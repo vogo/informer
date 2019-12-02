@@ -30,7 +30,15 @@ func main() {
 
 	now := time.Now()
 	weekday := time.Now().Weekday()
-	buf.WriteString(fmt.Sprintf("今天是 %s %s\n", now.Format("2006-01-02"), weekday.String()))
+
+	dateString := fmt.Sprintf("今天是 %s %s\n\n", now.Format("2006-01-02"), weekday.String())
+	buf.WriteString(dateString)
+
+	if dailySoup := GetDailySoup(); dailySoup != "" {
+		buf.WriteString(dailySoup)
+		buf.WriteByte('\n')
+		buf.WriteByte('\n')
+	}
 
 	if weekday == time.Sunday {
 		buf.WriteString("周末愉快!")
@@ -101,4 +109,32 @@ func ding(url, content string) {
 	}
 
 	log.Printf("ding response: %v", resp)
+}
+
+func GetDailySoup() string {
+	resp, err := http.Get("http://open.iciba.com/dsapi/")
+	if err != nil {
+		fmt.Printf("err: %v\n", err)
+		return ""
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("err: %v\n", err)
+		return ""
+	}
+	if resp.StatusCode != 200 {
+		fmt.Printf("err: %d, %s\n", resp.StatusCode, b)
+		return ""
+	}
+
+	data := struct {
+		Content string
+	}{}
+
+	if err = json.Unmarshal(b, &data); err != nil {
+		fmt.Printf("err: %v\n", err)
+		return ""
+	}
+
+	return data.Content
 }
