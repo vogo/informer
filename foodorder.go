@@ -18,19 +18,27 @@ const (
 	previousChosenFileName = "previous_chosen.json"
 )
 
+// FoodMenu 菜单
 type FoodMenu struct {
 	Type     string   `json:"type"`
 	ChoseNum int      `json:"chose_num"`
 	List     []string `json:"list"`
 }
 
-type FoodList []*FoodMenu
+// FoodConfig 食物配置
+type FoodConfig struct {
+	Tel      string      `json:"tel"`
+	Partners []string    `json:"partners"`
+	FoodList []*FoodMenu `json:"food_list"`
+}
+
+// FoodOrder 下单
+type FoodOrder struct {
+	User  string              `json:"user"`
+	Chose map[string][]string `json:"chose"`
+}
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("require ding url")
-	}
-
 	buf := bytes.NewBuffer(nil)
 
 	now := time.Now()
@@ -45,18 +53,6 @@ func main() {
 		buf.WriteByte('\n')
 	}
 
-	if weekday == time.Sunday {
-		buf.WriteString("周末愉快!")
-	} else {
-		autoChoseFood(buf)
-	}
-
-	content := string(buf.Bytes())
-	fmt.Print(content)
-	ding(os.Args[1], content)
-}
-
-func autoChoseFood(buf *bytes.Buffer) {
 	exePath, _ := os.Executable()
 	exeDir := filepath.Dir(exePath)
 	dataPath := filepath.Join(exeDir, configFileName)
@@ -65,19 +61,60 @@ func autoChoseFood(buf *bytes.Buffer) {
 		log.Fatal(err)
 	}
 
-	var foodList FoodList
-	if err := json.Unmarshal(data, &foodList); err != nil {
+	var foodConfig FoodConfig
+	if err := json.Unmarshal(data, &foodConfig); err != nil {
 		log.Fatal(err)
 	}
 
-	filterPreviousChosen(exeDir, &foodList)
+	previousFoodOrder := FoodOrder{}
+	previousData, err := ioutil.ReadFile(filepath.Join(exeDir, previousChosenFileName))
+	if err != nil {
+		return
+	}
 
-	buf.WriteString("上班辛苦了! 中午为你推荐以下菜单: \n\n")
+	_ = json.Unmarshal(previousData, &previousFoodOrder)
+
+	var orderUser string
+	if len(foodConfig.Partners) > 0 {
+		orderUser = foodConfig.Partners[0]
+	}
+	if previousFoodOrder.User != "" {
+		for i, u := range foodConfig.Partners {
+			if u == previousFoodOrder.User && i < len(foodConfig.Partners)-1 {
+				orderUser = foodConfig.Partners[i+1]
+			}
+		}
+	}
+
+	fmt.Printf("order user: %s\n", orderUser)
+
+	if weekday == time.Sunday || weekday == time.Saturday {
+		buf.WriteString("周末愉快!")
+	} else {
+		autoChoseFood(buf, exeDir, &foodConfig, &previousFoodOrder, orderUser)
+	}
+
+	content := string(buf.Bytes())
+	fmt.Print(content)
+
+	if len(os.Args) > 1 {
+		ding(os.Args[1], content, orderUser, weekday)
+	}
+}
+
+func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, previousFoodOrder *FoodOrder, orderUser string) {
+	filterPreviousChosen(previousFoodOrder, &foodConfig.FoodList)
+
+	buf.WriteString("上班辛苦了! 中午为你推荐以下菜单(点餐电话" + foodConfig.Tel + "): \n\n")
 
 	rand.Seed(time.Now().Unix())
 
-	chose := make(map[string][]string)
-	for _, foodMenu := range foodList {
+	foodOrder := &FoodOrder{
+		User:  orderUser,
+		Chose: make(map[string][]string),
+	}
+
+	for _, foodMenu := range foodConfig.FoodList {
 		buf.WriteString(foodMenu.Type)
 		buf.WriteByte(':')
 		for i := 0; i < foodMenu.ChoseNum; i++ {
@@ -87,36 +124,30 @@ func autoChoseFood(buf *bytes.Buffer) {
 			}
 			buf.WriteString(foodMenu.List[index])
 
-			chose[foodMenu.Type] = append(chose[foodMenu.Type], foodMenu.List[index])
+			foodOrder.Chose[foodMenu.Type] = append(foodOrder.Chose[foodMenu.Type], foodMenu.List[index])
 			foodMenu.List = append(foodMenu.List[:index], foodMenu.List[index+1:]...)
 		}
 		buf.WriteByte('\n')
 	}
 
-	if b, err := json.Marshal(chose); err == nil {
+	buf.WriteString("\n需要一起点餐的同学+1, 被@的同学负责点餐~\n")
+
+	if b, err := json.Marshal(foodOrder); err == nil {
 		_ = ioutil.WriteFile(filepath.Join(exeDir, previousChosenFileName), b, 0660)
 	}
 }
 
-func filterPreviousChosen(exeDir string, foodList *FoodList) {
-	previousChosen := make(map[string][]string)
-	previousData, err := ioutil.ReadFile(filepath.Join(exeDir, previousChosenFileName))
-	if err != nil {
+func filterPreviousChosen(previousFoodOrder *FoodOrder, foodList *[]*FoodMenu) {
+	if len(previousFoodOrder.Chose) == 0 {
 		return
 	}
 
-	_ = json.Unmarshal(previousData, &previousChosen)
+	log.Printf("previous chosen: %v", previousFoodOrder.Chose)
 
-	if len(previousChosen) == 0 {
-		return
-	}
-
-	log.Printf("previous chosen: %v", previousChosen)
-
-	for key := range previousChosen {
+	for key := range previousFoodOrder.Chose {
 		for _, foodMenu := range *foodList {
 			if foodMenu.Type == key {
-				filterItems(foodMenu, previousChosen[key])
+				filterItems(foodMenu, previousFoodOrder.Chose[key])
 				break
 			}
 		}
@@ -139,18 +170,29 @@ func filterItems(foodMenu *FoodMenu, filters []string) {
 type DingText struct {
 	Content string `json:"content"`
 }
+
+type DingAt struct {
+	AtMobiles []string `json:"atMobiles"`
+}
+
 type DingMsg struct {
 	MsgType string   `json:"msgtype"`
 	Text    DingText `json:"text"`
+	At      DingAt   `json:"at"`
 }
 
-func ding(url, content string) {
+func ding(url, content, user string, weekday time.Weekday) {
 	msg := &DingMsg{
 		MsgType: "text",
 		Text: DingText{
 			Content: content,
 		},
 	}
+
+	if user != "" && weekday != time.Sunday && weekday != time.Saturday {
+		msg.At = DingAt{AtMobiles: []string{user}}
+	}
+
 	data, _ := json.Marshal(msg)
 	log.Printf("ding url: %s", url)
 	log.Printf("ding data: %s", data)
