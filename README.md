@@ -16,5 +16,5 @@ GOBIN=$(pwd) go get -u github.com/wongoo/foodorder@master
 ## 配置 linux crontab 定时任务
 ```bash
 # 每天早上10点发
-00 10 * * * /home/root/foodorder/foodorder "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"
+00 10 * * * /root/foodorder/foodorder "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"
 ```

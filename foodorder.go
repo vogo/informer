@@ -69,7 +69,7 @@ func main() {
 	previousFoodOrder := FoodOrder{}
 	previousData, err := ioutil.ReadFile(filepath.Join(exeDir, previousChosenFileName))
 	if err != nil {
-		return
+		log.Printf("read previous chosen error: %v", err)
 	}
 
 	_ = json.Unmarshal(previousData, &previousFoodOrder)
