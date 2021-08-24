@@ -18,22 +18,28 @@ const (
 	previousChosenFileName = "previous_chosen.json"
 )
 
-// FoodMenu 菜单
-type FoodMenu struct {
+// Menu 菜单
+type Menu struct {
 	Type     string   `json:"type"`
 	ChoseNum int      `json:"chose_num"`
 	List     []string `json:"list"`
 }
 
-// FoodConfig 食物配置
-type FoodConfig struct {
-	Tel      string      `json:"tel"`
-	Partners []string    `json:"partners"`
-	FoodList []*FoodMenu `json:"food_list"`
+// Config 食物配置
+type Config struct {
+	Partners    []string      `json:"partners"`
+	Restaurants []*Restaurant `json:"restaurants"`
 }
 
-// FoodOrder 下单
-type FoodOrder struct {
+// Restaurant 餐厅
+type Restaurant struct {
+	Name  string  `json:"name"`
+	Tel   string  `json:"tel"`
+	Menus []*Menu `json:"food_list"`
+}
+
+// Order 下单
+type Order struct {
 	User  string              `json:"user"`
 	Chose map[string][]string `json:"chose"`
 }
@@ -61,12 +67,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var foodConfig FoodConfig
+	var foodConfig Config
 	if err := json.Unmarshal(data, &foodConfig); err != nil {
 		log.Fatal(err)
 	}
 
-	previousFoodOrder := FoodOrder{}
+	previousFoodOrder := Order{}
 	previousData, err := ioutil.ReadFile(filepath.Join(exeDir, previousChosenFileName))
 	if err != nil {
 		log.Printf("read previous chosen error: %v", err)
@@ -102,19 +108,28 @@ func main() {
 	}
 }
 
-func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, previousFoodOrder *FoodOrder, orderUser string) {
-	filterPreviousChosen(previousFoodOrder, &foodConfig.FoodList)
+func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *Config, previousFoodOrder *Order, orderUser string) {
+	rand.Seed(time.Now().Unix())
 
-	buf.WriteString("上班辛苦了! 中午为你推荐以下菜单(点餐电话" + foodConfig.Tel + "): \n\n")
+	restaurantIndex := rand.Intn(len(foodConfig.Restaurants))
+	restaurant := foodConfig.Restaurants[restaurantIndex]
+
+	filterPreviousChosen(previousFoodOrder, &restaurant.Menus)
+
+	buf.WriteString("上班辛苦了! 中午为你推荐餐厅《" + restaurant.Name + "》")
+	if restaurant.Tel != "" {
+		buf.WriteString("(点餐电话" + restaurant.Tel + ")")
+	}
 
 	rand.Seed(time.Now().Unix())
 
-	foodOrder := &FoodOrder{
+	foodOrder := &Order{
 		User:  orderUser,
 		Chose: make(map[string][]string),
 	}
+	buf.WriteString("\n\n")
 
-	for _, foodMenu := range foodConfig.FoodList {
+	for _, foodMenu := range restaurant.Menus {
 		buf.WriteString(foodMenu.Type)
 		buf.WriteByte(':')
 		for i := 0; i < foodMenu.ChoseNum; i++ {
@@ -130,14 +145,16 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 		buf.WriteByte('\n')
 	}
 
-	buf.WriteString("\n需要一起点餐的同学+1, 被@的同学负责点餐~\n")
+	if restaurant.Tel != "" {
+		buf.WriteString("\n需要一起点餐的同学+1, 被@的同学负责点餐~\n")
+	}
 
 	if b, err := json.Marshal(foodOrder); err == nil {
 		_ = ioutil.WriteFile(filepath.Join(exeDir, previousChosenFileName), b, 0660)
 	}
 }
 
-func filterPreviousChosen(previousFoodOrder *FoodOrder, foodList *[]*FoodMenu) {
+func filterPreviousChosen(previousFoodOrder *Order, menus *[]*Menu) {
 	if len(previousFoodOrder.Chose) == 0 {
 		return
 	}
@@ -145,7 +162,7 @@ func filterPreviousChosen(previousFoodOrder *FoodOrder, foodList *[]*FoodMenu) {
 	log.Printf("previous chosen: %v", previousFoodOrder.Chose)
 
 	for key := range previousFoodOrder.Chose {
-		for _, foodMenu := range *foodList {
+		for _, foodMenu := range *menus {
 			if foodMenu.Type == key {
 				filterItems(foodMenu, previousFoodOrder.Chose[key])
 				break
@@ -154,17 +171,17 @@ func filterPreviousChosen(previousFoodOrder *FoodOrder, foodList *[]*FoodMenu) {
 	}
 }
 
-func filterItems(foodMenu *FoodMenu, filters []string) {
+func filterItems(menu *Menu, filters []string) {
 	for _, filter := range filters {
-		for index, name := range foodMenu.List {
+		for index, name := range menu.List {
 			if name == filter {
-				foodMenu.List = append(foodMenu.List[:index], foodMenu.List[index+1:]...)
+				menu.List = append(menu.List[:index], menu.List[index+1:]...)
 				break
 			}
 		}
 	}
 
-	log.Printf("after filter for %s: %s", foodMenu.Type, foodMenu.List)
+	log.Printf("after filter for %s: %s", menu.Type, menu.List)
 }
 
 type DingText struct {
