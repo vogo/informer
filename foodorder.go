@@ -97,7 +97,7 @@ func main() {
 	if weekday == time.Sunday || weekday == time.Saturday {
 		buf.WriteString("周末愉快!")
 	} else {
-		autoChoseFood(buf, exeDir, &foodConfig, &previousFoodOrder, orderUser)
+		autoChoseFood(buf, exeDir, &foodConfig, &previousFoodOrder, &orderUser)
 	}
 
 	content := string(buf.Bytes())
@@ -108,7 +108,7 @@ func main() {
 	}
 }
 
-func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *Config, previousFoodOrder *Order, orderUser string) {
+func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *Config, previousFoodOrder *Order, orderUser *string) {
 	rand.Seed(time.Now().Unix())
 
 	restaurantIndex := rand.Intn(len(foodConfig.Restaurants))
@@ -124,29 +124,33 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *Config, previou
 	rand.Seed(time.Now().Unix())
 
 	foodOrder := &Order{
-		User:  orderUser,
+		User:  *orderUser,
 		Chose: make(map[string][]string),
 	}
 	buf.WriteString("\n\n")
 
-	for _, foodMenu := range restaurant.Menus {
-		buf.WriteString(foodMenu.Type)
-		buf.WriteByte(':')
-		for i := 0; i < foodMenu.ChoseNum; i++ {
-			index := rand.Intn(len(foodMenu.List))
-			if i > 0 {
-				buf.WriteByte(',')
+	if len(restaurant.Menus) == 0 {
+		*orderUser = ""
+	} else {
+		for _, foodMenu := range restaurant.Menus {
+			buf.WriteString(foodMenu.Type)
+			buf.WriteByte(':')
+			for i := 0; i < foodMenu.ChoseNum; i++ {
+				index := rand.Intn(len(foodMenu.List))
+				if i > 0 {
+					buf.WriteByte(',')
+				}
+				buf.WriteString(foodMenu.List[index])
+
+				foodOrder.Chose[foodMenu.Type] = append(foodOrder.Chose[foodMenu.Type], foodMenu.List[index])
+				foodMenu.List = append(foodMenu.List[:index], foodMenu.List[index+1:]...)
 			}
-			buf.WriteString(foodMenu.List[index])
-
-			foodOrder.Chose[foodMenu.Type] = append(foodOrder.Chose[foodMenu.Type], foodMenu.List[index])
-			foodMenu.List = append(foodMenu.List[:index], foodMenu.List[index+1:]...)
+			buf.WriteByte('\n')
 		}
-		buf.WriteByte('\n')
-	}
 
-	if restaurant.Tel != "" {
-		buf.WriteString("\n需要一起点餐的同学+1, 被@的同学负责点餐~\n")
+		if restaurant.Tel != "" {
+			buf.WriteString("\n需要一起点餐的同学+1, 被@的同学负责点餐~\n")
+		}
 	}
 
 	if b, err := json.Marshal(foodOrder); err == nil {
