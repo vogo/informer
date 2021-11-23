@@ -108,7 +108,8 @@ func main() {
 	fmt.Print(content)
 
 	if len(os.Args) > 1 {
-		ding(os.Args[1], content, orderUser, weekday)
+		// ding(os.Args[1], content, orderUser, weekday)
+		lark(os.Args[1], content, orderUser, weekday)
 	}
 }
 
@@ -229,42 +230,6 @@ func filterItems(menu *Menu, filters []string) {
 	log.Printf("after filter for %s: %s", menu.Type, menu.List)
 }
 
-type DingText struct {
-	Content string `json:"content"`
-}
-
-type DingAt struct {
-	AtMobiles []string `json:"atMobiles"`
-}
-
-type DingMsg struct {
-	MsgType string   `json:"msgtype"`
-	Text    DingText `json:"text"`
-	At      DingAt   `json:"at"`
-}
-
-func ding(url, content, user string, weekday time.Weekday) {
-	msg := &DingMsg{
-		MsgType: "text",
-		Text: DingText{
-			Content: content,
-		},
-	}
-
-	if user != "" && weekday != time.Sunday && weekday != time.Saturday {
-		msg.At = DingAt{AtMobiles: []string{user}}
-	}
-
-	data, _ := json.Marshal(msg)
-	log.Printf("ding url: %s", url)
-	log.Printf("ding data: %s", data)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("ding response: %v", resp)
-}
 
 func GetDailySoup() string {
 	resp, err := http.Get("http://open.iciba.com/dsapi/")
