@@ -1,4 +1,4 @@
-package main
+package informer
 
 import (
 	"bytes"
@@ -7,14 +7,11 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
-	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 )
 
 const (
-	configFileName         = "foodorder.json"
 	previousChosenFileName = "previous_chosen.json"
 )
 
@@ -25,8 +22,8 @@ type Menu struct {
 	List     []string `json:"list"`
 }
 
-// Config 食物配置
-type Config struct {
+// FoodConfig 点餐配置
+type FoodConfig struct {
 	Partners    []string      `json:"partners"`
 	Restaurants []*Restaurant `json:"restaurants"`
 }
@@ -45,33 +42,8 @@ type Order struct {
 	Chose          map[string][]string `json:"chose"`
 }
 
-func main() {
-	buf := bytes.NewBuffer(nil)
-
-	now := time.Now()
-	weekday := time.Now().Weekday()
-
-	dateString := fmt.Sprintf("今天是 %s %s\n\n", now.Format("2006-01-02"), weekday.String())
-	buf.WriteString(dateString)
-
-	if dailySoup := GetDailySoup(); dailySoup != "" {
-		buf.WriteString(dailySoup)
-		buf.WriteByte('\n')
-		buf.WriteByte('\n')
-	}
-
-	exePath, _ := os.Executable()
-	exeDir := filepath.Dir(exePath)
-	dataPath := filepath.Join(exeDir, configFileName)
-	data, err := ioutil.ReadFile(dataPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var foodConfig Config
-	if err := json.Unmarshal(data, &foodConfig); err != nil {
-		log.Fatal(err)
-	}
+func addFoodAutoChose(buf *bytes.Buffer, config Config, exeDir string) {
+	foodConfig := config.Food
 
 	var previousFoodOrders []*Order
 	previousData, err := ioutil.ReadFile(filepath.Join(exeDir, previousChosenFileName))
@@ -98,22 +70,10 @@ func main() {
 
 	fmt.Printf("order user: %s\n", orderUser)
 
-	if weekday == time.Sunday || weekday == time.Saturday {
-		buf.WriteString("周末愉快!")
-	} else {
-		autoChoseFood(buf, exeDir, &foodConfig, previousFoodOrders, &orderUser)
-	}
-
-	content := string(buf.Bytes())
-	fmt.Print(content)
-
-	if len(os.Args) > 1 {
-		// ding(os.Args[1], content, orderUser, weekday)
-		lark(os.Args[1], content, orderUser, weekday)
-	}
+	autoChoseFood(buf, exeDir, foodConfig, previousFoodOrders, &orderUser)
 }
 
-func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *Config, previousFoodOrders []*Order, orderUser *string) {
+func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, previousFoodOrders []*Order, orderUser *string) {
 	rand.Seed(time.Now().Unix())
 
 	if len(previousFoodOrders) == len(foodConfig.Restaurants) {
@@ -228,33 +188,4 @@ func filterItems(menu *Menu, filters []string) {
 	}
 
 	log.Printf("after filter for %s: %s", menu.Type, menu.List)
-}
-
-
-func GetDailySoup() string {
-	resp, err := http.Get("http://open.iciba.com/dsapi/")
-	if err != nil {
-		fmt.Printf("err: %v\n", err)
-		return ""
-	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("err: %v\n", err)
-		return ""
-	}
-	if resp.StatusCode != 200 {
-		fmt.Printf("err: %d, %s\n", resp.StatusCode, b)
-		return ""
-	}
-
-	data := struct {
-		Content string
-	}{}
-
-	if err = json.Unmarshal(b, &data); err != nil {
-		fmt.Printf("err: %v\n", err)
-		return ""
-	}
-
-	return data.Content
 }

@@ -1,11 +1,10 @@
-package main
+package informer
 
 import (
 	"bytes"
 	"encoding/json"
 	"log"
 	"net/http"
-	"time"
 )
 
 type LarkContent struct {
@@ -17,7 +16,7 @@ type LarkMessage struct {
 	Content *LarkContent `json:"content"`
 }
 
-func lark(url, content, _ string, _ time.Weekday) {
+func lark(url, content string) {
 	msg := &LarkMessage{
 		Type: "text",
 		Content: &LarkContent{
