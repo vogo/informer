@@ -8,8 +8,7 @@ import (
 func TestUpdateAndFilterFeeds(t *testing.T) {
 	feedConfigs := []*FeedConfig{
 		{
-			Title:  "阮一峰的网络日志",
-			URL:    "http://www.ruanyifeng.com/blog/atom.xml",
+			URL:    "http://blog.sciencenet.cn/rss.php?uid=117333",
 			Weight: 100,
 		},
 	}

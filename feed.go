@@ -16,6 +16,7 @@ import (
 const (
 	feedDataFile      = "feed_data.json"
 	maxInformFeedSize = 5
+	dateFormatPattern = "2006-01-02"
 )
 
 type FeedConfig struct {
@@ -61,7 +62,7 @@ func addFeeds(buf *bytes.Buffer, configs []*FeedConfig, exeDir string) {
 }
 
 func updateAndFilterFeeds(configs []*FeedConfig, feedData map[string]*FeedDetail) []*FeedArticle {
-	sevenDaysBefore := time.Now().Add(time.Hour * 24 * -7).Format("2006-01-02")
+	sevenDaysBefore := time.Now().Add(time.Hour * 24 * -7).Format(dateFormatPattern)
 
 	for _, config := range configs {
 		addFeed(feedData, config, sevenDaysBefore)
@@ -126,22 +127,27 @@ func addFeedItem(data map[string]*FeedDetail, config *FeedConfig, sevenDaysBefor
 		return
 	}
 
-	var date string
+	now := time.Now()
+	date := now
+
 	if item.UpdatedParsed != nil {
-		date = item.UpdatedParsed.Format("2006-01-02")
+		date = *item.UpdatedParsed
 	} else if item.PublishedParsed != nil {
-		date = item.PublishedParsed.Format("2006-01-02")
-	} else {
-		date = time.Now().Format("2006-01-02")
+		date = *item.PublishedParsed
 	}
 
-	if strings.Compare(date, sevenDaysBefore) < 0 {
+	if date.After(now) {
+		date = now
+	}
+
+	dateStr := date.Format(dateFormatPattern)
+	if strings.Compare(dateStr, sevenDaysBefore) < 0 {
 		return
 	}
 
 	data[url] = &FeedDetail{
 		Title:    item.Title,
-		Date:     date,
+		Date:     dateStr,
 		Weight:   config.Weight,
 		Informed: false,
 	}
