@@ -127,7 +127,11 @@ func addFeedItem(data map[string]*FeedDetail, config *FeedConfig, sevenDaysBefor
 	}
 
 	var date string
-	if item.Updated != "" {
+	if item.UpdatedParsed != nil {
+		date = item.UpdatedParsed.Format("2006-01-02")
+	} else if item.PublishedParsed != nil {
+		date = item.PublishedParsed.Format("2006-01-02")
+	} else if item.Updated != "" {
 		date = item.Updated
 	} else if item.Published != "" {
 		date = item.Published

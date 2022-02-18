@@ -12,7 +12,6 @@
     {"url": "http://blog.sciencenet.cn/rss.php?uid=117333", "weight": 100},
     {"url": "http://neoremind.com/feed/", "weight": 100},
     {"url": "http://www.pkudodo.com/feed/", "weight": 100},
-    {"url": "http://feeds.kenengba.com/kenengbarss", "weight": 20},
     {"url": "https://coolshell.cn/feed", "weight": 100},
     {"url": "https://blog.gokit.info/index.xml", "weight": 20},
     {"url": "https://jvns.ca/atom.xml", "weight": 50},
