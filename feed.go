@@ -131,10 +131,6 @@ func addFeedItem(data map[string]*FeedDetail, config *FeedConfig, sevenDaysBefor
 		date = item.UpdatedParsed.Format("2006-01-02")
 	} else if item.PublishedParsed != nil {
 		date = item.PublishedParsed.Format("2006-01-02")
-	} else if item.Updated != "" {
-		date = item.Updated
-	} else if item.Published != "" {
-		date = item.Published
 	} else {
 		date = time.Now().Format("2006-01-02")
 	}
