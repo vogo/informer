@@ -5,11 +5,10 @@
       "url": "http://www.ruanyifeng.com/blog/atom.xml",
       "weight": 100
     },
-    {"url": "http://www.ruanyifeng.com/blog/atom.xml", "weight": 100},
     {"url": "https://cjting.me/index.xml", "weight": 50},
     {"url": "http://antirez.com/rss", "weight": 50},
     {"url": "https://fukun.org/index.xml", "weight": 50},
-    {"url": "http://blog.sciencenet.cn/rss.php?uid=117333", "weight": 100},
+    {"url": "http://blog.sciencenet.cn/rss.php?uid=117333", "weight": 40},
     {"url": "http://neoremind.com/feed/", "weight": 100},
     {"url": "http://www.pkudodo.com/feed/", "weight": 100},
     {"url": "https://coolshell.cn/feed", "weight": 100},
@@ -30,7 +29,12 @@
     {"url": "https://www.codedump.info/index.xml", "weight": 60},
     {"url": "https://www.sqlsec.com/atom.xml", "weight": 20},
     {"url": "http://xargin.com/rss/", "weight": 80},
-    {"url": "http://cizixs.com/feed", "weight": 50}
+    {"url": "http://cizixs.com/feed", "weight": 50},
+    {"url": "https://catcoding.me/atom.xml", "weight": 60},
+    {"url": "https://tech.meituan.com/feed/", "weight": 100},
+    {"url": "https://insights.thoughtworks.cn/feed/", "weight": 58},
+    {"url": "https://xiaomi-info.github.io/atom", "weight": 58},
+    {"url": "https://ciechanow.ski/atom.xml", "weight": 100}
   ],
   "food": {
     "partners": [

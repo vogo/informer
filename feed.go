@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"log"
+	"math"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/mmcdole/gofeed"
@@ -16,20 +16,22 @@ import (
 const (
 	feedDataFile      = "feed_data.json"
 	maxInformFeedSize = 5
-	dateFormatPattern = "2006-01-02"
+	feedExpireDays    = 7
+	oneDaySeconds     = int64(24 * time.Hour / time.Second)
 )
 
 type FeedConfig struct {
 	Title  string `json:"title"`
 	URL    string `json:"url"`
-	Weight int    `json:"weight"`
+	Weight int64  `json:"weight"`
 }
 
 type FeedDetail struct {
-	Title    string `json:"title"`
-	Date     string `json:"date"`
-	Weight   int    `json:"weight"`
-	Informed bool   `json:"informed"`
+	Title     string `json:"title"`
+	Timestamp int64  `json:"timestamp"`
+	Weight    int64  `json:"weight"`
+	Informed  bool   `json:"informed"`
+	score     int64
 }
 
 type FeedArticle struct {
@@ -62,36 +64,60 @@ func addFeeds(buf *bytes.Buffer, configs []*FeedConfig, exeDir string) {
 }
 
 func updateAndFilterFeeds(configs []*FeedConfig, feedData map[string]*FeedDetail) []*FeedArticle {
-	sevenDaysBefore := time.Now().Add(time.Hour * 24 * -7).Format(dateFormatPattern)
+	now := time.Now()
+	nowTime := now.Unix()
+	expireTime := now.Add(time.Hour * 24 * -feedExpireDays).Unix()
 
+	minWeight := int64(math.MaxInt64)
+	maxWeight := int64(0)
 	for _, config := range configs {
-		addFeed(feedData, config, sevenDaysBefore)
+		addFeed(feedData, config, expireTime)
+
+		if minWeight > config.Weight {
+			minWeight = config.Weight
+		}
+		if maxWeight < config.Weight {
+			maxWeight = config.Weight
+		}
 	}
+
+	dayIntervalWeight := int64((maxWeight - minWeight) / feedExpireDays)
 
 	var deleteList []string
 	var articleList []*FeedArticle
 	for url, detail := range feedData {
-		if strings.Compare(detail.Date, sevenDaysBefore) < 0 {
+		// adjust timestamp
+		if detail.Timestamp == 0 {
+			detail.Timestamp = nowTime
+		}
+
+		if detail.Timestamp < expireTime {
 			deleteList = append(deleteList, url)
 			continue
 		}
-		if !detail.Informed {
-			articleList = append(articleList, &FeedArticle{
-				FeedDetail: *detail,
-				URL:        url,
-			})
+		if detail.Informed {
+			continue
 		}
+
+		article := &FeedArticle{
+			FeedDetail: *detail,
+			URL:        url,
+		}
+
+		pastDays := (nowTime - article.Timestamp) / oneDaySeconds
+		article.score = article.Weight - pastDays*dayIntervalWeight
+		articleList = append(articleList, article)
+	}
+
+	for _, key := range deleteList {
+		delete(feedData, key)
 	}
 
 	sort.Slice(articleList, func(i, j int) bool {
 		a := articleList[i]
 		b := articleList[j]
 
-		if a.Weight != b.Weight {
-			return a.Weight < b.Weight
-		}
-
-		return strings.Compare(a.Date, b.Date) < 0
+		return a.score < b.score
 	})
 
 	size := maxInformFeedSize
@@ -106,7 +132,7 @@ func updateAndFilterFeeds(configs []*FeedConfig, feedData map[string]*FeedDetail
 	return informArticles
 }
 
-func addFeed(data map[string]*FeedDetail, config *FeedConfig, sevenDaysBefore string) {
+func addFeed(data map[string]*FeedDetail, config *FeedConfig, expireTime int64) {
 	log.Println("parse feed: ", config.URL)
 
 	fp := gofeed.NewParser()
@@ -117,11 +143,11 @@ func addFeed(data map[string]*FeedDetail, config *FeedConfig, sevenDaysBefore st
 	}
 
 	for _, item := range feed.Items {
-		addFeedItem(data, config, sevenDaysBefore, item)
+		addFeedItem(data, config, expireTime, item)
 	}
 }
 
-func addFeedItem(data map[string]*FeedDetail, config *FeedConfig, sevenDaysBefore string, item *gofeed.Item) {
+func addFeedItem(data map[string]*FeedDetail, config *FeedConfig, expireTime int64, item *gofeed.Item) {
 	url := item.Link
 	if _, exists := data[url]; exists {
 		return
@@ -140,15 +166,15 @@ func addFeedItem(data map[string]*FeedDetail, config *FeedConfig, sevenDaysBefor
 		date = now
 	}
 
-	dateStr := date.Format(dateFormatPattern)
-	if strings.Compare(dateStr, sevenDaysBefore) < 0 {
+	timestamp := date.Unix()
+	if timestamp < expireTime {
 		return
 	}
 
 	data[url] = &FeedDetail{
-		Title:    item.Title,
-		Date:     dateStr,
-		Weight:   config.Weight,
-		Informed: false,
+		Title:     item.Title,
+		Timestamp: timestamp,
+		Weight:    config.Weight,
+		Informed:  false,
 	}
 }
