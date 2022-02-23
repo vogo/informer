@@ -16,8 +16,8 @@ const (
 )
 
 type Config struct {
-	Food  *FoodConfig   `json:"food"`
-	Feeds []*FeedConfig `json:"feeds"`
+	Food *FoodConfig `json:"food"`
+	Feed *FeedConfig `json:"feed"`
 }
 
 func Inform() {
@@ -49,7 +49,7 @@ func Inform() {
 		addFoodAutoChose(buf, informerConfig, exeDir)
 	}
 
-	addFeeds(buf, informerConfig.Feeds, exeDir)
+	addFeeds(buf, informerConfig.Feed, exeDir)
 
 	content := string(buf.Bytes())
 	fmt.Print(content)

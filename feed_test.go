@@ -6,16 +6,21 @@ import (
 )
 
 func TestUpdateAndFilterFeeds(t *testing.T) {
-	feedConfigs := []*FeedConfig{
-		{
-			URL:    "http://blog.sciencenet.cn/rss.php?uid=117333",
-			Weight: 100,
+	feedConfig := &FeedConfig{
+		MaxInformFeedSize: 10,
+		FeedExpireDays:    15,
+		SameSiteMaxCount:  2,
+		Feeds: []*FeedSource{
+			{
+				URL:    "http://blog.sciencenet.cn/rss.php?uid=117333",
+				Weight: 100,
+			},
 		},
 	}
 
 	feedData := make(map[string]*FeedDetail)
 
-	articles := updateAndFilterFeeds(feedConfigs, feedData)
+	articles := updateAndFilterFeeds(feedConfig, feedData)
 	if len(articles) == 0 {
 		t.Error("parse feed article failed")
 	} else {

@@ -1,41 +1,171 @@
 {
-  "feeds": [
-    {
-      "title": "阮一峰的网络日志",
-      "url": "http://www.ruanyifeng.com/blog/atom.xml",
-      "weight": 100
-    },
-    {"url": "https://cjting.me/index.xml", "weight": 50},
-    {"url": "http://antirez.com/rss", "weight": 50},
-    {"url": "https://fukun.org/index.xml", "weight": 50},
-    {"url": "http://blog.sciencenet.cn/rss.php?uid=117333", "weight": 40},
-    {"url": "http://neoremind.com/feed/", "weight": 100},
-    {"url": "http://www.pkudodo.com/feed/", "weight": 100},
-    {"url": "https://coolshell.cn/feed", "weight": 100},
-    {"url": "https://blog.gokit.info/index.xml", "weight": 20},
-    {"url": "https://jvns.ca/atom.xml", "weight": 50},
-    {"url": "https://rakyll.org/index.xml", "weight": 50},
-    {"url": "https://blog.dingkewz.com/index.xml", "weight": 50},
-    {"url": "http://www.kennybastani.com/feeds/posts/default", "weight": 20},
-    {"url": "https://martinfowler.com/feed.atom", "weight": 100},
-    {"url": "https://taohuawu.club/rss.xml", "weight": 50},
-    {"url": "http://www.jackyshen.com/atom.xml", "weight": 50},
-    {"url": "https://luyuhuang.tech/feed.xml", "weight": 60},
-    {"url": "http://wsfdl.com/feed.xml", "weight": 50},
-    {"url": "http://lanlingzi.cn/index.xml", "weight": 50},
-    {"url": "http://arthurchiao.art/feed", "weight": 60},
-    {"url": "http://www.zenlife.tk/feed.atom", "weight": 60},
-    {"url": "http://blog.fens.me/feed", "weight": 50},
-    {"url": "https://www.codedump.info/index.xml", "weight": 60},
-    {"url": "https://www.sqlsec.com/atom.xml", "weight": 20},
-    {"url": "http://xargin.com/rss/", "weight": 80},
-    {"url": "http://cizixs.com/feed", "weight": 50},
-    {"url": "https://catcoding.me/atom.xml", "weight": 60},
-    {"url": "https://tech.meituan.com/feed/", "weight": 100},
-    {"url": "https://insights.thoughtworks.cn/feed/", "weight": 58},
-    {"url": "https://xiaomi-info.github.io/atom", "weight": 58},
-    {"url": "https://ciechanow.ski/atom.xml", "weight": 100}
-  ],
+  "feed": {
+    "feed_expire_days": 15,
+    "max_inform_feed_size": 10,
+    "same_site_max_count": 2,
+    "feeds": [
+      {
+        "title": "阮一峰的网络日志",
+        "url": "http://www.ruanyifeng.com/blog/atom.xml",
+        "weight": 100
+      },
+      {
+        "title": "王垠的博客 - 当然我在扯淡",
+        "url": "https://feed43.com/3866365887656584.xml",
+        "weight": 90
+      },
+      {
+        "title": "Kernel Aliyun",
+        "url": "https://kernel.taobao.org/feed.xml",
+        "weight": 90
+      },
+      {
+        "title": "云风",
+        "url": "https://blog.codingnow.com/atom.xml",
+        "weight": 80
+      },
+      {
+        "title": "阿里云开发者社区-阿里技术",
+        "url": "https://feed43.com/5157458655843068.xml",
+        "weight": 80
+      },
+      {
+        "title": "管理世界杂志社",
+        "url": "https://feed43.com/4501737746661513.xml",
+        "weight": 30
+      },
+      {
+        "title": "国家金融与发展实验室-研究评论",
+        "url": "https://feed43.com/8216803327744404.xml",
+        "weight": 40
+      },
+      {
+        "title": "Go语言爱好者周刊",
+        "url": "https://feed43.com/2336083773385462.xml",
+        "weight": 50
+      },
+      {
+        "url": "https://cjting.me/index.xml",
+        "weight": 50
+      },
+      {
+        "url": "http://antirez.com/rss",
+        "weight": 50
+      },
+      {
+        "url": "https://fukun.org/index.xml",
+        "weight": 50
+      },
+      {
+        "url": "http://neoremind.com/feed/",
+        "weight": 100
+      },
+      {
+        "url": "http://www.pkudodo.com/feed/",
+        "weight": 100
+      },
+      {
+        "url": "https://coolshell.cn/feed",
+        "weight": 100
+      },
+      {
+        "url": "https://blog.gokit.info/index.xml",
+        "weight": 20
+      },
+      {
+        "url": "https://jvns.ca/atom.xml",
+        "weight": 50
+      },
+      {
+        "url": "https://rakyll.org/index.xml",
+        "weight": 50
+      },
+      {
+        "url": "https://blog.dingkewz.com/index.xml",
+        "weight": 50
+      },
+      {
+        "url": "http://www.kennybastani.com/feeds/posts/default",
+        "weight": 20
+      },
+      {
+        "url": "https://martinfowler.com/feed.atom",
+        "weight": 100
+      },
+      {
+        "url": "https://taohuawu.club/rss.xml",
+        "weight": 50
+      },
+      {
+        "url": "http://www.jackyshen.com/atom.xml",
+        "weight": 50
+      },
+      {
+        "url": "https://luyuhuang.tech/feed.xml",
+        "weight": 60
+      },
+      {
+        "url": "http://wsfdl.com/feed.xml",
+        "weight": 50
+      },
+      {
+        "url": "http://lanlingzi.cn/index.xml",
+        "weight": 50
+      },
+      {
+        "url": "http://arthurchiao.art/feed",
+        "weight": 60
+      },
+      {
+        "url": "http://www.zenlife.tk/feed.atom",
+        "weight": 60
+      },
+      {
+        "url": "http://blog.fens.me/feed",
+        "weight": 50
+      },
+      {
+        "url": "https://www.codedump.info/index.xml",
+        "weight": 60
+      },
+      {
+        "url": "https://www.sqlsec.com/atom.xml",
+        "weight": 20
+      },
+      {
+        "url": "http://xargin.com/rss/",
+        "weight": 80
+      },
+      {
+        "url": "http://cizixs.com/feed",
+        "weight": 50
+      },
+      {
+        "url": "https://catcoding.me/atom.xml",
+        "weight": 60
+      },
+      {
+        "url": "https://tech.meituan.com/feed/",
+        "weight": 100
+      },
+      {
+        "url": "https://insights.thoughtworks.cn/feed/",
+        "weight": 58
+      },
+      {
+        "url": "https://xiaomi-info.github.io/atom",
+        "weight": 58
+      },
+      {
+        "url": "https://ciechanow.ski/atom.xml",
+        "weight": 100
+      },
+      {
+        "url": "https://tech.youzan.com/rss/",
+        "weight": 70
+      }
+    ]
+  },
   "food": {
     "partners": [
       "18059811234",

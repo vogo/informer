@@ -8,19 +8,25 @@ import (
 	"math"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mmcdole/gofeed"
 )
 
 const (
-	feedDataFile      = "feed_data.json"
-	maxInformFeedSize = 5
-	feedExpireDays    = 7
-	oneDaySeconds     = int64(24 * time.Hour / time.Second)
+	feedDataFile  = "feed_data.json"
+	oneDaySeconds = int64(24 * time.Hour / time.Second)
 )
 
 type FeedConfig struct {
+	MaxInformFeedSize int           `json:"max_inform_feed_size"`
+	FeedExpireDays    int           `json:"feed_expire_days"`
+	SameSiteMaxCount  int           `json:"same_site_max_count"`
+	Feeds             []*FeedSource `json:"feeds"`
+}
+
+type FeedSource struct {
 	Title  string `json:"title"`
 	URL    string `json:"url"`
 	Weight int64  `json:"weight"`
@@ -39,7 +45,7 @@ type FeedArticle struct {
 	URL string `json:"url"`
 }
 
-func addFeeds(buf *bytes.Buffer, configs []*FeedConfig, exeDir string) {
+func addFeeds(buf *bytes.Buffer, config *FeedConfig, exeDir string) {
 	feedDateFilePath := filepath.Join(exeDir, feedDataFile)
 	dataFile, err := ioutil.ReadFile(feedDateFilePath)
 	if err != nil {
@@ -50,7 +56,7 @@ func addFeeds(buf *bytes.Buffer, configs []*FeedConfig, exeDir string) {
 
 	_ = json.Unmarshal(dataFile, &feedData)
 
-	articles := updateAndFilterFeeds(configs, feedData)
+	articles := updateAndFilterFeeds(config, feedData)
 	if len(articles) > 0 {
 		buf.WriteString("文章推荐:\n")
 		for _, a := range articles {
@@ -63,14 +69,14 @@ func addFeeds(buf *bytes.Buffer, configs []*FeedConfig, exeDir string) {
 	}
 }
 
-func updateAndFilterFeeds(configs []*FeedConfig, feedData map[string]*FeedDetail) []*FeedArticle {
+func updateAndFilterFeeds(config *FeedConfig, feedData map[string]*FeedDetail) []*FeedArticle {
 	now := time.Now()
 	nowTime := now.Unix()
-	expireTime := now.Add(time.Hour * 24 * -feedExpireDays).Unix()
+	expireTime := now.Add(time.Hour * 24 * time.Duration(-config.FeedExpireDays)).Unix()
 
 	minWeight := int64(math.MaxInt64)
 	maxWeight := int64(0)
-	for _, config := range configs {
+	for _, config := range config.Feeds {
 		addFeed(feedData, config, expireTime)
 
 		if minWeight > config.Weight {
@@ -81,7 +87,7 @@ func updateAndFilterFeeds(configs []*FeedConfig, feedData map[string]*FeedDetail
 		}
 	}
 
-	dayIntervalWeight := int64((maxWeight - minWeight) / feedExpireDays)
+	dayIntervalWeight := (maxWeight - minWeight) / int64(config.FeedExpireDays)
 
 	var deleteList []string
 	var articleList []*FeedArticle
@@ -120,19 +126,47 @@ func updateAndFilterFeeds(configs []*FeedConfig, feedData map[string]*FeedDetail
 		return a.score < b.score
 	})
 
-	size := maxInformFeedSize
-	if len(articleList) < size {
-		size = len(articleList)
-	}
-
-	informArticles := articleList[:size]
+	informArticles := choseArticle(articleList, config)
 	for _, a := range informArticles {
 		feedData[a.URL].Informed = true
 	}
 	return informArticles
 }
 
-func addFeed(data map[string]*FeedDetail, config *FeedConfig, expireTime int64) {
+func choseArticle(list []*FeedArticle, config *FeedConfig) []*FeedArticle {
+	var articles []*FeedArticle
+
+	previousArticleHost := ""
+	sameSiteArticleCount := 0
+
+	for _, article := range list {
+		host := article.URL
+		hostIndex := strings.Index(host, "/")
+		if hostIndex > 0 {
+			host = host[:hostIndex]
+		}
+
+		if previousArticleHost == host {
+			if sameSiteArticleCount >= config.SameSiteMaxCount {
+				continue
+			}
+			sameSiteArticleCount++
+		} else {
+			previousArticleHost = host
+			sameSiteArticleCount = 1
+		}
+
+		articles = append(articles, article)
+
+		if len(articles) >= config.MaxInformFeedSize {
+			break
+		}
+	}
+
+	return articles
+}
+
+func addFeed(data map[string]*FeedDetail, config *FeedSource, expireTime int64) {
 	log.Println("parse feed: ", config.URL)
 
 	fp := gofeed.NewParser()
@@ -147,7 +181,7 @@ func addFeed(data map[string]*FeedDetail, config *FeedConfig, expireTime int64) 
 	}
 }
 
-func addFeedItem(data map[string]*FeedDetail, config *FeedConfig, expireTime int64, item *gofeed.Item) {
+func addFeedItem(data map[string]*FeedDetail, config *FeedSource, expireTime int64, item *gofeed.Item) {
 	url := item.Link
 	if _, exists := data[url]; exists {
 		return
