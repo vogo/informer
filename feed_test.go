@@ -3,6 +3,8 @@ package informer
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestUpdateAndFilterFeeds(t *testing.T) {
@@ -27,4 +29,8 @@ func TestUpdateAndFilterFeeds(t *testing.T) {
 		articlesInfo, _ := json.Marshal(articles)
 		t.Log(string(articlesInfo))
 	}
+}
+
+func TestGetHostFromUrl(t *testing.T) {
+	assert.Equal(t, "www.blog.com", getHostFromUrl("http://www.blog.com/page.html"))
 }

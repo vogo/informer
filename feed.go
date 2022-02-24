@@ -141,11 +141,7 @@ func choseArticle(list []*FeedArticle, config *FeedConfig) []*FeedArticle {
 	sameSiteArticleCount := 0
 
 	for _, article := range list {
-		host := article.URL
-		hostIndex := strings.Index(host, "/")
-		if hostIndex > 0 {
-			host = host[:hostIndex]
-		}
+		host := getHostFromUrl(article.URL)
 
 		if previousArticleHost == host {
 			if sameSiteArticleCount >= config.SameSiteMaxCount {
@@ -165,6 +161,20 @@ func choseArticle(list []*FeedArticle, config *FeedConfig) []*FeedArticle {
 	}
 
 	return articles
+}
+
+// get host from url,
+// host is www.blog.com if url is http://www.blog.com/page.html.
+func getHostFromUrl(host string) string {
+	hostIndex := strings.Index(host, "//")
+	if hostIndex > 0 {
+		host = host[hostIndex+2:]
+	}
+	hostIndex = strings.Index(host, "/")
+	if hostIndex > 0 {
+		host = host[:hostIndex]
+	}
+	return host
 }
 
 func addFeed(data map[string]*FeedDetail, config *FeedSource, expireTime int64) {
