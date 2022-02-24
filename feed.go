@@ -119,11 +119,12 @@ func updateAndFilterFeeds(config *FeedConfig, feedData map[string]*FeedDetail) [
 		delete(feedData, key)
 	}
 
+	// order by score desc
 	sort.Slice(articleList, func(i, j int) bool {
 		a := articleList[i]
 		b := articleList[j]
 
-		return a.score < b.score
+		return a.score > b.score
 	})
 
 	informArticles := choseArticle(articleList, config)

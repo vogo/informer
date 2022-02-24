@@ -45,6 +45,31 @@
         "weight": 50
       },
       {
+        "title": "字节跳动技术团队CSDN",
+        "url": "https://feed43.com/4865303661152630.xml",
+        "weight": 60
+      },
+      {
+        "title": "百度云原生-知乎",
+        "url": "https://feed43.com/6877382507441158.xml",
+        "weight": 70
+      },
+      {
+        "title": "warfalcon - 知乎",
+        "url": "https://feed43.com/6665741677661500.xml",
+        "weight": 40
+      },
+      {
+        "title": "百度geek说-知乎",
+        "url": "https://feed43.com/4675533876101682.xml",
+        "weight": 70
+      },
+      {
+        "title": "Neo的技术博客",
+        "url": "http://neoremind.com/feed/",
+        "weight": 100
+      },
+      {
         "url": "https://cjting.me/index.xml",
         "weight": 50
       },
@@ -55,10 +80,6 @@
       {
         "url": "https://fukun.org/index.xml",
         "weight": 50
-      },
-      {
-        "url": "http://neoremind.com/feed/",
-        "weight": 100
       },
       {
         "url": "http://www.pkudodo.com/feed/",
