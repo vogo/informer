@@ -18,43 +18,21 @@
 package informer
 
 import (
-	"encoding/json"
-	"io"
-	"log"
-	"net/http"
+	"crypto/rand"
+	"math/big"
+	mathRand "math/rand"
 )
 
-func getDailySoup() string {
-	resp, err := http.Get("http://open.iciba.com/dsapi/")
+func randIntn64(n int64) int64 {
+	nBig, err := rand.Int(rand.Reader, big.NewInt(n))
 	if err != nil {
-		log.Printf("err: %v\n", err)
-
-		return ""
-	}
-	defer resp.Body.Close()
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("err: %v\n", err)
-
-		return ""
+		// nolint:gosec //ignore this
+		return mathRand.Int63n(n)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("err: %d, %s\n", resp.StatusCode, b)
+	return nBig.Int64()
+}
 
-		return ""
-	}
-
-	data := struct {
-		Content string
-	}{}
-
-	if err = json.Unmarshal(b, &data); err != nil {
-		log.Printf("err: %v\n", err)
-
-		return ""
-	}
-
-	return data.Content
+func randIntn(n int) int {
+	return int(randIntn64(int64(n)))
 }

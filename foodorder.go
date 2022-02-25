@@ -20,10 +20,9 @@ package informer
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -32,27 +31,27 @@ const (
 	previousChosenFileName = "previous_chosen.json"
 )
 
-// Menu 菜单
+// Menu 菜单.
 type Menu struct {
 	Type     string   `json:"type"`
 	ChoseNum int      `json:"chose_num"`
 	List     []string `json:"list"`
 }
 
-// FoodConfig 点餐配置
+// FoodConfig 点餐配置.
 type FoodConfig struct {
 	Partners    []string      `json:"partners"`
 	Restaurants []*Restaurant `json:"restaurants"`
 }
 
-// Restaurant 餐厅
+// Restaurant 餐厅.
 type Restaurant struct {
 	Name  string  `json:"name"`
 	Tel   string  `json:"tel"`
 	Menus []*Menu `json:"food_list"`
 }
 
-// Order 下单
+// Order 下单.
 type Order struct {
 	RestaurantName string              `json:"name"`
 	User           string              `json:"user"`
@@ -63,7 +62,8 @@ func addFoodAutoChose(buf *bytes.Buffer, config Config, exeDir string) {
 	foodConfig := config.Food
 
 	var previousFoodOrders []*Order
-	previousData, err := ioutil.ReadFile(filepath.Join(exeDir, previousChosenFileName))
+
+	previousData, err := os.ReadFile(filepath.Join(exeDir, previousChosenFileName))
 	if err != nil {
 		log.Printf("read previous chosen error: %v", err)
 	}
@@ -74,6 +74,7 @@ func addFoodAutoChose(buf *bytes.Buffer, config Config, exeDir string) {
 	if len(foodConfig.Partners) > 0 {
 		orderUser = foodConfig.Partners[0]
 	}
+
 	if len(previousFoodOrders) > 0 {
 		previousLatestOrder := previousFoodOrders[len(previousFoodOrders)-1]
 		if previousLatestOrder.User != "" {
@@ -85,7 +86,7 @@ func addFoodAutoChose(buf *bytes.Buffer, config Config, exeDir string) {
 		}
 	}
 
-	fmt.Printf("order user: %s\n", orderUser)
+	log.Printf("order user: %s\n", orderUser)
 
 	autoChoseFood(buf, exeDir, foodConfig, previousFoodOrders, &orderUser)
 }
@@ -99,10 +100,12 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 
 	restaurants := filterPreviousChosenRestaurants(previousFoodOrders, foodConfig.Restaurants)
 
+	//nolint:gosec // ignore this
 	restaurantIndex := rand.Intn(len(restaurants))
 	restaurant := restaurants[restaurantIndex]
 
 	buf.WriteString("上班辛苦了! 中午为你推荐餐厅《" + restaurant.Name + "》")
+
 	if restaurant.Tel != "" {
 		buf.WriteString("(点餐电话" + restaurant.Tel + ")")
 	}
@@ -114,6 +117,7 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 		User:           *orderUser,
 		Chose:          make(map[string][]string),
 	}
+
 	buf.WriteString("\n\n")
 
 	if len(restaurant.Menus) == 0 {
@@ -123,7 +127,7 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 			buf.WriteString(foodMenu.Type)
 			buf.WriteByte(':')
 			for i := 0; i < foodMenu.ChoseNum; i++ {
-				index := rand.Intn(len(foodMenu.List))
+				index := randIntn(len(foodMenu.List))
 				if i > 0 {
 					buf.WriteByte(',')
 				}
@@ -142,7 +146,7 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 
 	previousFoodOrders = append(previousFoodOrders, foodOrder)
 	if b, err := json.Marshal(previousFoodOrders); err == nil {
-		_ = ioutil.WriteFile(filepath.Join(exeDir, previousChosenFileName), b, 0o660)
+		_ = os.WriteFile(filepath.Join(exeDir, previousChosenFileName), b, defaultDataFilePermission)
 	}
 }
 
@@ -169,11 +173,14 @@ LOOP1:
 	return results
 }
 
+//nolint:deadcode,unused // ignore this
 func filterPreviousChosenMenus(previousFoodOrders []*Order, restaurant *Restaurant) {
 	var previousFoodOrder *Order
+
 	for _, o := range previousFoodOrders {
 		if o.RestaurantName == restaurant.Name {
 			previousFoodOrder = o
+
 			break
 		}
 	}
@@ -188,17 +195,20 @@ func filterPreviousChosenMenus(previousFoodOrders []*Order, restaurant *Restaura
 		for _, foodMenu := range restaurant.Menus {
 			if foodMenu.Type == key {
 				filterItems(foodMenu, previousFoodOrder.Chose[key])
+
 				break
 			}
 		}
 	}
 }
 
+// nolint:unused // ignore this
 func filterItems(menu *Menu, filters []string) {
 	for _, filter := range filters {
 		for index, name := range menu.List {
 			if name == filter {
 				menu.List = append(menu.List[:index], menu.List[index+1:]...)
+
 				break
 			}
 		}

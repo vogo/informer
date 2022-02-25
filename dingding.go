@@ -39,6 +39,7 @@ type DingMsg struct {
 	At      DingAt   `json:"at"`
 }
 
+//nolint:deadcode,unused // ignore this
 func ding(url, content, user string, weekday time.Weekday) {
 	msg := &DingMsg{
 		MsgType: "text",
@@ -51,13 +52,20 @@ func ding(url, content, user string, weekday time.Weekday) {
 		msg.At = DingAt{AtMobiles: []string{user}}
 	}
 
-	data, _ := json.Marshal(msg)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Println(err)
+	}
+
 	log.Printf("ding url: %s", url)
 	log.Printf("ding data: %s", data)
+
 	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	defer resp.Body.Close()
 
 	log.Printf("ding response: %v", resp)
 }

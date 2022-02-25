@@ -41,13 +41,19 @@ func lark(url, content string) {
 		},
 	}
 
-	data, _ := json.Marshal(msg)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Println(err)
+	}
+
 	log.Printf("lark url: %s", url)
 	log.Printf("lark data: %s", data)
+
 	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer resp.Body.Close()
 
 	log.Printf("lark response: %v", resp)
 }

@@ -17,44 +17,4 @@
 
 package informer
 
-import (
-	"encoding/json"
-	"io"
-	"log"
-	"net/http"
-)
-
-func getDailySoup() string {
-	resp, err := http.Get("http://open.iciba.com/dsapi/")
-	if err != nil {
-		log.Printf("err: %v\n", err)
-
-		return ""
-	}
-	defer resp.Body.Close()
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("err: %v\n", err)
-
-		return ""
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("err: %d, %s\n", resp.StatusCode, b)
-
-		return ""
-	}
-
-	data := struct {
-		Content string
-	}{}
-
-	if err = json.Unmarshal(b, &data); err != nil {
-		log.Printf("err: %v\n", err)
-
-		return ""
-	}
-
-	return data.Content
-}
+const defaultDataFilePermission = 0o600

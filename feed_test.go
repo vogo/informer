@@ -15,21 +15,24 @@
  * limitations under the License.
  */
 
-package informer
+package informer_test
 
 import (
 	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/wongoo/informer"
 )
 
 func TestUpdateAndFilterFeeds(t *testing.T) {
-	feedConfig := &FeedConfig{
+	t.Parallel()
+
+	feedConfig := &informer.FeedConfig{
 		MaxInformFeedSize: 10,
 		FeedExpireDays:    15,
 		SameSiteMaxCount:  2,
-		Feeds: []*FeedSource{
+		Feeds: []*informer.FeedSource{
 			{
 				URL:    "http://blog.sciencenet.cn/rss.php?uid=117333",
 				Weight: 100,
@@ -37,17 +40,23 @@ func TestUpdateAndFilterFeeds(t *testing.T) {
 		},
 	}
 
-	feedData := make(map[string]*FeedDetail)
+	feedData := make(map[string]*informer.FeedDetail)
 
-	articles := updateAndFilterFeeds(feedConfig, feedData)
+	articles := informer.UpdateAndFilterFeeds(feedConfig, feedData)
 	if len(articles) == 0 {
 		t.Error("parse feed article failed")
 	} else {
-		articlesInfo, _ := json.Marshal(articles)
+		articlesInfo, err := json.Marshal(articles)
+		if err != nil {
+			t.Error(err)
+		}
+
 		t.Log(string(articlesInfo))
 	}
 }
 
 func TestGetHostFromUrl(t *testing.T) {
-	assert.Equal(t, "www.blog.com", getHostFromUrl("http://www.blog.com/page.html"))
+	t.Parallel()
+
+	assert.Equal(t, "www.blog.com", informer.GetHostFromURL("http://www.blog.com/page.html"))
 }

@@ -18,11 +18,11 @@
 package informer
 
 import (
-	"bytes"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"log"
 	"math"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -54,7 +54,9 @@ type FeedDetail struct {
 	Timestamp int64  `json:"timestamp"`
 	Weight    int64  `json:"weight"`
 	Informed  bool   `json:"informed"`
-	score     int64
+
+	//nolint:structcheck //ignore this
+	score int64
 }
 
 type FeedArticle struct {
@@ -62,9 +64,10 @@ type FeedArticle struct {
 	URL string `json:"url"`
 }
 
-func addFeeds(buf *bytes.Buffer, config *FeedConfig, exeDir string) {
+func addFeeds(buf io.StringWriter, config *FeedConfig, exeDir string) {
 	feedDateFilePath := filepath.Join(exeDir, feedDataFile)
-	dataFile, err := ioutil.ReadFile(feedDateFilePath)
+
+	dataFile, err := os.ReadFile(feedDateFilePath)
 	if err != nil {
 		log.Printf("read feed data error: %v", err)
 	}
@@ -73,41 +76,53 @@ func addFeeds(buf *bytes.Buffer, config *FeedConfig, exeDir string) {
 
 	_ = json.Unmarshal(dataFile, &feedData)
 
-	articles := updateAndFilterFeeds(config, feedData)
+	articles := UpdateAndFilterFeeds(config, feedData)
 	if len(articles) > 0 {
-		buf.WriteString("文章推荐:\n")
+		_, _ = buf.WriteString("文章推荐:\n")
+
 		for _, a := range articles {
-			buf.WriteString("- " + a.Title + ", " + a.URL + "\n")
+			_, _ = buf.WriteString("- " + a.Title + ", " + a.URL + "\n")
 		}
 	}
 
 	if b, jsonErr := json.Marshal(feedData); jsonErr == nil {
-		_ = ioutil.WriteFile(feedDateFilePath, b, 0o660)
+		_ = os.WriteFile(feedDateFilePath, b, defaultDataFilePermission)
 	}
 }
 
-func updateAndFilterFeeds(config *FeedConfig, feedData map[string]*FeedDetail) []*FeedArticle {
+func UpdateAndFilterFeeds(config *FeedConfig, feedData map[string]*FeedDetail) []*FeedArticle {
 	now := time.Now()
 	nowTime := now.Unix()
 	expireTime := now.Add(time.Hour * 24 * time.Duration(-config.FeedExpireDays)).Unix()
 
 	minWeight := int64(math.MaxInt64)
 	maxWeight := int64(0)
-	for _, config := range config.Feeds {
-		addFeed(feedData, config, expireTime)
 
-		if minWeight > config.Weight {
-			minWeight = config.Weight
+	for _, source := range config.Feeds {
+		addFeed(feedData, source, expireTime)
+
+		if minWeight > source.Weight {
+			minWeight = source.Weight
 		}
-		if maxWeight < config.Weight {
-			maxWeight = config.Weight
+
+		if maxWeight < source.Weight {
+			maxWeight = source.Weight
 		}
 	}
 
 	dayIntervalWeight := (maxWeight - minWeight) / int64(config.FeedExpireDays)
 
+	articleList := filterArticles(feedData, nowTime, expireTime, dayIntervalWeight)
+
+	return sortAndChoseArticles(config, feedData, articleList)
+}
+
+func filterArticles(feedData map[string]*FeedDetail, nowTime, expireTime, dayIntervalWeight int64) []*FeedArticle {
 	var deleteList []string
+
+	// nolint:prealloc //ignore this
 	var articleList []*FeedArticle
+
 	for url, detail := range feedData {
 		// adjust timestamp
 		if detail.Timestamp == 0 {
@@ -116,8 +131,10 @@ func updateAndFilterFeeds(config *FeedConfig, feedData map[string]*FeedDetail) [
 
 		if detail.Timestamp < expireTime {
 			deleteList = append(deleteList, url)
+
 			continue
 		}
+
 		if detail.Informed {
 			continue
 		}
@@ -136,6 +153,10 @@ func updateAndFilterFeeds(config *FeedConfig, feedData map[string]*FeedDetail) [
 		delete(feedData, key)
 	}
 
+	return articleList
+}
+
+func sortAndChoseArticles(config *FeedConfig, feedData map[string]*FeedDetail, articleList []*FeedArticle) []*FeedArticle {
 	// order by score desc
 	sort.Slice(articleList, func(i, j int) bool {
 		a := articleList[i]
@@ -148,17 +169,19 @@ func updateAndFilterFeeds(config *FeedConfig, feedData map[string]*FeedDetail) [
 	for _, a := range informArticles {
 		feedData[a.URL].Informed = true
 	}
+
 	return informArticles
 }
 
 func choseArticle(list []*FeedArticle, config *FeedConfig) []*FeedArticle {
+	// nolint:prealloc //ignore this
 	var articles []*FeedArticle
 
 	previousArticleHost := ""
 	sameSiteArticleCount := 0
 
 	for _, article := range list {
-		host := getHostFromUrl(article.URL)
+		host := GetHostFromURL(article.URL)
 
 		if previousArticleHost == host {
 			if sameSiteArticleCount >= config.SameSiteMaxCount {
@@ -180,17 +203,19 @@ func choseArticle(list []*FeedArticle, config *FeedConfig) []*FeedArticle {
 	return articles
 }
 
-// get host from url,
+// GetHostFromURL get host from url,
 // host is www.blog.com if url is http://www.blog.com/page.html.
-func getHostFromUrl(host string) string {
+func GetHostFromURL(host string) string {
 	hostIndex := strings.Index(host, "//")
 	if hostIndex > 0 {
 		host = host[hostIndex+2:]
 	}
+
 	hostIndex = strings.Index(host, "/")
 	if hostIndex > 0 {
 		host = host[:hostIndex]
 	}
+
 	return host
 }
 
@@ -198,9 +223,11 @@ func addFeed(data map[string]*FeedDetail, config *FeedSource, expireTime int64) 
 	log.Println("parse feed: ", config.URL)
 
 	fp := gofeed.NewParser()
+
 	feed, err := fp.ParseURL(config.URL)
 	if err != nil {
 		log.Printf("parse feed url error! url: %s, error: %v", config.URL, err)
+
 		return
 	}
 

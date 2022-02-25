@@ -20,8 +20,6 @@ package informer
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -51,7 +49,8 @@ func Inform() {
 	exePath, _ := os.Executable()
 	exeDir := filepath.Dir(exePath)
 	dataPath := filepath.Join(exeDir, configFileName)
-	data, err := ioutil.ReadFile(dataPath)
+
+	data, err := os.ReadFile(dataPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,11 +67,10 @@ func Inform() {
 
 	addFeeds(buf, informerConfig.Feed, exeDir)
 
-	content := string(buf.Bytes())
-	fmt.Print(content)
+	content := buf.String()
+	log.Println(content)
 
 	if len(os.Args) > 1 {
-		// ding(os.Args[1], content, orderUser, weekday)
 		lark(os.Args[1], content)
 	}
 }
