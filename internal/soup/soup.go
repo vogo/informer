@@ -15,24 +15,46 @@
  * limitations under the License.
  */
 
-package informer
+package soup
 
 import (
-	"crypto/rand"
-	"math/big"
-	mathRand "math/rand"
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
 )
 
-func randIntn64(n int64) int64 {
-	nBig, err := rand.Int(rand.Reader, big.NewInt(n))
+func GetDailySoup() string {
+	resp, err := http.Get("http://open.iciba.com/dsapi/")
 	if err != nil {
-		// nolint:gosec //ignore this
-		return mathRand.Int63n(n)
+		log.Printf("err: %v\n", err)
+
+		return ""
+	}
+	defer resp.Body.Close()
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("err: %v\n", err)
+
+		return ""
 	}
 
-	return nBig.Int64()
-}
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("err: %d, %s\n", resp.StatusCode, b)
 
-func randIntn(n int) int {
-	return int(randIntn64(int64(n)))
+		return ""
+	}
+
+	data := struct {
+		Content string
+	}{}
+
+	if err = json.Unmarshal(b, &data); err != nil {
+		log.Printf("err: %v\n", err)
+
+		return ""
+	}
+
+	return data.Content
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package informer
+package foodorder
 
 import (
 	"bytes"
@@ -25,6 +25,9 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/wongoo/informer/internal"
+	"github.com/wongoo/informer/internal/util"
 )
 
 const (
@@ -58,9 +61,7 @@ type Order struct {
 	Chose          map[string][]string `json:"chose"`
 }
 
-func addFoodAutoChose(buf *bytes.Buffer, config Config, exeDir string) {
-	foodConfig := config.Food
-
+func AddFoodAutoChose(buf *bytes.Buffer, foodConfig *FoodConfig, exeDir string) {
 	var previousFoodOrders []*Order
 
 	previousData, err := os.ReadFile(filepath.Join(exeDir, previousChosenFileName))
@@ -127,7 +128,7 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 			buf.WriteString(foodMenu.Type)
 			buf.WriteByte(':')
 			for i := 0; i < foodMenu.ChoseNum; i++ {
-				index := randIntn(len(foodMenu.List))
+				index := util.RandIntn(len(foodMenu.List))
 				if i > 0 {
 					buf.WriteByte(',')
 				}
@@ -146,7 +147,7 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 
 	previousFoodOrders = append(previousFoodOrders, foodOrder)
 	if b, err := json.Marshal(previousFoodOrders); err == nil {
-		_ = os.WriteFile(filepath.Join(exeDir, previousChosenFileName), b, defaultDataFilePermission)
+		_ = os.WriteFile(filepath.Join(exeDir, previousChosenFileName), b, internal.DefaultDataFilePermission)
 	}
 }
 

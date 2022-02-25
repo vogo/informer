@@ -6,7 +6,7 @@
 
 ## 安装 informer
 ```bash
-GOBIN=$(pwd) go install github.com/wongoo/informer/cmd/informer@master
+GOBIN=$(pwd) go install github.com/wongoo/informer@master
 ```
 
 ## 创建配置文件
@@ -14,7 +14,13 @@ GOBIN=$(pwd) go install github.com/wongoo/informer/cmd/informer@master
 参考[配置范例](informer.json)
 
 ## 配置 linux crontab 定时任务
-```bash
-# 每天早上10点发
+
+每天早上10点发到钉钉：
+```
 00 10 * * * /root/informer/informer "https://oapi.dingtalk.com/robot/send?access_token=xxxxx >> /root/informer/cron.log"
+```
+
+或每天早上10点发到飞书：
+```
+00 10 * * * /root/informer/informer "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxx >> /root/informer/cron.log"
 ```

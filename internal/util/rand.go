@@ -15,10 +15,24 @@
  * limitations under the License.
  */
 
-package main
+package util
 
-import "github.com/wongoo/informer"
+import (
+	"crypto/rand"
+	"math/big"
+	mathRand "math/rand"
+)
 
-func main() {
-	informer.Inform()
+func randIntn64(n int64) int64 {
+	nBig, err := rand.Int(rand.Reader, big.NewInt(n))
+	if err != nil {
+		// nolint:gosec //ignore this
+		return mathRand.Int63n(n)
+	}
+
+	return nBig.Int64()
+}
+
+func RandIntn(n int) int {
+	return int(randIntn64(int64(n)))
 }

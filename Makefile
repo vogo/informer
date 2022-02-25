@@ -13,7 +13,7 @@ check: license-check
 		golangci-lint run
 
 test:
-		go test -coverprofile=coverage.txt -covermode=atomic
+		go test ./... -coverprofile=coverage.txt -covermode=atomic
 
 build: format check test
 

@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package informer
+package date
 
 import (
 	"fmt"
 	"time"
 )
 
-func getDateInfo() string {
+func GetDateInfo() string {
 	now := time.Now()
 	weekday := now.Weekday()
 

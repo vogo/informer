@@ -15,62 +15,12 @@
  * limitations under the License.
  */
 
-package informer
+package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"log"
-	"os"
-	"path/filepath"
-	"time"
+	"github.com/wongoo/informer/internal/inform"
 )
 
-const (
-	configFileName = "informer.json"
-)
-
-type Config struct {
-	Food *FoodConfig `json:"food"`
-	Feed *FeedConfig `json:"feed"`
-}
-
-func Inform() {
-	buf := bytes.NewBuffer(nil)
-
-	buf.WriteString(getDateInfo())
-
-	if dailySoup := getDailySoup(); dailySoup != "" {
-		buf.WriteString(dailySoup)
-		buf.WriteByte('\n')
-		buf.WriteByte('\n')
-	}
-
-	exePath, _ := os.Executable()
-	exeDir := filepath.Dir(exePath)
-	dataPath := filepath.Join(exeDir, configFileName)
-
-	data, err := os.ReadFile(dataPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var informerConfig Config
-	if err := json.Unmarshal(data, &informerConfig); err != nil {
-		log.Fatal(err)
-	}
-
-	weekday := time.Now().Weekday()
-	if weekday != time.Sunday && weekday != time.Saturday {
-		addFoodAutoChose(buf, informerConfig, exeDir)
-	}
-
-	addFeeds(buf, informerConfig.Feed, exeDir)
-
-	content := buf.String()
-	log.Println(content)
-
-	if len(os.Args) > 1 {
-		lark(os.Args[1], content)
-	}
+func main() {
+	inform.Inform()
 }

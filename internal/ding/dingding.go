@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package informer
+package ding
 
 import (
 	"bytes"
@@ -25,31 +25,32 @@ import (
 	"time"
 )
 
-type DingText struct {
+const Host = "dingtalk.com"
+
+type MsgText struct {
 	Content string `json:"content"`
 }
 
-type DingAt struct {
+type MsgAt struct {
 	AtMobiles []string `json:"atMobiles"`
 }
 
-type DingMsg struct {
-	MsgType string   `json:"msgtype"`
-	Text    DingText `json:"text"`
-	At      DingAt   `json:"at"`
+type MsgBody struct {
+	MsgType string  `json:"msgtype"`
+	Text    MsgText `json:"text"`
+	At      MsgAt   `json:"at"`
 }
 
-//nolint:deadcode,unused // ignore this
-func ding(url, content, user string, weekday time.Weekday) {
-	msg := &DingMsg{
+func Ding(url, content, user string, weekday time.Weekday) {
+	msg := &MsgBody{
 		MsgType: "text",
-		Text: DingText{
+		Text: MsgText{
 			Content: content,
 		},
 	}
 
 	if user != "" && weekday != time.Sunday && weekday != time.Saturday {
-		msg.At = DingAt{AtMobiles: []string{user}}
+		msg.At = MsgAt{AtMobiles: []string{user}}
 	}
 
 	data, err := json.Marshal(msg)

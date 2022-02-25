@@ -15,48 +15,47 @@
  * limitations under the License.
  */
 
-package informer_test
+package lark
 
 import (
+	"bytes"
 	"encoding/json"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/wongoo/informer"
+	"log"
+	"net/http"
 )
 
-func TestUpdateAndFilterFeeds(t *testing.T) {
-	t.Parallel()
+const Host = "feishu.cn"
 
-	feedConfig := &informer.FeedConfig{
-		MaxInformFeedSize: 10,
-		FeedExpireDays:    15,
-		SameSiteMaxCount:  2,
-		Feeds: []*informer.FeedSource{
-			{
-				URL:    "http://blog.sciencenet.cn/rss.php?uid=117333",
-				Weight: 100,
-			},
+type Content struct {
+	Text string `json:"text"`
+}
+
+type Message struct {
+	Type    string   `json:"msg_type"`
+	Content *Content `json:"content"`
+}
+
+func Lark(url, content string) {
+	msg := &Message{
+		Type: "text",
+		Content: &Content{
+			Text: content,
 		},
 	}
 
-	feedData := make(map[string]*informer.FeedDetail)
-
-	articles := informer.UpdateAndFilterFeeds(feedConfig, feedData)
-	if len(articles) == 0 {
-		t.Error("parse feed article failed")
-	} else {
-		articlesInfo, err := json.Marshal(articles)
-		if err != nil {
-			t.Error(err)
-		}
-
-		t.Log(string(articlesInfo))
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Println(err)
 	}
-}
 
-func TestGetHostFromUrl(t *testing.T) {
-	t.Parallel()
+	log.Printf("lark url: %s", url)
+	log.Printf("lark data: %s", data)
 
-	assert.Equal(t, "www.blog.com", informer.GetHostFromURL("http://www.blog.com/page.html"))
+	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	log.Printf("lark response: %v", resp)
 }

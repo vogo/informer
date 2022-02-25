@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package informer
+package feed
 
 import (
 	"encoding/json"
@@ -32,24 +32,25 @@ import (
 )
 
 const (
-	feedDataFile  = "feed_data.json"
-	oneDaySeconds = int64(24 * time.Hour / time.Second)
+	defaultDataFilePermission = 0o600
+	feedDataFile              = "feed_data.json"
+	oneDaySeconds             = int64(24 * time.Hour / time.Second)
 )
 
-type FeedConfig struct {
-	MaxInformFeedSize int           `json:"max_inform_feed_size"`
-	FeedExpireDays    int           `json:"feed_expire_days"`
-	SameSiteMaxCount  int           `json:"same_site_max_count"`
-	Feeds             []*FeedSource `json:"feeds"`
+type Config struct {
+	MaxInformFeedSize int       `json:"max_inform_feed_size"`
+	FeedExpireDays    int       `json:"feed_expire_days"`
+	SameSiteMaxCount  int       `json:"same_site_max_count"`
+	Feeds             []*Source `json:"feeds"`
 }
 
-type FeedSource struct {
+type Source struct {
 	Title  string `json:"title"`
 	URL    string `json:"url"`
 	Weight int64  `json:"weight"`
 }
 
-type FeedDetail struct {
+type Detail struct {
 	Title     string `json:"title"`
 	Timestamp int64  `json:"timestamp"`
 	Weight    int64  `json:"weight"`
@@ -59,12 +60,12 @@ type FeedDetail struct {
 	score int64
 }
 
-type FeedArticle struct {
-	FeedDetail
+type Article struct {
+	Detail
 	URL string `json:"url"`
 }
 
-func addFeeds(buf io.StringWriter, config *FeedConfig, exeDir string) {
+func AddFeeds(buf io.StringWriter, config *Config, exeDir string) {
 	feedDateFilePath := filepath.Join(exeDir, feedDataFile)
 
 	dataFile, err := os.ReadFile(feedDateFilePath)
@@ -72,7 +73,7 @@ func addFeeds(buf io.StringWriter, config *FeedConfig, exeDir string) {
 		log.Printf("read feed data error: %v", err)
 	}
 
-	feedData := make(map[string]*FeedDetail)
+	feedData := make(map[string]*Detail)
 
 	_ = json.Unmarshal(dataFile, &feedData)
 
@@ -90,7 +91,7 @@ func addFeeds(buf io.StringWriter, config *FeedConfig, exeDir string) {
 	}
 }
 
-func UpdateAndFilterFeeds(config *FeedConfig, feedData map[string]*FeedDetail) []*FeedArticle {
+func UpdateAndFilterFeeds(config *Config, feedData map[string]*Detail) []*Article {
 	now := time.Now()
 	nowTime := now.Unix()
 	expireTime := now.Add(time.Hour * 24 * time.Duration(-config.FeedExpireDays)).Unix()
@@ -117,11 +118,11 @@ func UpdateAndFilterFeeds(config *FeedConfig, feedData map[string]*FeedDetail) [
 	return sortAndChoseArticles(config, feedData, articleList)
 }
 
-func filterArticles(feedData map[string]*FeedDetail, nowTime, expireTime, dayIntervalWeight int64) []*FeedArticle {
+func filterArticles(feedData map[string]*Detail, nowTime, expireTime, dayIntervalWeight int64) []*Article {
 	var deleteList []string
 
 	// nolint:prealloc //ignore this
-	var articleList []*FeedArticle
+	var articleList []*Article
 
 	for url, detail := range feedData {
 		// adjust timestamp
@@ -139,9 +140,9 @@ func filterArticles(feedData map[string]*FeedDetail, nowTime, expireTime, dayInt
 			continue
 		}
 
-		article := &FeedArticle{
-			FeedDetail: *detail,
-			URL:        url,
+		article := &Article{
+			Detail: *detail,
+			URL:    url,
 		}
 
 		pastDays := (nowTime - article.Timestamp) / oneDaySeconds
@@ -156,7 +157,7 @@ func filterArticles(feedData map[string]*FeedDetail, nowTime, expireTime, dayInt
 	return articleList
 }
 
-func sortAndChoseArticles(config *FeedConfig, feedData map[string]*FeedDetail, articleList []*FeedArticle) []*FeedArticle {
+func sortAndChoseArticles(config *Config, feedData map[string]*Detail, articleList []*Article) []*Article {
 	// order by score desc
 	sort.Slice(articleList, func(i, j int) bool {
 		a := articleList[i]
@@ -173,9 +174,9 @@ func sortAndChoseArticles(config *FeedConfig, feedData map[string]*FeedDetail, a
 	return informArticles
 }
 
-func choseArticle(list []*FeedArticle, config *FeedConfig) []*FeedArticle {
+func choseArticle(list []*Article, config *Config) []*Article {
 	// nolint:prealloc //ignore this
-	var articles []*FeedArticle
+	var articles []*Article
 
 	previousArticleHost := ""
 	sameSiteArticleCount := 0
@@ -219,7 +220,7 @@ func GetHostFromURL(host string) string {
 	return host
 }
 
-func addFeed(data map[string]*FeedDetail, config *FeedSource, expireTime int64) {
+func addFeed(data map[string]*Detail, config *Source, expireTime int64) {
 	log.Println("parse feed: ", config.URL)
 
 	fp := gofeed.NewParser()
@@ -236,7 +237,7 @@ func addFeed(data map[string]*FeedDetail, config *FeedSource, expireTime int64) 
 	}
 }
 
-func addFeedItem(data map[string]*FeedDetail, config *FeedSource, expireTime int64, item *gofeed.Item) {
+func addFeedItem(data map[string]*Detail, config *Source, expireTime int64, item *gofeed.Item) {
 	url := item.Link
 	if _, exists := data[url]; exists {
 		return
@@ -260,7 +261,7 @@ func addFeedItem(data map[string]*FeedDetail, config *FeedSource, expireTime int
 		return
 	}
 
-	data[url] = &FeedDetail{
+	data[url] = &Detail{
 		Title:     item.Title,
 		Timestamp: timestamp,
 		Weight:    config.Weight,
