@@ -27,7 +27,8 @@
       {
         "title": "阿里云开发者社区-阿里技术",
         "url": "https://feed43.com/5157458655843068.xml",
-        "weight": 80
+        "weight": 80,
+        "max_fetch_num": 5
       },
       {
         "title": "管理世界杂志社",

@@ -45,10 +45,10 @@ type Config struct {
 }
 
 type Source struct {
-	Title         string `json:"title"`
-	URL           string `json:"url"`
-	Weight        int64  `json:"weight"`
-	MaxFetchCount int    `json:"max_fetch_count"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	Weight      int64  `json:"weight"`
+	MaxFetchNum int    `json:"max_fetch_num"`
 }
 
 type Detail struct {
@@ -248,7 +248,7 @@ func addFeed(data map[string]*Detail, source *Source, expireTime int64) {
 
 		count++
 
-		if source.MaxFetchCount > 0 && count >= source.MaxFetchCount {
+		if source.MaxFetchNum > 0 && count >= source.MaxFetchNum {
 			break
 		}
 	}
