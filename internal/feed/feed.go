@@ -45,9 +45,10 @@ type Config struct {
 }
 
 type Source struct {
-	Title  string `json:"title"`
-	URL    string `json:"url"`
-	Weight int64  `json:"weight"`
+	Title         string `json:"title"`
+	URL           string `json:"url"`
+	Weight        int64  `json:"weight"`
+	MaxFetchCount int    `json:"max_fetch_count"`
 }
 
 type Detail struct {
@@ -228,24 +229,32 @@ func GetHostFromURL(host string) string {
 	return host
 }
 
-func addFeed(data map[string]*Detail, config *Source, expireTime int64) {
-	log.Println("parse feed: ", config.URL)
+func addFeed(data map[string]*Detail, source *Source, expireTime int64) {
+	log.Println("parse feed: ", source.URL)
 
 	fp := gofeed.NewParser()
 
-	feed, err := fp.ParseURL(config.URL)
+	feed, err := fp.ParseURL(source.URL)
 	if err != nil {
-		log.Printf("parse feed url error! url: %s, error: %v", config.URL, err)
+		log.Printf("parse feed url error! url: %s, error: %v", source.URL, err)
 
 		return
 	}
 
+	count := 0
+
 	for _, item := range feed.Items {
-		addFeedItem(data, config, expireTime, item)
+		addFeedItem(data, source, expireTime, item)
+
+		count++
+
+		if source.MaxFetchCount > 0 && count >= source.MaxFetchCount {
+			break
+		}
 	}
 }
 
-func addFeedItem(data map[string]*Detail, config *Source, expireTime int64, item *gofeed.Item) {
+func addFeedItem(data map[string]*Detail, source *Source, expireTime int64, item *gofeed.Item) {
 	url := item.Link
 	if _, exists := data[url]; exists {
 		return
@@ -272,7 +281,7 @@ func addFeedItem(data map[string]*Detail, config *Source, expireTime int64, item
 	data[url] = &Detail{
 		Title:     item.Title,
 		Timestamp: timestamp,
-		Weight:    config.Weight,
+		Weight:    source.Weight,
 		Informed:  false,
 	}
 }
