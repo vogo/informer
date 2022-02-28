@@ -163,7 +163,15 @@ func sortAndChoseArticles(config *Config, feedData map[string]*Detail, articleLi
 		a := articleList[i]
 		b := articleList[j]
 
-		return a.score > b.score
+		if a.score != b.score {
+			return a.score > b.score
+		}
+
+		if a.Timestamp != b.Timestamp {
+			return a.Timestamp > b.Timestamp
+		}
+
+		return strings.Compare(a.Title, b.Title) > 0
 	})
 
 	informArticles := choseArticle(articleList, config)
