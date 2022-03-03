@@ -1,10 +1,11 @@
 module github.com/wongoo/informer
 
-go 1.18
+go 1.17
 
 require (
 	github.com/mmcdole/gofeed v1.1.3
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.4.0
+	github.com/vogo/vogo v0.0.0-20220303084735-2b4e5f514a84
 )
 
 require (
@@ -18,4 +19,5 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/net v0.0.0-20200301022130-244492dfa37a // indirect
 	golang.org/x/text v0.3.2 // indirect
+	gopkg.in/yaml.v2 v2.2.2 // indirect
 )

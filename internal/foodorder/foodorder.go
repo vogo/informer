@@ -26,8 +26,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/vogo/vogo/vrand"
 	"github.com/wongoo/informer/internal"
-	"github.com/wongoo/informer/internal/util"
 )
 
 const (
@@ -128,7 +128,7 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 			buf.WriteString(foodMenu.Type)
 			buf.WriteByte(':')
 			for i := 0; i < foodMenu.ChoseNum; i++ {
-				index := util.RandIntn(len(foodMenu.List))
+				index := vrand.Intn(len(foodMenu.List))
 				if i > 0 {
 					buf.WriteByte(',')
 				}
