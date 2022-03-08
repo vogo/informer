@@ -69,11 +69,14 @@ func Inform() {
 	}
 
 	weekday := time.Now().Weekday()
-	if weekday != time.Sunday && weekday != time.Saturday {
+
+	if informerConfig.Food != nil && weekday != time.Sunday && weekday != time.Saturday {
 		foodorder.AddFoodAutoChose(buf, informerConfig.Food, exeDir)
 	}
 
-	feed.AddFeeds(buf, informerConfig.Feed, exeDir)
+	if informerConfig.Feed != nil {
+		feed.AddFeeds(buf, informerConfig.Feed, exeDir)
+	}
 
 	content := buf.String()
 	log.Println(content)
