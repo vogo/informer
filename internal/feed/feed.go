@@ -41,6 +41,7 @@ type Config struct {
 	MaxInformFeedSize int       `json:"max_inform_feed_size"`
 	FeedExpireDays    int       `json:"feed_expire_days"`
 	SameSiteMaxCount  int       `json:"same_site_max_count"`
+	MaxFetchNum       int       `json:"max_fetch_num"`
 	Feeds             []*Source `json:"feeds"`
 }
 
@@ -101,7 +102,7 @@ func UpdateAndFilterFeeds(config *Config, feedData map[string]*Detail) []*Articl
 	maxWeight := int64(0)
 
 	for _, source := range config.Feeds {
-		addFeed(feedData, source, expireTime)
+		addFeed(feedData, config, source, expireTime)
 
 		if minWeight > source.Weight {
 			minWeight = source.Weight
@@ -229,7 +230,7 @@ func GetHostFromURL(host string) string {
 	return host
 }
 
-func addFeed(data map[string]*Detail, source *Source, expireTime int64) {
+func addFeed(data map[string]*Detail, config *Config, source *Source, expireTime int64) {
 	log.Println("parse feed: ", source.URL)
 
 	fp := gofeed.NewParser()
@@ -248,7 +249,8 @@ func addFeed(data map[string]*Detail, source *Source, expireTime int64) {
 
 		count++
 
-		if source.MaxFetchNum > 0 && count >= source.MaxFetchNum {
+		if (source.MaxFetchNum > 0 && count >= source.MaxFetchNum) ||
+			(config.MaxFetchNum > 0 && count >= config.MaxFetchNum) {
 			break
 		}
 	}
