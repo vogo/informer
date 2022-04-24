@@ -257,12 +257,12 @@ func addFeed(data map[string]*Detail, config *Config, source *Source, expireTime
 }
 
 func addFeedItem(data map[string]*Detail, source *Source, expireTime int64, item *gofeed.Item) {
-	if IsURLContainsInvalidChars(item.Link) {
+	urlAddr, ok := FormatURL(item.Link)
+	if !ok {
 		return
 	}
 
-	url := FormatURL(item.Link)
-	if _, exists := data[url]; exists {
+	if _, exists := data[urlAddr]; exists {
 		return
 	}
 
@@ -284,7 +284,7 @@ func addFeedItem(data map[string]*Detail, source *Source, expireTime int64, item
 		return
 	}
 
-	data[url] = &Detail{
+	data[urlAddr] = &Detail{
 		Title:     item.Title,
 		Timestamp: timestamp,
 		Weight:    source.Weight,
