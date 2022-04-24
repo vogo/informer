@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/mmcdole/gofeed v1.1.3
 	github.com/stretchr/testify v1.4.0
+	github.com/vogo/logger v1.3.0
 	github.com/vogo/vogo v0.0.0-20220303084735-2b4e5f514a84
 )
 
