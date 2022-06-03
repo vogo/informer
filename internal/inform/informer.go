@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vogo/logger"
 	"github.com/wongoo/informer/internal/date"
 	"github.com/wongoo/informer/internal/ding"
 	"github.com/wongoo/informer/internal/feed"
@@ -79,7 +80,7 @@ func Inform() {
 	}
 
 	content := buf.String()
-	log.Println(content)
+	logger.Info(content)
 
 	if len(os.Args) > 1 {
 		url := os.Args[1]

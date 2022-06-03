@@ -18,68 +18,25 @@
 package feed
 
 import (
-	"encoding/json"
 	"io"
-	"log"
 	"math"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/mmcdole/gofeed"
+	"github.com/vogo/logger"
 )
 
 const (
-	defaultDataFilePermission = 0o600
-	feedDataFile              = "feed_data.json"
-	oneDaySeconds             = int64(24 * time.Hour / time.Second)
+	oneDaySeconds = int64(24 * time.Hour / time.Second)
 )
 
-type Config struct {
-	MaxInformFeedSize int       `json:"max_inform_feed_size"`
-	FeedExpireDays    int       `json:"feed_expire_days"`
-	SameSiteMaxCount  int       `json:"same_site_max_count"`
-	MaxFetchNum       int       `json:"max_fetch_num"`
-	Feeds             []*Source `json:"feeds"`
-}
+func AddFeeds(buf io.StringWriter, config *Config, confDir string) {
+	InitFeedDB(confDir)
 
-type Source struct {
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Weight      int64  `json:"weight"`
-	MaxFetchNum int    `json:"max_fetch_num"`
-}
+	saveJsonDataToFeedDB(confDir)
 
-type Detail struct {
-	Title     string `json:"title"`
-	Timestamp int64  `json:"timestamp"`
-	Weight    int64  `json:"weight"`
-	Informed  bool   `json:"informed"`
-
-	//nolint:structcheck //ignore this
-	score int64
-}
-
-type Article struct {
-	Detail
-	URL string `json:"url"`
-}
-
-func AddFeeds(buf io.StringWriter, config *Config, exeDir string) {
-	feedDateFilePath := filepath.Join(exeDir, feedDataFile)
-
-	dataFile, err := os.ReadFile(feedDateFilePath)
-	if err != nil {
-		log.Printf("read feed data error: %v", err)
-	}
-
-	feedData := make(map[string]*Detail)
-
-	_ = json.Unmarshal(dataFile, &feedData)
-
-	articles := UpdateAndFilterFeeds(config, feedData)
+	articles := UpdateAndFilterFeeds(config)
 	if len(articles) > 0 {
 		_, _ = buf.WriteString("文章推荐:\n")
 
@@ -87,13 +44,9 @@ func AddFeeds(buf io.StringWriter, config *Config, exeDir string) {
 			_, _ = buf.WriteString("- " + a.Title + ", " + a.URL + "\n")
 		}
 	}
-
-	if b, jsonErr := json.Marshal(feedData); jsonErr == nil {
-		_ = os.WriteFile(feedDateFilePath, b, defaultDataFilePermission)
-	}
 }
 
-func UpdateAndFilterFeeds(config *Config, feedData map[string]*Detail) []*Article {
+func UpdateAndFilterFeeds(config *Config) []*Article {
 	now := time.Now()
 	nowTime := now.Unix()
 	expireTime := now.Add(time.Hour * 24 * time.Duration(-config.FeedExpireDays)).Unix()
@@ -102,7 +55,7 @@ func UpdateAndFilterFeeds(config *Config, feedData map[string]*Detail) []*Articl
 	maxWeight := int64(0)
 
 	for _, source := range config.Feeds {
-		addFeed(feedData, config, source, expireTime)
+		addFeed(config, source, expireTime)
 
 		if minWeight > source.Weight {
 			minWeight = source.Weight
@@ -115,70 +68,42 @@ func UpdateAndFilterFeeds(config *Config, feedData map[string]*Detail) []*Articl
 
 	dayIntervalWeight := (maxWeight - minWeight) / int64(config.FeedExpireDays)
 
-	articleList := filterArticles(feedData, nowTime, expireTime, dayIntervalWeight)
+	updateExistsScore(nowTime, dayIntervalWeight)
 
-	return sortAndChoseArticles(config, feedData, articleList)
+	return sortAndChoseArticles(config)
 }
 
-func filterArticles(feedData map[string]*Detail, nowTime, expireTime, dayIntervalWeight int64) []*Article {
-	var deleteList []string
-
-	// nolint:prealloc //ignore this
+func updateExistsScore(nowTime, dayIntervalWeight int64) {
 	var articleList []*Article
+	feedDataDB.Model(&Article{}).Where("informed=?", false).Find(&articleList)
 
-	for url, detail := range feedData {
+	for _, article := range articleList {
 		// adjust timestamp
-		if detail.Timestamp == 0 {
-			detail.Timestamp = nowTime
-		}
-
-		if detail.Timestamp < expireTime {
-			deleteList = append(deleteList, url)
-
-			continue
-		}
-
-		if detail.Informed {
-			continue
-		}
-
-		article := &Article{
-			Detail: *detail,
-			URL:    url,
+		if article.Timestamp == 0 {
+			article.Timestamp = nowTime
 		}
 
 		pastDays := (nowTime - article.Timestamp) / oneDaySeconds
-		article.score = article.Weight - pastDays*dayIntervalWeight
-		articleList = append(articleList, article)
-	}
+		newScore := article.Weight - pastDays*dayIntervalWeight
 
-	for _, key := range deleteList {
-		delete(feedData, key)
-	}
+		feedDataDB.Model(article).Update("score", newScore)
 
-	return articleList
+	}
 }
 
-func sortAndChoseArticles(config *Config, feedData map[string]*Detail, articleList []*Article) []*Article {
-	// order by score desc
-	sort.Slice(articleList, func(i, j int) bool {
-		a := articleList[i]
-		b := articleList[j]
+func sortAndChoseArticles(config *Config) []*Article {
+	var articleList []*Article
 
-		if a.score != b.score {
-			return a.score > b.score
-		}
-
-		if a.Timestamp != b.Timestamp {
-			return a.Timestamp > b.Timestamp
-		}
-
-		return strings.Compare(a.Title, b.Title) > 0
-	})
+	feedDataDB.Model(&Article{}).
+		Where("informed=?", false).
+		Order("score desc").
+		Order("id desc").
+		Limit(config.MaxInformFeedSize * 4).
+		Find(&articleList)
 
 	informArticles := choseArticle(articleList, config)
 	for _, a := range informArticles {
-		feedData[a.URL].Informed = true
+		feedDataDB.Model(a).Update("informed", true)
 	}
 
 	return informArticles
@@ -230,14 +155,14 @@ func GetHostFromURL(host string) string {
 	return host
 }
 
-func addFeed(data map[string]*Detail, config *Config, source *Source, expireTime int64) {
-	log.Println("parse feed: ", source.URL)
+func addFeed(config *Config, source *Source, expireTime int64) {
+	logger.Info("parse feed: ", source.URL)
 
 	fp := gofeed.NewParser()
 
 	feed, err := fp.ParseURL(source.URL)
 	if err != nil {
-		log.Printf("parse feed url error! url: %s, error: %v", source.URL, err)
+		logger.Infof("parse feed url error! url: %s, error: %v", source.URL, err)
 
 		return
 	}
@@ -245,26 +170,34 @@ func addFeed(data map[string]*Detail, config *Config, source *Source, expireTime
 	count := 0
 
 	for _, item := range feed.Items {
-		addFeedItem(data, source, expireTime, item)
+		addFeedItem(source, expireTime, item)
 
 		count++
 
-		if (source.MaxFetchNum > 0 && count >= source.MaxFetchNum) ||
-			(config.MaxFetchNum > 0 && count >= config.MaxFetchNum) {
+		if source.MaxFetchNum > 0 {
+			if count >= source.MaxFetchNum {
+				break
+			}
+		} else if config.MaxFetchNum > 0 && count >= config.MaxFetchNum {
 			break
 		}
 	}
 }
 
-func addFeedItem(data map[string]*Detail, source *Source, expireTime int64, item *gofeed.Item) {
+func addFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
 	urlAddr, ok := FormatURL(item.Link)
 	if !ok {
 		return
 	}
 
-	if _, exists := data[urlAddr]; exists {
+	var existCount int64
+	feedDataDB.Model(&Article{}).Where("url=?", urlAddr).Count(&existCount)
+	if existCount > 0 {
+		logger.Warnf("add feed: %s, %s", item.Title, item.Link)
 		return
 	}
+
+	logger.Infof("add feed: %s, %s", item.Title, item.Link)
 
 	now := time.Now()
 	date := now
@@ -284,10 +217,13 @@ func addFeedItem(data map[string]*Detail, source *Source, expireTime int64, item
 		return
 	}
 
-	data[urlAddr] = &Detail{
+	article := &Article{
 		Title:     item.Title,
 		Timestamp: timestamp,
 		Weight:    source.Weight,
 		Informed:  false,
+		URL:       urlAddr,
 	}
+
+	feedDataDB.Save(article)
 }

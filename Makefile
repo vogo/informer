@@ -16,4 +16,3 @@ test:
 		go test ./... -coverprofile=coverage.txt -covermode=atomic
 
 build: format check test
-

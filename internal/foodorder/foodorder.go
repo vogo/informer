@@ -20,12 +20,12 @@ package foodorder
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/vogo/logger"
 	"github.com/vogo/vogo/vrand"
 	"github.com/wongoo/informer/internal"
 )
@@ -66,7 +66,7 @@ func AddFoodAutoChose(buf *bytes.Buffer, foodConfig *FoodConfig, exeDir string) 
 
 	previousData, err := os.ReadFile(filepath.Join(exeDir, previousChosenFileName))
 	if err != nil {
-		log.Printf("read previous chosen error: %v", err)
+		logger.Infof("read previous chosen error: %v", err)
 	}
 
 	_ = json.Unmarshal(previousData, &previousFoodOrders)
@@ -87,7 +87,7 @@ func AddFoodAutoChose(buf *bytes.Buffer, foodConfig *FoodConfig, exeDir string) 
 		}
 	}
 
-	log.Printf("order user: %s\n", orderUser)
+	logger.Infof("order user: %s", orderUser)
 
 	autoChoseFood(buf, exeDir, foodConfig, previousFoodOrders, &orderUser)
 }
@@ -190,7 +190,7 @@ func filterPreviousChosenMenus(previousFoodOrders []*Order, restaurant *Restaura
 		return
 	}
 
-	log.Printf("previous chosen: %v", previousFoodOrder.Chose)
+	logger.Infof("previous chosen: %v", previousFoodOrder.Chose)
 
 	for key := range previousFoodOrder.Chose {
 		for _, foodMenu := range restaurant.Menus {
@@ -215,5 +215,5 @@ func filterItems(menu *Menu, filters []string) {
 		}
 	}
 
-	log.Printf("after filter for %s: %s", menu.Type, menu.List)
+	logger.Infof("after filter for %s: %s", menu.Type, menu.List)
 }

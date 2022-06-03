@@ -22,6 +22,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/vogo/logger"
 )
 
 const Host = "feishu.cn"
@@ -45,11 +47,11 @@ func Lark(url, content string) {
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		log.Println(err)
+		logger.Info(err)
 	}
 
-	log.Printf("lark url: %s", url)
-	log.Printf("lark data: %s", data)
+	logger.Infof("lark url: %s", url)
+	logger.Infof("lark data: %s", data)
 
 	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
@@ -57,5 +59,5 @@ func Lark(url, content string) {
 	}
 	defer resp.Body.Close()
 
-	log.Printf("lark response: %v", resp)
+	logger.Infof("lark response: %v", resp)
 }

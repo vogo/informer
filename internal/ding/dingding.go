@@ -23,6 +23,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/vogo/logger"
 )
 
 const Host = "dingtalk.com"
@@ -55,11 +57,11 @@ func Ding(url, content, user string, weekday time.Weekday) {
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		log.Println(err)
+		logger.Info(err)
 	}
 
-	log.Printf("ding url: %s", url)
-	log.Printf("ding data: %s", data)
+	logger.Infof("ding url: %s", url)
+	logger.Infof("ding data: %s", data)
 
 	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
@@ -68,5 +70,5 @@ func Ding(url, content, user string, weekday time.Weekday) {
 
 	defer resp.Body.Close()
 
-	log.Printf("ding response: %v", resp)
+	logger.Infof("ding response: %v", resp)
 }

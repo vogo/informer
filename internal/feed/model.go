@@ -17,39 +17,29 @@
 
 package feed
 
-import (
-	"net/url"
-	"strings"
-
-	"github.com/vogo/logger"
-)
-
-func FormatURL(link string) (string, bool) {
-	if isURLContainsInvalidChars(link) {
-		return "", false
-	}
-
-	u, err := url.Parse(link)
-	if err != nil {
-		logger.Info("format url error!", err)
-
-		return "", false
-	}
-
-	params := u.Query()
-	for key := range params {
-		if strings.HasPrefix(key, "utm_") {
-			params.Del(key)
-		}
-	}
-
-	u.RawQuery = params.Encode()
-
-	return u.String(), true
+type Config struct {
+	MaxInformFeedSize int       `json:"max_inform_feed_size"`
+	FeedExpireDays    int       `json:"feed_expire_days"`
+	SameSiteMaxCount  int       `json:"same_site_max_count"`
+	MaxFetchNum       int       `json:"max_fetch_num"`
+	Feeds             []*Source `json:"feeds"`
 }
 
-func isURLContainsInvalidChars(link string) bool {
-	return strings.Contains(link, "%22") ||
-		strings.Contains(link, "%20") ||
-		strings.Contains(link, "%3C")
+type Source struct {
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	Weight      int64  `json:"weight"`
+	MaxFetchNum int    `json:"max_fetch_num"`
+}
+
+type Detail struct{}
+
+type Article struct {
+	ID        int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
+	URL       string `json:"url" gorm:"index"`
+	Title     string `json:"title"`
+	Timestamp int64  `json:"timestamp"`
+	Weight    int64  `json:"weight"`
+	Informed  bool   `json:"informed" gorm:"index"`
+	Score     int64  `json:"score" gorm:"index"`
 }

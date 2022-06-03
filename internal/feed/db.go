@@ -15,52 +15,59 @@
  * limitations under the License.
  */
 
-package feed_test
+package feed
 
 import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/wongoo/informer/internal/feed"
+	"github.com/vogo/logger"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
-func TestUpdateAndFilterFeeds(t *testing.T) {
-	t.Parallel()
+var feedDataDB *gorm.DB
 
-	exePath, _ := os.Executable()
-	exeDir := filepath.Dir(exePath)
-	feed.InitFeedDB(exeDir)
-
-	feedConfig := &feed.Config{
-		MaxInformFeedSize: 10,
-		FeedExpireDays:    15,
-		SameSiteMaxCount:  2,
-		Feeds: []*feed.Source{
-			{
-				URL:    "http://blog.sciencenet.cn/rss.php?uid=117333",
-				Weight: 100,
-			},
-		},
+func InitFeedDB(dataDir string) {
+	var err error
+	feedDataDB, err = gorm.Open(sqlite.Open(dataDir+"/feed.db"), &gorm.Config{})
+	if err != nil {
+		panic(err)
 	}
 
-	articles := feed.UpdateAndFilterFeeds(feedConfig)
-	if len(articles) == 0 {
-		t.Error("parse feed article failed")
-	} else {
-		articlesInfo, err := json.Marshal(articles)
-		if err != nil {
-			t.Error(err)
-		}
-
-		t.Log(string(articlesInfo))
+	if err = feedDataDB.AutoMigrate(&Article{}); err != nil {
+		panic(err)
 	}
 }
 
-func TestGetHostFromUrl(t *testing.T) {
-	t.Parallel()
+const feedDataJSONFile = "feed_data.json"
 
-	assert.Equal(t, "www.blog.com", feed.GetHostFromURL("http://www.blog.com/page.html"))
+func saveJsonDataToFeedDB(confDir string) {
+	feedDateFilePath := filepath.Join(confDir, feedDataJSONFile)
+
+	dataFile, err := os.ReadFile(feedDateFilePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.Infof("read feed data error: %v", err)
+		}
+
+		return
+	}
+
+	feedData := make(map[string]*Article)
+
+	_ = json.Unmarshal(dataFile, &feedData)
+
+	for k, v := range feedData {
+		v.URL = k
+
+		if v.Score == 0 {
+			v.Score = v.Weight
+		}
+
+		feedDataDB.Save(v)
+	}
+
+	_ = os.Remove(feedDateFilePath)
 }

@@ -20,14 +20,15 @@ package soup
 import (
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
+
+	"github.com/vogo/logger"
 )
 
 func GetDailySoup() string {
 	resp, err := http.Get("http://open.iciba.com/dsapi/")
 	if err != nil {
-		log.Printf("err: %v\n", err)
+		logger.Infof("err: %v", err)
 
 		return ""
 	}
@@ -35,13 +36,13 @@ func GetDailySoup() string {
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("err: %v\n", err)
+		logger.Infof("err: %v", err)
 
 		return ""
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("err: %d, %s\n", resp.StatusCode, b)
+		logger.Infof("err: %d, %s", resp.StatusCode, b)
 
 		return ""
 	}
@@ -51,7 +52,7 @@ func GetDailySoup() string {
 	}{}
 
 	if err = json.Unmarshal(b, &data); err != nil {
-		log.Printf("err: %v\n", err)
+		logger.Infof("err: %v", err)
 
 		return ""
 	}
