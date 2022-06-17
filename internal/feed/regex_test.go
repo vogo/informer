@@ -42,3 +42,22 @@ func TestRegexParse(t *testing.T) {
 		t.Log(a.Title, a.URL)
 	}
 }
+
+func TestRegexParse2(t *testing.T) {
+	t.Parallel()
+
+	articles, err := feed.RegexParse(&feed.Source{
+		URL:         "https://www.yinwang.org",
+		Weight:      50,
+		MaxFetchNum: 5,
+		Regex:       `<li class="list-group-item title">[\W]*<div class="date">[^<]+</div><br>[\W]*<a href="([^"]+)">([^<>]+)</a>[\W]*</li>`,
+		TitleGroup:  2,
+		URLGroup:    1,
+	})
+
+	assert.Nil(t, err)
+
+	for _, a := range articles {
+		t.Log(a.Title, a.URL)
+	}
+}

@@ -19,6 +19,7 @@ package feed
 
 import (
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/vogo/logger"
@@ -36,12 +37,14 @@ func RegexParse(source *Source) ([]*Article, error) {
 		return nil, err
 	}
 
+	hostPrefix := GetHostPrefix(source.URL)
+
 	var articles []*Article
 
 	match := re.FindAllSubmatch(data, -1)
 
 	for _, groups := range match {
-		article := matchArticle(source, groups)
+		article := matchArticle(source, hostPrefix, groups)
 		if article != nil {
 			articles = append(articles, article)
 		}
@@ -50,15 +53,24 @@ func RegexParse(source *Source) ([]*Article, error) {
 	return articles, nil
 }
 
-func matchArticle(source *Source, groups [][]byte) *Article {
+func matchArticle(source *Source, hostPrefix string, groups [][]byte) *Article {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Errorf("match article error: %v", err)
 		}
 	}()
 
+	link := string(groups[source.URLGroup])
+	if !strings.HasPrefix(link, "http://") && !strings.HasPrefix(link, "https://") {
+		if link[0] != '/' {
+			link = hostPrefix + "/" + link
+		} else {
+			link = hostPrefix + link
+		}
+	}
+
 	return &Article{
-		URL:       string(groups[source.URLGroup]),
+		URL:       link,
 		Title:     string(groups[source.TitleGroup]),
 		Timestamp: time.Now().Unix(),
 		Weight:    source.Weight,

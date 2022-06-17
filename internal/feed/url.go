@@ -53,3 +53,35 @@ func isURLContainsInvalidChars(link string) bool {
 		strings.Contains(link, "%20") ||
 		strings.Contains(link, "%3C")
 }
+
+// GetHostFromURL get host from url,
+// host is www.blog.com if url is http://www.blog.com/page.html.
+func GetHostFromURL(host string) string {
+	hostIndex := strings.Index(host, "//")
+	if hostIndex > 0 {
+		host = host[hostIndex+2:]
+	}
+
+	hostIndex = strings.Index(host, "/")
+	if hostIndex > 0 {
+		host = host[:hostIndex]
+	}
+
+	return host
+}
+
+// GetHostPrefix get host prefix from url,
+// prefix is http://www.blog.com if url is http://www.blog.com/page.html.
+func GetHostPrefix(link string) string {
+	protocolIndex := strings.Index(link, "//")
+	if protocolIndex < 0 {
+		protocolIndex = 0
+	}
+
+	hostIndex := strings.Index(link[protocolIndex+2:], "/")
+	if hostIndex > 0 {
+		return link[:protocolIndex+2+hostIndex]
+	}
+
+	return link
+}

@@ -20,7 +20,6 @@ package feed
 import (
 	"io"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/vogo/logger"
@@ -142,22 +141,6 @@ func choseArticle(list []*Article, config *Config) []*Article {
 	}
 
 	return articles
-}
-
-// GetHostFromURL get host from url,
-// host is www.blog.com if url is http://www.blog.com/page.html.
-func GetHostFromURL(host string) string {
-	hostIndex := strings.Index(host, "//")
-	if hostIndex > 0 {
-		host = host[hostIndex+2:]
-	}
-
-	hostIndex = strings.Index(host, "/")
-	if hostIndex > 0 {
-		host = host[:hostIndex]
-	}
-
-	return host
 }
 
 func isFeedURLExists(url string) bool {
