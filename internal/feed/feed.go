@@ -31,11 +31,7 @@ const (
 	oneDaySeconds = int64(24 * time.Hour / time.Second)
 )
 
-func AddFeeds(buf io.StringWriter, config *Config, confDir string) {
-	InitFeedDB(confDir)
-
-	saveJsonDataToFeedDB(confDir)
-
+func AddFeeds(buf io.StringWriter, config *Config) {
 	articles := UpdateAndFilterFeeds(config)
 	if len(articles) > 0 {
 		_, _ = buf.WriteString("文章推荐:\n")
@@ -54,7 +50,12 @@ func UpdateAndFilterFeeds(config *Config) []*Article {
 	minWeight := int64(math.MaxInt64)
 	maxWeight := int64(0)
 
-	for _, source := range config.Feeds {
+	var sources []*Source
+
+	feedDataDB.Model(&Source{}).Order("id").Find(&sources)
+	sources = append(sources, config.Feeds...)
+
+	for _, source := range sources {
 		addFeed(config, source, expireTime)
 
 		if minWeight > source.Weight {
@@ -75,6 +76,7 @@ func UpdateAndFilterFeeds(config *Config) []*Article {
 
 func updateExistsScore(nowTime, dayIntervalWeight int64) {
 	var articleList []*Article
+
 	feedDataDB.Model(&Article{}).Where("informed=?", false).Find(&articleList)
 
 	for _, article := range articleList {
@@ -87,9 +89,10 @@ func updateExistsScore(nowTime, dayIntervalWeight int64) {
 		newScore := article.Weight - pastDays*dayIntervalWeight
 
 		feedDataDB.Model(article).Update("score", newScore)
-
 	}
 }
+
+const articleChoseSizeMultiple = 4
 
 func sortAndChoseArticles(config *Config) []*Article {
 	var articleList []*Article
@@ -98,7 +101,7 @@ func sortAndChoseArticles(config *Config) []*Article {
 		Where("informed=?", false).
 		Order("score desc").
 		Order("id desc").
-		Limit(config.MaxInformFeedSize * 4).
+		Limit(config.MaxInformFeedSize * articleChoseSizeMultiple).
 		Find(&articleList)
 
 	informArticles := choseArticle(articleList, config)
@@ -191,9 +194,12 @@ func addFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
 	}
 
 	var existCount int64
+
 	feedDataDB.Model(&Article{}).Where("url=?", urlAddr).Count(&existCount)
+
 	if existCount > 0 {
 		logger.Warnf("add feed: %s, %s", item.Title, item.Link)
+
 		return
 	}
 

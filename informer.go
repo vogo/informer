@@ -18,9 +18,27 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+
+	"github.com/wongoo/informer/internal/feed"
 	"github.com/wongoo/informer/internal/inform"
 )
 
 func main() {
-	inform.Inform()
+	exePath, _ := os.Executable()
+	exeDir := filepath.Dir(exePath)
+
+	var op string
+	if len(os.Args) > 1 {
+		op = os.Args[1]
+		if op == "feed" {
+			feed.InitFeedDB(exeDir)
+			feed.Operate(os.Args[2:])
+
+			return
+		}
+	}
+
+	inform.Inform(exeDir, op)
 }

@@ -26,10 +26,14 @@ type Config struct {
 }
 
 type Source struct {
+	ID          int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
 	Title       string `json:"title"`
 	URL         string `json:"url"`
 	Weight      int64  `json:"weight"`
 	MaxFetchNum int    `json:"max_fetch_num"`
+	Regex       string `json:"regex"`
+	TitleGroup  int    `json:"title_group"`
+	URLGroup    int    `json:"url_group"`
 }
 
 type Detail struct{}

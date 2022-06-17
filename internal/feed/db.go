@@ -18,20 +18,17 @@
 package feed
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-
-	"github.com/vogo/logger"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
+// nolint:gochecknoglobals //ignore this.
 var feedDataDB *gorm.DB
 
 func InitFeedDB(dataDir string) {
 	var err error
 	feedDataDB, err = gorm.Open(sqlite.Open(dataDir+"/feed.db"), &gorm.Config{})
+
 	if err != nil {
 		panic(err)
 	}
@@ -39,35 +36,8 @@ func InitFeedDB(dataDir string) {
 	if err = feedDataDB.AutoMigrate(&Article{}); err != nil {
 		panic(err)
 	}
-}
 
-const feedDataJSONFile = "feed_data.json"
-
-func saveJsonDataToFeedDB(confDir string) {
-	feedDateFilePath := filepath.Join(confDir, feedDataJSONFile)
-
-	dataFile, err := os.ReadFile(feedDateFilePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			logger.Infof("read feed data error: %v", err)
-		}
-
-		return
+	if err = feedDataDB.AutoMigrate(&Source{}); err != nil {
+		panic(err)
 	}
-
-	feedData := make(map[string]*Article)
-
-	_ = json.Unmarshal(dataFile, &feedData)
-
-	for k, v := range feedData {
-		v.URL = k
-
-		if v.Score == 0 {
-			v.Score = v.Weight
-		}
-
-		feedDataDB.Save(v)
-	}
-
-	_ = os.Remove(feedDateFilePath)
 }

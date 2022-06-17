@@ -15,18 +15,30 @@
  * limitations under the License.
  */
 
-package date
+package feed_test
 
 import (
-	"fmt"
-	"time"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/wongoo/informer/internal/feed"
 )
 
-func GetDateInfo() string {
-	now := time.Now()
-	weekday := now.Weekday()
+func TestRegexParse(t *testing.T) {
+	t.Parallel()
 
-	dateString := fmt.Sprintf("今天是 %s %s\n\n", now.Format("2006-01-02"), weekday.String())
+	articles, err := feed.RegexParse(&feed.Source{
+		URL:         "https://kaifa.baidu.com/rest/v1/home/github?optionLanguage=go&optionSince=DAILY",
+		Weight:      50,
+		MaxFetchNum: 5,
+		Regex:       `,"url":"([^"]+)","title":"([^"]+)",`,
+		TitleGroup:  2,
+		URLGroup:    1,
+	})
 
-	return dateString
+	assert.Nil(t, err)
+
+	for _, a := range articles {
+		t.Log(a.Title, a.URL)
+	}
 }

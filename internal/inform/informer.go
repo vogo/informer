@@ -44,7 +44,7 @@ type Config struct {
 	Feed *feed.Config          `json:"feed"`
 }
 
-func Inform() {
+func Inform(exeDir, urlAddr string) {
 	buf := bytes.NewBuffer(nil)
 
 	buf.WriteString(date.GetDateInfo())
@@ -55,8 +55,6 @@ func Inform() {
 		buf.WriteByte('\n')
 	}
 
-	exePath, _ := os.Executable()
-	exeDir := filepath.Dir(exePath)
 	dataPath := filepath.Join(exeDir, configFileName)
 
 	data, err := os.ReadFile(dataPath)
@@ -76,18 +74,18 @@ func Inform() {
 	}
 
 	if informerConfig.Feed != nil {
-		feed.AddFeeds(buf, informerConfig.Feed, exeDir)
+		feed.InitFeedDB(exeDir)
+		feed.AddFeeds(buf, informerConfig.Feed)
 	}
 
 	content := buf.String()
 	logger.Info(content)
 
-	if len(os.Args) > 1 {
-		url := os.Args[1]
-		if strings.Contains(url, lark.Host) {
-			lark.Lark(url, content)
-		} else if strings.Contains(url, ding.Host) {
-			ding.Ding(url, content, "", weekday)
+	if urlAddr != "" {
+		if strings.Contains(urlAddr, lark.Host) {
+			lark.Lark(urlAddr, content)
+		} else if strings.Contains(urlAddr, ding.Host) {
+			ding.Ding(urlAddr, content, "", weekday)
 		}
 	}
 }

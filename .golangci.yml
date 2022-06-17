@@ -31,6 +31,8 @@ linters:
     - cyclop
     - tagliatelle
     - varnamelen
+    - exhaustruct
+    - forbidigo
 
 run:
   skip-files:

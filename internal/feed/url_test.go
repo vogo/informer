@@ -25,6 +25,8 @@ import (
 )
 
 func TestFormatURL(t *testing.T) {
+	t.Parallel()
+
 	checks := [][2]string{
 		{"https://www.baidu.com/abc?utm_source=aaa", "https://www.baidu.com/abc"},
 		{"https://www.baidu.com/abc?utm_source=aaa&p=1", "https://www.baidu.com/abc?p=1"},
@@ -34,8 +36,10 @@ func TestFormatURL(t *testing.T) {
 		result, ok := feed.FormatURL(item[0])
 		if !ok {
 			t.Error("format link failed.", item[0])
+
 			continue
 		}
+
 		assert.Equal(t, item[1], result)
 	}
 }
