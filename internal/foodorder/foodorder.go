@@ -105,7 +105,7 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 	restaurantIndex := rand.Intn(len(restaurants))
 	restaurant := restaurants[restaurantIndex]
 
-	buf.WriteString("上班辛苦了! 中午为你推荐餐厅《" + restaurant.Name + "》")
+	buf.WriteString("中午为你推荐餐厅《" + restaurant.Name + "》")
 
 	if restaurant.Tel != "" {
 		buf.WriteString("(点餐电话" + restaurant.Tel + ")")

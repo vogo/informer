@@ -18,11 +18,11 @@
 package feed
 
 type Config struct {
-	MaxInformFeedSize int       `json:"max_inform_feed_size"`
-	FeedExpireDays    int       `json:"feed_expire_days"`
-	SameSiteMaxCount  int       `json:"same_site_max_count"`
-	MaxFetchNum       int       `json:"max_fetch_num"`
-	Feeds             []*Source `json:"feeds"`
+	ID                int64 `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
+	MaxInformFeedSize int   `json:"max_inform_feed_size"`
+	FeedExpireDays    int   `json:"feed_expire_days"`
+	SameSiteMaxCount  int   `json:"same_site_max_count"`
+	MaxFetchNum       int   `json:"max_fetch_num"`
 }
 
 type Source struct {

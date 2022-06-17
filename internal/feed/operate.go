@@ -36,7 +36,9 @@ func Operate(ops []string) {
 	case "view":
 		viewSource(ops[1])
 	case "add":
-		addSource(ops[1], ops[2])
+		AddSource(ops[1], ops[2])
+	case "remove":
+		removeSource(ops[1])
 	case "update":
 		updateSource(ops[1], ops[2], ops[3])
 	case "parse":
@@ -78,11 +80,16 @@ func parseSource(idStr string) {
 	}
 }
 
-func addSource(title, link string) {
+func AddSource(title, link string) {
 	feedDataDB.Create(&Source{
 		Title: title,
 		URL:   link,
 	})
+}
+
+func removeSource(id string) {
+	sourceID, _ := strconv.Atoi(id)
+	feedDataDB.Delete(&Source{}, sourceID)
 }
 
 func updateSource(id, column, value string) {

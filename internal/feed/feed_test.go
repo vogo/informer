@@ -38,13 +38,9 @@ func TestUpdateAndFilterFeeds(t *testing.T) {
 		MaxInformFeedSize: 10,
 		FeedExpireDays:    15,
 		SameSiteMaxCount:  2,
-		Feeds: []*feed.Source{
-			{
-				URL:    "http://blog.sciencenet.cn/rss.php?uid=117333",
-				Weight: 100,
-			},
-		},
 	}
+
+	feed.AddSource("test", "http://blog.sciencenet.cn/rss.php?uid=117333")
 
 	articles := feed.UpdateAndFilterFeeds(feedConfig)
 	if len(articles) == 0 {

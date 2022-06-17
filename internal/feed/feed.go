@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mmcdole/gofeed"
 	"github.com/vogo/logger"
 )
 
@@ -53,10 +52,13 @@ func UpdateAndFilterFeeds(config *Config) []*Article {
 	var sources []*Source
 
 	feedDataDB.Model(&Source{}).Order("id").Find(&sources)
-	sources = append(sources, config.Feeds...)
 
 	for _, source := range sources {
-		addFeed(config, source, expireTime)
+		if source.Regex != "" {
+			regexParseFeed(config, source, expireTime)
+		} else {
+			addGoFeed(config, source, expireTime)
+		}
 
 		if minWeight > source.Weight {
 			minWeight = source.Weight
@@ -158,78 +160,16 @@ func GetHostFromURL(host string) string {
 	return host
 }
 
-func addFeed(config *Config, source *Source, expireTime int64) {
-	logger.Info("parse feed: ", source.URL)
-
-	fp := gofeed.NewParser()
-
-	feed, err := fp.ParseURL(source.URL)
-	if err != nil {
-		logger.Infof("parse feed url error! url: %s, error: %v", source.URL, err)
-
-		return
-	}
-
-	count := 0
-
-	for _, item := range feed.Items {
-		addFeedItem(source, expireTime, item)
-
-		count++
-
-		if source.MaxFetchNum > 0 {
-			if count >= source.MaxFetchNum {
-				break
-			}
-		} else if config.MaxFetchNum > 0 && count >= config.MaxFetchNum {
-			break
-		}
-	}
-}
-
-func addFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
-	urlAddr, ok := FormatURL(item.Link)
-	if !ok {
-		return
-	}
-
+func isFeedURLExists(url string) bool {
 	var existCount int64
 
-	feedDataDB.Model(&Article{}).Where("url=?", urlAddr).Count(&existCount)
+	feedDataDB.Model(&Article{}).Where("url=?", url).Count(&existCount)
 
 	if existCount > 0 {
-		logger.Warnf("add feed: %s, %s", item.Title, item.Link)
+		logger.Warnf("exists feed: %s", url)
 
-		return
+		return true
 	}
 
-	logger.Infof("add feed: %s, %s", item.Title, item.Link)
-
-	now := time.Now()
-	date := now
-
-	if item.UpdatedParsed != nil {
-		date = *item.UpdatedParsed
-	} else if item.PublishedParsed != nil {
-		date = *item.PublishedParsed
-	}
-
-	if date.After(now) {
-		date = now
-	}
-
-	timestamp := date.Unix()
-	if timestamp < expireTime {
-		return
-	}
-
-	article := &Article{
-		Title:     item.Title,
-		Timestamp: timestamp,
-		Weight:    source.Weight,
-		Informed:  false,
-		URL:       urlAddr,
-	}
-
-	feedDataDB.Save(article)
+	return false
 }
