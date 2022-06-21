@@ -15,37 +15,19 @@
  * limitations under the License.
  */
 
-package feed
+package httpx_test
 
-import "github.com/vogo/logger"
+import (
+	"testing"
 
-func regexParseFeed(config *Config, source *Source, _ int64) {
-	logger.Info("regex parse feed: ", source.URL)
+	"github.com/stretchr/testify/assert"
+	"github.com/wongoo/informer/internal/httpx"
+)
 
-	articles, err := RegexParse(source)
-	if err != nil {
-		logger.Infof("regex parse feed url error! url: %s, error: %v", source.URL, err)
+func TestGetWechatLinkData(t *testing.T) {
+	t.Parallel()
 
-		return
-	}
-
-	count := 0
-
-	for _, a := range articles {
-		if source.MaxFetchNum > 0 {
-			if count >= source.MaxFetchNum {
-				break
-			}
-		} else if config.MaxFetchNum > 0 && count >= config.MaxFetchNum {
-			break
-		}
-
-		count++
-
-		if isFeedURLExists(a.URL) {
-			continue
-		}
-
-		feedDataDB.Save(a)
-	}
+	data, err := httpx.GetWechatLinkData("https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzI1MzYzMjE0MQ==&scene=124#wechat_redirect")
+	assert.Nil(t, err)
+	t.Logf("data: %s", data)
 }

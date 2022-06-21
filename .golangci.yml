@@ -33,6 +33,7 @@ linters:
     - varnamelen
     - exhaustruct
     - forbidigo
+    - lll
 
 run:
   skip-files:

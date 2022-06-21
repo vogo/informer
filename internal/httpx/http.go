@@ -59,13 +59,27 @@ var defaultHTTPHeaders = map[string]string{
 	"mode": "cors",
 }
 
+// nolint:gochecknoglobals //ignore this.
+var wechatHTTPHeaders = map[string]string{
+	"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) MicroMessenger/6.8.0(0x16080000) MacWechat/3.4.1(0x13040110) Safari/605.1.15 NetType/WIFI",
+}
+
 func GetLinkData(link string) ([]byte, error) {
+	return getWithHeaders(link, defaultHTTPHeaders)
+}
+
+// GetWechatLinkData 添加固定头部并不能获取微信公众号信息.
+func GetWechatLinkData(link string) ([]byte, error) {
+	return getWithHeaders(link, wechatHTTPHeaders)
+}
+
+func getWithHeaders(link string, headers map[string]string) ([]byte, error) {
 	httpReq, err := http.NewRequest(http.MethodGet, link, bytes.NewReader(nil))
 	if err != nil {
 		return nil, err
 	}
 
-	for k, v := range defaultHTTPHeaders {
+	for k, v := range headers {
 		httpReq.Header.Set(k, v)
 	}
 

@@ -47,10 +47,10 @@ func TestRegexParse2(t *testing.T) {
 	t.Parallel()
 
 	articles, err := feed.RegexParse(&feed.Source{
-		URL:         "https://www.yinwang.org",
+		URL:         "https://www.infoq.cn/profile/7A6A18227E53FA/publish/article",
 		Weight:      50,
 		MaxFetchNum: 5,
-		Regex:       `<li class="list-group-item title">[\W]*<div class="date">[^<]+</div><br>[\W]*<a href="([^"]+)">([^<>]+)</a>[\W]*</li>`,
+		Regex:       `<h6[^>]+class="favorite"><a[^>]+ href="([^"]+)" target="_blank" rel="" class="com-article-title"><!----> ([^<>]+) </a></h6>`,
 		TitleGroup:  2,
 		URLGroup:    1,
 	})
