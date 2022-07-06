@@ -22,14 +22,33 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vogo/logger"
 	"github.com/wongoo/informer/internal/httpx"
+	"github.com/wongoo/informer/internal/util"
 )
 
 func RegexParse(source *Source) ([]*Article, error) {
 	re, err := regexp.Compile(source.Regex)
 	if err != nil {
 		return nil, err
+	}
+
+	linkParser := func(groups [][]byte) string {
+		return string(groups[source.URLGroup])
+	}
+	titleParser := func(groups [][]byte) string {
+		return string(groups[source.TitleGroup])
+	}
+	if source.URLExp != "" {
+		urlRegexRender := util.RegexMatchRender(source.URLExp)
+		linkParser = func(groups [][]byte) string {
+			return string(urlRegexRender(groups))
+		}
+	}
+	if source.TitleExp != "" {
+		titleRegexRender := util.RegexMatchRender(source.TitleExp)
+		titleParser = func(groups [][]byte) string {
+			return string(titleRegexRender(groups))
+		}
 	}
 
 	data, err := httpx.GetLinkData(source.URL)
@@ -44,23 +63,24 @@ func RegexParse(source *Source) ([]*Article, error) {
 	match := re.FindAllSubmatch(data, -1)
 
 	for _, groups := range match {
-		article := matchArticle(source, hostPrefix, groups)
-		if article != nil {
-			articles = append(articles, article)
+		link := linkParser(groups)
+		link = adjustLink(hostPrefix, link)
+		title := titleParser(groups)
+
+		article := &Article{
+			URL:       link,
+			Title:     title,
+			Timestamp: time.Now().Unix(),
+			Weight:    source.Weight,
 		}
+
+		articles = append(articles, article)
 	}
 
 	return articles, nil
 }
 
-func matchArticle(source *Source, hostPrefix string, groups [][]byte) *Article {
-	defer func() {
-		if err := recover(); err != nil {
-			logger.Errorf("match article error: %v", err)
-		}
-	}()
-
-	link := string(groups[source.URLGroup])
+func adjustLink(hostPrefix string, link string) string {
 	if !strings.HasPrefix(link, "http://") && !strings.HasPrefix(link, "https://") {
 		if link[0] != '/' {
 			link = hostPrefix + "/" + link
@@ -69,10 +89,5 @@ func matchArticle(source *Source, hostPrefix string, groups [][]byte) *Article {
 		}
 	}
 
-	return &Article{
-		URL:       link,
-		Title:     string(groups[source.TitleGroup]),
-		Timestamp: time.Now().Unix(),
-		Weight:    source.Weight,
-	}
+	return link
 }

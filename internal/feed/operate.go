@@ -107,6 +107,8 @@ func viewSource(idStr string) {
 	fmt.Printf("weight:\t%d\n", source.Weight)
 	fmt.Printf("max_fetch_num:\t%d\n", source.MaxFetchNum)
 	fmt.Printf("regex:\t%s\n", source.Regex)
+	fmt.Printf("title_exp:\t%s\n", source.TitleExp)
+	fmt.Printf("url_exp:\t%s\n", source.URLExp)
 	fmt.Printf("title_group:\t%d\n", source.TitleGroup)
 	fmt.Printf("url_group:\t%d\n", source.URLGroup)
 }

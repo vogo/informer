@@ -34,6 +34,8 @@ type Source struct {
 	Regex       string `json:"regex"`
 	TitleGroup  int    `json:"title_group"`
 	URLGroup    int    `json:"url_group"`
+	TitleExp    string `json:"title_exp"`
+	URLExp      string `json:"url_exp"`
 }
 
 type Detail struct{}
