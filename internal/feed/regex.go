@@ -35,15 +35,18 @@ func RegexParse(source *Source) ([]*Article, error) {
 	linkParser := func(groups [][]byte) string {
 		return string(groups[source.URLGroup])
 	}
+
 	titleParser := func(groups [][]byte) string {
 		return string(groups[source.TitleGroup])
 	}
+
 	if source.URLExp != "" {
 		urlRegexRender := util.RegexMatchRender(source.URLExp)
 		linkParser = func(groups [][]byte) string {
 			return string(urlRegexRender(groups))
 		}
 	}
+
 	if source.TitleExp != "" {
 		titleRegexRender := util.RegexMatchRender(source.TitleExp)
 		titleParser = func(groups [][]byte) string {
@@ -58,11 +61,16 @@ func RegexParse(source *Source) ([]*Article, error) {
 
 	hostPrefix := GetHostPrefix(source.URL)
 
+	// nolint:prealloc //ignore this.
 	var articles []*Article
 
 	match := re.FindAllSubmatch(data, -1)
 
-	for _, groups := range match {
+	for i, groups := range match {
+		if source.MaxFetchNum > 0 && i >= source.MaxFetchNum {
+			break
+		}
+
 		link := linkParser(groups)
 		link = adjustLink(hostPrefix, link)
 		title := titleParser(groups)
@@ -80,7 +88,7 @@ func RegexParse(source *Source) ([]*Article, error) {
 	return articles, nil
 }
 
-func adjustLink(hostPrefix string, link string) string {
+func adjustLink(hostPrefix, link string) string {
 	if !strings.HasPrefix(link, "http://") && !strings.HasPrefix(link, "https://") {
 		if link[0] != '/' {
 			link = hostPrefix + "/" + link
