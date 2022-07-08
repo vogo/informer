@@ -35,11 +35,13 @@ func RegexParse(source *Source) ([]*Article, error) {
 
 	if source.URLExp == "" {
 		logger.Errorf("url exp is empty, url: %s", source.URL)
+
 		return nil, nil
 	}
 
 	if source.TitleExp == "" {
 		logger.Errorf("title exp is empty, url: %s", source.URL)
+
 		return nil, nil
 	}
 

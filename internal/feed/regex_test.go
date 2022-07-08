@@ -32,8 +32,8 @@ func TestRegexParse(t *testing.T) {
 		Weight:      50,
 		MaxFetchNum: 5,
 		Regex:       `,"url":"([^"]+)","title":"([^"]+)",`,
-		TitleGroup:  2,
-		URLGroup:    1,
+		TitleExp:    "$2",
+		URLExp:      "$1",
 	})
 
 	assert.Nil(t, err)
@@ -51,8 +51,8 @@ func TestRegexParse2(t *testing.T) {
 		Weight:      50,
 		MaxFetchNum: 5,
 		Regex:       `<h6[^>]+class="favorite"><a[^>]+ href="([^"]+)" target="_blank" rel="" class="com-article-title"><!----> ([^<>]+) </a></h6>`,
-		TitleGroup:  2,
-		URLGroup:    1,
+		TitleExp:    "$2",
+		URLExp:      "$1",
 	})
 
 	assert.Nil(t, err)
