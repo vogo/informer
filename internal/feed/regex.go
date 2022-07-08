@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vogo/logger"
 	"github.com/wongoo/informer/internal/httpx"
 	"github.com/wongoo/informer/internal/util"
 )
@@ -32,26 +33,24 @@ func RegexParse(source *Source) ([]*Article, error) {
 		return nil, err
 	}
 
+	if source.URLExp == "" {
+		logger.Errorf("url exp is empty, url: %s", source.URL)
+		return nil, nil
+	}
+
+	if source.TitleExp == "" {
+		logger.Errorf("title exp is empty, url: %s", source.URL)
+		return nil, nil
+	}
+
+	urlRegexRender := util.RegexMatchRender(source.URLExp)
 	linkParser := func(groups [][]byte) string {
-		return string(groups[source.URLGroup])
+		return string(urlRegexRender(groups))
 	}
 
+	titleRegexRender := util.RegexMatchRender(source.TitleExp)
 	titleParser := func(groups [][]byte) string {
-		return string(groups[source.TitleGroup])
-	}
-
-	if source.URLExp != "" {
-		urlRegexRender := util.RegexMatchRender(source.URLExp)
-		linkParser = func(groups [][]byte) string {
-			return string(urlRegexRender(groups))
-		}
-	}
-
-	if source.TitleExp != "" {
-		titleRegexRender := util.RegexMatchRender(source.TitleExp)
-		titleParser = func(groups [][]byte) string {
-			return string(titleRegexRender(groups))
-		}
+		return string(titleRegexRender(groups))
 	}
 
 	data, err := httpx.GetLinkData(source.URL)

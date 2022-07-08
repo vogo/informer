@@ -32,8 +32,6 @@ type Source struct {
 	Weight      int64  `json:"weight"`
 	MaxFetchNum int    `json:"max_fetch_num"`
 	Regex       string `json:"regex"`
-	TitleGroup  int    `json:"title_group"`
-	URLGroup    int    `json:"url_group"`
 	TitleExp    string `json:"title_exp"`
 	URLExp      string `json:"url_exp"`
 }
