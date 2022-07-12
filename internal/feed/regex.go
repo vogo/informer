@@ -72,11 +72,13 @@ func RegexParse(source *Source) ([]*Article, error) {
 	match := re.FindAllSubmatch(data, -1)
 	if len(match) == 0 {
 		logger.Warnf("no match, url: %s, data: %s", source.URL, data)
+
 		return nil, nil
 	}
 
 	// nolint:prealloc //ignore this.
 	var articles []*Article
+
 	for i, groups := range match {
 		if source.MaxFetchNum > 0 && i >= source.MaxFetchNum {
 			break

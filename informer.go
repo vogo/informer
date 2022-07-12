@@ -31,6 +31,7 @@ func main() {
 	exeDir := filepath.Dir(exePath)
 
 	var op string
+
 	if len(os.Args) > 1 {
 		logger.SetLevel(logger.LevelDebug)
 

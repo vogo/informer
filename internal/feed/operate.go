@@ -43,6 +43,9 @@ func Operate(ops []string) {
 		updateSource(ops[1], ops[2], ops[3])
 	case "parse":
 		parseSource(ops[1])
+	case "copy":
+		copySource(ops[1])
+		listSource()
 	}
 }
 
@@ -120,4 +123,27 @@ func listSource() {
 	for _, source := range sources {
 		fmt.Printf("%d,\t%s,\t%s\n", source.ID, source.Title, source.URL)
 	}
+}
+
+func copySource(srcID string) {
+	id, _ := strconv.Atoi(srcID)
+	source := &Source{}
+	feedDataDB.Model(source).Where("id=?", id).Find(source)
+
+	if source.ID == 0 {
+		fmt.Println("source not found")
+
+		return
+	}
+
+	feedDataDB.Create(&Source{
+		Title:       source.Title,
+		URL:         source.URL,
+		CURL:        source.CURL,
+		Weight:      source.Weight,
+		MaxFetchNum: source.MaxFetchNum,
+		Regex:       source.Regex,
+		TitleExp:    source.TitleExp,
+		URLExp:      source.URLExp,
+	})
 }
