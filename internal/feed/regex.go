@@ -69,11 +69,14 @@ func RegexParse(source *Source) ([]*Article, error) {
 
 	hostPrefix := GetHostPrefix(source.URL)
 
+	match := re.FindAllSubmatch(data, -1)
+	if len(match) == 0 {
+		logger.Warnf("no match, url: %s, data: %s", source.URL, data)
+		return nil, nil
+	}
+
 	// nolint:prealloc //ignore this.
 	var articles []*Article
-
-	match := re.FindAllSubmatch(data, -1)
-
 	for i, groups := range match {
 		if source.MaxFetchNum > 0 && i >= source.MaxFetchNum {
 			break
@@ -82,6 +85,7 @@ func RegexParse(source *Source) ([]*Article, error) {
 		link := linkParser(groups)
 		link = adjustLink(hostPrefix, link)
 		title := titleParser(groups)
+		logger.Infof("regex parse, link: %s, title: %s", link, title)
 
 		article := &Article{
 			URL:       link,

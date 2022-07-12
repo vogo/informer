@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/vogo/logger"
 	"github.com/wongoo/informer/internal/feed"
 	"github.com/wongoo/informer/internal/inform"
 )
@@ -31,6 +32,8 @@ func main() {
 
 	var op string
 	if len(os.Args) > 1 {
+		logger.SetLevel(logger.LevelDebug)
+
 		op = os.Args[1]
 		if op == "feed" {
 			feed.InitFeedDB(exeDir)
