@@ -104,7 +104,7 @@ func viewSource(idStr string) {
 	fmt.Printf("id:\t%d\n", source.ID)
 	fmt.Printf("title:\t%s\n", source.Title)
 	fmt.Printf("url:\t%s\n", source.URL)
-	fmt.Printf("curl:\t%s\n", source.CURL)
+	fmt.Printf("c_url:\t%s\n", source.CURL)
 	fmt.Printf("weight:\t%d\n", source.Weight)
 	fmt.Printf("max_fetch_num:\t%d\n", source.MaxFetchNum)
 	fmt.Printf("regex:\t%s\n", source.Regex)
