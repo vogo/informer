@@ -29,6 +29,7 @@ type Source struct {
 	ID          int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
 	Title       string `json:"title"`
 	URL         string `json:"url"`
+	CURL        string `json:"curl"`
 	Weight      int64  `json:"weight"`
 	MaxFetchNum int    `json:"max_fetch_num"`
 	Regex       string `json:"regex"`

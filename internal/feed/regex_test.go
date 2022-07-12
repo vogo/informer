@@ -61,3 +61,23 @@ func TestRegexParse2(t *testing.T) {
 		t.Log(a.Title, a.URL)
 	}
 }
+
+func TestRegexParse3(t *testing.T) {
+	t.Parallel()
+
+	articles, err := feed.RegexParse(&feed.Source{
+		URL:         "https://www.infoq.cn/topic/architecture",
+		CURL:        `curl 'https://www.infoq.cn/public/v1/article/getList' -H 'Origin: https://www.infoq.cn' -H 'Referer: https://www.infoq.cn/topic/architecture' --data-raw '{"type":1,"size":30,"id":8}' --compressed`,
+		Weight:      50,
+		MaxFetchNum: 5,
+		Regex:       `"article_title":"([^"]+)".*?"uuid":"([^"]+)"`,
+		TitleExp:    "$1",
+		URLExp:      "https://www.infoq.cn/article/$2",
+	})
+
+	assert.Nil(t, err)
+
+	for _, a := range articles {
+		t.Log(a.Title, a.URL)
+	}
+}

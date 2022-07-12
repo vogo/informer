@@ -23,8 +23,9 @@ import (
 	"time"
 
 	"github.com/vogo/logger"
+	"github.com/vogo/vogo/vos"
+	"github.com/vogo/vogo/vregexp"
 	"github.com/wongoo/informer/internal/httpx"
-	"github.com/wongoo/informer/internal/util"
 )
 
 func RegexParse(source *Source) ([]*Article, error) {
@@ -45,17 +46,23 @@ func RegexParse(source *Source) ([]*Article, error) {
 		return nil, nil
 	}
 
-	urlRegexRender := util.RegexMatchRender(source.URLExp)
+	urlRegexRender := vregexp.RegexGroupRender(source.URLExp)
 	linkParser := func(groups [][]byte) string {
 		return string(urlRegexRender(groups))
 	}
 
-	titleRegexRender := util.RegexMatchRender(source.TitleExp)
+	titleRegexRender := vregexp.RegexGroupRender(source.TitleExp)
 	titleParser := func(groups [][]byte) string {
 		return string(titleRegexRender(groups))
 	}
 
-	data, err := httpx.GetLinkData(source.URL)
+	var data []byte
+	if source.CURL != "" {
+		data, err = vos.ExecShell(source.CURL)
+	} else {
+		data, err = httpx.GetLinkData(source.URL)
+	}
+
 	if err != nil {
 		return nil, err
 	}

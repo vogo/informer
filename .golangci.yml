@@ -12,6 +12,8 @@ linters-settings:
     locale: US
   lll:
     line-length: 140
+  funlen:
+    lines: 120
   goimports:
     local-prefixes: github.com/golangci/golangci-lint
   gocritic:
