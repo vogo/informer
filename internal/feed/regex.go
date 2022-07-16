@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/vogo/logger"
+	"github.com/vogo/vogo/vnet/vurl"
 	"github.com/vogo/vogo/vos"
 	"github.com/vogo/vogo/vregexp"
 	"github.com/wongoo/informer/internal/httpx"
@@ -88,6 +89,10 @@ func RegexParse(source *Source) ([]*Article, error) {
 		link = adjustLink(hostPrefix, link)
 		title := titleParser(groups)
 		logger.Infof("regex parse, link: %s, title: %s", link, title)
+
+		if source.Redirect {
+			link = vurl.RedirectURL(link)
+		}
 
 		article := &Article{
 			URL:       link,

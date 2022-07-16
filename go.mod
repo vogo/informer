@@ -6,7 +6,7 @@ require (
 	github.com/mmcdole/gofeed v1.1.3
 	github.com/stretchr/testify v1.7.1
 	github.com/vogo/logger v1.4.0
-	github.com/vogo/vogo v0.0.0-20220712011029-192f7a6ca3de
+	github.com/vogo/vogo v0.0.0-20220716032518-c4afff96c8b4
 	gorm.io/driver/sqlite v1.3.6
 	gorm.io/gorm v1.23.8
 )

@@ -22,6 +22,7 @@ import (
 
 	"github.com/mmcdole/gofeed"
 	"github.com/vogo/logger"
+	"github.com/vogo/vogo/vnet/vurl"
 )
 
 func addGoFeed(config *Config, source *Source, expireTime int64) {
@@ -57,6 +58,10 @@ func addGoFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
 	urlAddr, ok := FormatURL(item.Link)
 	if !ok {
 		return
+	}
+
+	if source.Redirect {
+		urlAddr = vurl.RedirectURL(urlAddr)
 	}
 
 	if isFeedURLExists(urlAddr) {

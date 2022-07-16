@@ -113,6 +113,7 @@ func viewSource(idStr string) {
 	fmt.Printf("regex:\t%s\n", source.Regex)
 	fmt.Printf("title_exp:\t%s\n", source.TitleExp)
 	fmt.Printf("url_exp:\t%s\n", source.URLExp)
+	fmt.Printf("redirect:\t%t\n", source.Redirect)
 }
 
 func listSource() {
@@ -145,5 +146,6 @@ func copySource(srcID string) {
 		Regex:       source.Regex,
 		TitleExp:    source.TitleExp,
 		URLExp:      source.URLExp,
+		Redirect:    source.Redirect,
 	})
 }
