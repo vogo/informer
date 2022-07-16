@@ -18,6 +18,7 @@
 package feed
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
 	"time"
@@ -54,7 +55,7 @@ func RegexParse(source *Source) ([]*Article, error) {
 
 	titleRegexRender := vregexp.RegexGroupRender(source.TitleExp)
 	titleParser := func(groups [][]byte) string {
-		return string(titleRegexRender(groups))
+		return string(bytes.TrimSpace(titleRegexRender(groups)))
 	}
 
 	var data []byte
