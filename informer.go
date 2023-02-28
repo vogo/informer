@@ -22,8 +22,8 @@ import (
 	"path/filepath"
 
 	"github.com/vogo/logger"
-	"github.com/wongoo/informer/internal/feed"
-	"github.com/wongoo/informer/internal/inform"
+	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/inform"
 )
 
 func main() {

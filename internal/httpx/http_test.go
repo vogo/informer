@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/wongoo/informer/internal/httpx"
+	"github.com/vogo/informer/internal/httpx"
 )
 
 func TestGetWechatLinkData(t *testing.T) {

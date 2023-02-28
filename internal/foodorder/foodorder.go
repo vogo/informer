@@ -27,7 +27,7 @@ import (
 
 	"github.com/vogo/logger"
 	"github.com/vogo/vogo/vrand"
-	"github.com/wongoo/informer/internal"
+	"github.com/vogo/informer/internal"
 )
 
 const (

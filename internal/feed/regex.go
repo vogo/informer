@@ -27,7 +27,7 @@ import (
 	"github.com/vogo/vogo/vnet/vurl"
 	"github.com/vogo/vogo/vos"
 	"github.com/vogo/vogo/vregexp"
-	"github.com/wongoo/informer/internal/httpx"
+	"github.com/vogo/informer/internal/httpx"
 )
 
 func RegexParse(source *Source) ([]*Article, error) {

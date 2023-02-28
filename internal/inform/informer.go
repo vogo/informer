@@ -27,12 +27,12 @@ import (
 	"time"
 
 	"github.com/vogo/logger"
-	"github.com/wongoo/informer/internal/date"
-	"github.com/wongoo/informer/internal/ding"
-	"github.com/wongoo/informer/internal/feed"
-	"github.com/wongoo/informer/internal/foodorder"
-	"github.com/wongoo/informer/internal/lark"
-	"github.com/wongoo/informer/internal/soup"
+	"github.com/vogo/informer/internal/date"
+	"github.com/vogo/informer/internal/ding"
+	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/foodorder"
+	"github.com/vogo/informer/internal/lark"
+	"github.com/vogo/informer/internal/soup"
 )
 
 const (

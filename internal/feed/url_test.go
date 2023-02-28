@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/wongoo/informer/internal/feed"
+	"github.com/vogo/informer/internal/feed"
 )
 
 func TestFormatURL(t *testing.T) {

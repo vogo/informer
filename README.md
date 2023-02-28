@@ -6,7 +6,7 @@
 
 ## 安装 informer
 ```bash
-GOBIN=$(pwd) go install github.com/wongoo/informer@master
+GOBIN=$(pwd) go install github.com/vogo/informer@master
 ```
 
 ## 创建配置文件
