@@ -32,6 +32,12 @@ GOBIN=$(pwd) go install github.com/vogo/informer@master
 # title_exp:
 # url_exp:
 # redirect:	false
+
+# 测试抓取
+./informer feed parse 1
+# 科技爱好者周刊（第 243 期）：与孔子 AI 聊天 : http://www.ruanyifeng.com/blog/2023/02/weekly-issue-243.html
+# 科技爱好者周刊（第 242 期）：一次尴尬的服务器被黑 : http://www.ruanyifeng.com/blog/2023/02/weekly-issue-242.html
+# 科技爱好者周刊（第 241 期）：中国的增长动力在内陆 : http://www.ruanyifeng.com/blog/2023/02/weekly-issue-241.html
 ```
 
 订阅正则匹配范例:
@@ -47,11 +53,18 @@ GOBIN=$(pwd) go install github.com/vogo/informer@master
 # url:	https://www.julian.com/
 # c_url:
 # weight:	50
-# max_fetch_num:	1
+# max_fetch_num:	2
 # regex:	<a href="([^"]+)" class="blog-post-link[^"]+"><div class="blog-post-link-text">([^<]+)</div>
 # title_exp:	$2
 # url_exp:	https://www.julian.com$1
 # redirect:	false
+
+# 测试抓取 
+./informer feed parse 14
+# 2023/02/01 17:14:39.716 INFO regex parse, link: https://www.julian.com/blog/armageddon, title: Armageddon
+# 2023/02/01 17:14:39.716 INFO regex parse, link: https://www.julian.com/blog/life-planning, title: What to do with your life
+# Armageddon : https://www.julian.com/blog/armageddon
+# What to do with your life : https://www.julian.com/blog/life-planning
 ```
 
 ## 配置机器人
