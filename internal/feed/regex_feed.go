@@ -17,7 +17,9 @@
 
 package feed
 
-import "github.com/vogo/logger"
+import (
+	"github.com/vogo/logger"
+)
 
 func regexParseFeed(config *Config, source *Source, _ int64) {
 	logger.Info("regex parse feed: ", source.URL)

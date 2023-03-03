@@ -56,11 +56,8 @@ func RegexParse(source *Source) ([]*Article, error) {
 	titleRegexRender := vregexp.RegexGroupRender(source.TitleExp)
 	titleParser := func(groups [][]byte) string {
 		t := bytes.TrimSpace(titleRegexRender(groups))
-		t = bytes.ReplaceAll(t, []byte("\r"), []byte(""))
-		t = bytes.ReplaceAll(t, []byte("\n"), []byte(""))
-		t = bytes.ReplaceAll(t, []byte("\t"), []byte(""))
-		t = bytes.ReplaceAll(t, []byte(" "), []byte(""))
-		return string(t)
+		s := string(t)
+		return strings.Join(strings.Fields(s), " ")
 	}
 
 	var data []byte
