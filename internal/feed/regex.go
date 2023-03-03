@@ -23,11 +23,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vogo/informer/internal/httpx"
 	"github.com/vogo/logger"
 	"github.com/vogo/vogo/vnet/vurl"
 	"github.com/vogo/vogo/vos"
 	"github.com/vogo/vogo/vregexp"
-	"github.com/vogo/informer/internal/httpx"
 )
 
 func RegexParse(source *Source) ([]*Article, error) {
@@ -55,7 +55,12 @@ func RegexParse(source *Source) ([]*Article, error) {
 
 	titleRegexRender := vregexp.RegexGroupRender(source.TitleExp)
 	titleParser := func(groups [][]byte) string {
-		return string(bytes.TrimSpace(titleRegexRender(groups)))
+		t := bytes.TrimSpace(titleRegexRender(groups))
+		t = bytes.ReplaceAll(t, []byte("\r"), []byte(""))
+		t = bytes.ReplaceAll(t, []byte("\n"), []byte(""))
+		t = bytes.ReplaceAll(t, []byte("\t"), []byte(""))
+		t = bytes.ReplaceAll(t, []byte(" "), []byte(""))
+		return string(t)
 	}
 
 	var data []byte
