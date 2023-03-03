@@ -21,9 +21,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/vogo/logger"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/inform"
+	"github.com/vogo/logger"
 )
 
 func main() {

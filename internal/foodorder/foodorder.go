@@ -25,9 +25,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/vogo/informer/internal"
 	"github.com/vogo/logger"
 	"github.com/vogo/vogo/vrand"
-	"github.com/vogo/informer/internal"
 )
 
 const (

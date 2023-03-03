@@ -26,13 +26,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vogo/logger"
 	"github.com/vogo/informer/internal/date"
 	"github.com/vogo/informer/internal/ding"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/foodorder"
 	"github.com/vogo/informer/internal/lark"
 	"github.com/vogo/informer/internal/soup"
+	"github.com/vogo/logger"
 )
 
 const (

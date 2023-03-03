@@ -22,7 +22,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"strings"
 	"time"
+
+	"golang.org/x/net/html/charset"
 )
 
 const (
@@ -89,5 +92,16 @@ func getWithHeaders(link string, headers map[string]string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	return io.ReadAll(resp.Body)
+	var contentReader io.Reader = resp.Body
+
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "charset") {
+		contentReader, err = charset.NewReader(contentReader, contentType)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return io.ReadAll(contentReader)
 }
