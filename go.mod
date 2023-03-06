@@ -3,12 +3,13 @@ module github.com/vogo/informer
 go 1.20
 
 require (
-	github.com/mmcdole/gofeed v1.2.0
+	github.com/mmcdole/gofeed v1.2.1
 	github.com/stretchr/testify v1.8.1
 	github.com/vogo/logger v1.5.0
 	github.com/vogo/vogo v0.0.0-20221102073728-4e693f429440
+	golang.org/x/net v0.8.0
 	gorm.io/driver/sqlite v1.4.4
-	gorm.io/gorm v1.24.5
+	gorm.io/gorm v1.24.6
 )
 
 require (
@@ -23,7 +24,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/net v0.7.0 // indirect
-	golang.org/x/text v0.7.0 // indirect
+	golang.org/x/text v0.8.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
