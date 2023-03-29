@@ -34,65 +34,32 @@ const (
 	previousChosenFileName = "previous_chosen.json"
 )
 
-// Menu 菜单.
-type Menu struct {
-	Type     string   `json:"type"`
-	ChoseNum int      `json:"chose_num"`
-	List     []string `json:"list"`
-}
-
-// FoodConfig 点餐配置.
-type FoodConfig struct {
-	Partners    []string      `json:"partners"`
-	Restaurants []*Restaurant `json:"restaurants"`
-}
-
-// Restaurant 餐厅.
-type Restaurant struct {
-	Name  string  `json:"name"`
-	Tel   string  `json:"tel"`
-	Menus []*Menu `json:"food_list"`
-}
-
-// Order 下单.
-type Order struct {
-	RestaurantName string              `json:"name"`
-	User           string              `json:"user"`
-	Chose          map[string][]string `json:"chose"`
-}
-
 func AddFoodAutoChose(buf *bytes.Buffer, foodConfig *FoodConfig, exeDir string) {
-	var previousFoodOrders []*Order
-
-	previousData, err := os.ReadFile(filepath.Join(exeDir, previousChosenFileName))
-	if err != nil {
-		logger.Infof("read previous chosen error: %v", err)
+	var orderUserMobileNo string
+	if len(foodConfig.Partners) <= 0 {
+		logger.Error("partners can not be empty")
+		buf.WriteString("不能没有点餐人")
+		return
 	}
+	orderUserMobileNo = foodConfig.Partners[0]
+	var orderUser *User = getUser(orderUserMobileNo)
 
-	_ = json.Unmarshal(previousData, &previousFoodOrders)
-
-	var orderUser string
-	if len(foodConfig.Partners) > 0 {
-		orderUser = foodConfig.Partners[0]
-	}
-
-	if len(previousFoodOrders) > 0 {
-		previousLatestOrder := previousFoodOrders[len(previousFoodOrders)-1]
-		if previousLatestOrder.User != "" {
-			for i, u := range foodConfig.Partners {
-				if u == previousLatestOrder.User && i < len(foodConfig.Partners)-1 {
-					orderUser = foodConfig.Partners[i+1]
-				}
+	var previousLatestOrder *Order = getPreviousLatestOrder(orderUser)
+	if previousLatestOrder.UserId > 0 {
+		for i, u := range foodConfig.Partners {
+			if u == previousLatestOrder.Partners && i < len(foodConfig.Partners)-1 {
+				// 上次点餐的人，这次换一个
+				orderUser = getUser(foodConfig.Partners[i+1])
 			}
 		}
 	}
 
 	logger.Infof("order user: %s", orderUser)
 
-	autoChoseFood(buf, exeDir, foodConfig, previousFoodOrders, &orderUser)
+	autoChooseFood(buf, exeDir, foodConfig, previousFoodOrders, orderUser)
 }
 
-func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, previousFoodOrders []*Order, orderUser *string) {
+func autoChooseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, previousFoodOrders []*Order, orderUser *User) {
 	rand.Seed(time.Now().Unix())
 
 	if len(previousFoodOrders) == len(foodConfig.Restaurants) {
