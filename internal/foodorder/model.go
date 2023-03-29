@@ -21,7 +21,7 @@ package foodorder
 type Menu struct {
 	ID           int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
 	Type         string `json:"type"`
-	ChooseNum    int    `json:"choose_num"`
+	ChoseNum     int    `json:"chose_num"`
 	RestaurantId int64  `json:"restaurant_id"`
 }
 
@@ -48,17 +48,18 @@ type Restaurant struct {
 
 // Order 下单.
 type Order struct {
-	ID           int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
-	RestaurantId int64  `json:"restaurant_id"`
-	UserId       int64  `json:"user_id"`
-	Partners     string `json:"partners"`
+	ID             string `json:"id" gorm:"primarykey;"`
+	RestaurantId   int64  `json:"restaurant_id"`
+	RestaurantName string `json:"restaurant_name"`
+	UserId         int64  `json:"user_id"`
+	Partners       string `json:"partners"`
 }
 
 // OrderItem 下单项
 type OrderItem struct {
-	ID         int64 `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
-	MenuItemId int64 `json:"menu_item_id"`
-	OrderId    int64 `json:"order_id"`
+	ID         int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
+	MenuItemId int64  `json:"menu_item_id"`
+	OrderId    string `json:"order_id"`
 }
 
 // User 用户

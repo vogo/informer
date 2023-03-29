@@ -69,8 +69,11 @@ func Inform(exeDir, urlAddr string) {
 
 	weekday := time.Now().Weekday()
 
-	if informerConfig.Food != nil && weekday != time.Sunday && weekday != time.Saturday {
-		foodorder.AddFoodAutoChose(buf, informerConfig.Food, exeDir)
+	foodConfigs := foodorder.GetAllFoodConfig()
+	for _, foodConfig := range foodConfigs {
+		if informerConfig.Food != nil && weekday != time.Sunday && weekday != time.Saturday {
+			foodorder.AddFoodAutoChose(buf, foodConfig, exeDir)
+		}
 	}
 
 	if informerConfig.Feed != nil {
