@@ -40,8 +40,7 @@ const (
 )
 
 type Config struct {
-	Food *foodorder.FoodConfig `json:"food"`
-	Feed *feed.Config          `json:"feed"`
+	Feed *feed.Config `json:"feed"`
 }
 
 func Inform(exeDir, urlAddr string) {
@@ -78,7 +77,7 @@ func Inform(exeDir, urlAddr string) {
 		foodConfigs = foodorder.GetAllFoodConfig()
 	}
 	for _, foodConfig := range foodConfigs {
-		if informerConfig.Food != nil && weekday != time.Sunday && weekday != time.Saturday {
+		if foodConfig != nil && weekday != time.Sunday && weekday != time.Saturday {
 			foodorder.AddFoodAutoChose(buf, foodConfig, exeDir)
 		}
 	}

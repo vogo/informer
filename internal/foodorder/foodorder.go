@@ -44,28 +44,29 @@ func InitFoodOrderData(data []byte) {
 	// 取出food的配置，转成map[string]interface{}
 	foodConfig := informerConfig["food"].(map[string]interface{})
 	// 取出food的配置中的partners，转成[]string
-	partners := foodConfig["partners"].([]string)
+	partners := getStringArr(foodConfig, "partners")
 	addFoodConfig(partners)
 	addUser(partners)
 	// 取出food的配置中的restaurants，转成[]map[string]interface{}
-	restaurants := foodConfig["restaurants"].([]map[string]interface{})
+	restaurants := getMap(foodConfig, "restaurants")
 	// 遍历restaurants
 	for _, restaurant := range restaurants {
 		// 取出restaurant的name，转成string
-		name := restaurant["name"].(string)
+		name := getString(restaurant, "name")
 		// 取出restaurant的tel，转成string
-		tel := restaurant["tel"].(string)
+
+		tel := getString(restaurant, "tel")
 		restaurantId := addRestaurant(name, tel).ID
 		// 取出restaurant的menu，转成[]map[string]interface{}
-		menus := restaurant["food_list"].([]map[string]interface{})
+		menus := getMap(restaurant, "food_list")
 		// 遍历menu
 		for _, menu := range menus {
 			// 取出menu的type，转成string
-			menuType := menu["type"].(string)
+			menuType := getString(menu, "type")
 			// 取出menu的choseNum，转成int
-			choseNum := menu["chose_num"].(int)
+			choseNum := getInt(menu, "chose_num")
 			// 取出menu的list，转成[]string
-			foodList := menu["list"].([]string)
+			foodList := getStringArr(menu, "list")
 			menu := addMenu(menuType, choseNum, restaurantId)
 			menuItems := []*MenuItem{}
 			// 遍历foodList
@@ -84,10 +85,52 @@ func InitFoodOrderData(data []byte) {
 	}
 }
 
+func getString(data map[string]interface{}, key string) string {
+	// 判断data里有没有key
+	if _, ok := data[key]; ok {
+		return data[key].(string)
+	}
+	return ""
+}
+
+func getStringArr(data map[string]interface{}, key string) []string {
+	// 判断data里有没有key
+	if _, ok := data[key]; ok {
+		arr := data[key].([]interface{})
+		var result []string
+		for _, v := range arr {
+			result = append(result, v.(string))
+		}
+		return result
+	}
+	return nil
+}
+
+func getInt(data map[string]interface{}, key string) int {
+	// 判断data里有没有key
+	if _, ok := data[key]; ok {
+		return int(data[key].(float64))
+	}
+	return 0
+}
+
+func getMap(data map[string]interface{}, key string) []map[string]interface{} {
+	if _, ok := data[key]; ok {
+		arr := data[key].([]interface{})
+		var result []map[string]interface{}
+		for _, v := range arr {
+			result = append(result, v.(map[string]interface{}))
+		}
+		return result
+	}
+	return nil
+}
+
 // 增加点餐配置
 func addFoodConfig(partners []string) {
+	partnersJson, _ := json.Marshal(partners)
 	foodConfig := &FoodConfig{
-		Partners: partners,
+		Partners: string(partnersJson),
 	}
 	foodorderDB.Create(foodConfig)
 }
@@ -144,17 +187,19 @@ func AddFoodAutoChose(buf *bytes.Buffer, foodConfig *FoodConfig, exeDir string) 
 		buf.WriteString("不能没有点餐人")
 		return
 	}
-	orderUserMobileNo = foodConfig.Partners[0]
+	var partners []string
+	json.Unmarshal([]byte(foodConfig.Partners), &partners)
+	orderUserMobileNo = partners[0]
 	var orderUser *User = getUser(orderUserMobileNo)
 
 	previousOrders := getPreviousOrder(orderUser)
 	if len(previousOrders) > 0 {
 		previousLatestOrder := previousOrders[len(previousOrders)-1]
 		if previousLatestOrder.UserId > 0 {
-			for i, u := range foodConfig.Partners {
+			for i, u := range partners {
 				if u == previousLatestOrder.Partners && i < len(foodConfig.Partners)-1 {
 					// 上次点餐的人，这次换一个
-					orderUser = getUser(foodConfig.Partners[i+1])
+					orderUser = getUser(partners[i+1])
 				}
 			}
 		}

@@ -32,11 +32,15 @@ func InitFoodorderDB(dataDir string) {
 		panic(err)
 	}
 
+	if err = foodorderDB.AutoMigrate(&FoodConfig{}); err != nil {
+		panic(err)
+	}
+
 	if err = foodorderDB.AutoMigrate(&Menu{}); err != nil {
 		panic(err)
 	}
 
-	if err = foodorderDB.AutoMigrate(&FoodConfig{}); err != nil {
+	if err = foodorderDB.AutoMigrate(&MenuItem{}); err != nil {
 		panic(err)
 	}
 
@@ -45,6 +49,14 @@ func InitFoodorderDB(dataDir string) {
 	}
 
 	if err = foodorderDB.AutoMigrate(&Order{}); err != nil {
+		panic(err)
+	}
+
+	if err = foodorderDB.AutoMigrate(&OrderItem{}); err != nil {
+		panic(err)
+	}
+
+	if err = foodorderDB.AutoMigrate(&User{}); err != nil {
 		panic(err)
 	}
 }

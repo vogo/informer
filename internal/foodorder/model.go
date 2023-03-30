@@ -35,8 +35,8 @@ type MenuItem struct {
 
 // FoodConfig 点餐配置.
 type FoodConfig struct {
-	ID       int64    `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
-	Partners []string `json:"partners"`
+	ID       int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
+	Partners string `json:"partners" `
 }
 
 // Restaurant 餐厅.
