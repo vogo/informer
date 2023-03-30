@@ -69,7 +69,14 @@ func Inform(exeDir, urlAddr string) {
 
 	weekday := time.Now().Weekday()
 
+	foodorder.InitFoodorderDB(exeDir)
 	foodConfigs := foodorder.GetAllFoodConfig()
+	if len(foodConfigs) <= 0 {
+		logger.Info("No food config found, Init food config from informer.json")
+		// 初始化数据库
+		foodorder.InitFoodOrderData(data)
+		foodConfigs = foodorder.GetAllFoodConfig()
+	}
 	for _, foodConfig := range foodConfigs {
 		if informerConfig.Food != nil && weekday != time.Sunday && weekday != time.Saturday {
 			foodorder.AddFoodAutoChose(buf, foodConfig, exeDir)

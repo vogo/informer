@@ -19,7 +19,7 @@ package foodorder
 
 // Menu 菜单.
 type Menu struct {
-	ID           int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
+	ID           string `json:"id" gorm:"primarykey"`
 	Type         string `json:"type"`
 	ChoseNum     int    `json:"chose_num"`
 	RestaurantId int64  `json:"restaurant_id"`
@@ -27,10 +27,10 @@ type Menu struct {
 
 // MenuItem 菜单项
 type MenuItem struct {
-	ID     int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
-	Name   string `json:"name"`
-	Price  int    `json:"price"`
-	MenuId int64  `json:"menu_id"`
+	ID     int64   `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
+	Name   string  `json:"name"`
+	Price  float64 `json:"price"`
+	MenuId string  `json:"menu_id"`
 }
 
 // FoodConfig 点餐配置.

@@ -71,7 +71,7 @@ func getRestaurantMenu(restaurantId int64) []*Menu {
 }
 
 // 获取菜单的菜单项列表
-func getRestaurantMenuItemList(menuId int64) []*MenuItem {
+func getRestaurantMenuItemList(menuId string) []*MenuItem {
 	var menuItems []*MenuItem
 
 	foodorderDB.Model(&MenuItem{MenuId: menuId}).First(&menuItems)
@@ -87,4 +87,13 @@ func saveOrder(order *Order) {
 // 批量保存订单项列表
 func saveOrderItemList(orderItemList []*OrderItem) {
 	foodorderDB.Create(&orderItemList)
+}
+
+// 根据餐馆名称查询餐馆
+func getRestaurantByName(restaurantName string) *Restaurant {
+	var restaurant Restaurant
+
+	foodorderDB.Model(&Restaurant{Name: restaurantName}).First(&restaurant)
+
+	return &restaurant
 }
