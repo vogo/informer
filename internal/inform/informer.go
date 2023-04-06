@@ -40,8 +40,7 @@ const (
 )
 
 type Config struct {
-	Food *foodorder.FoodConfig `json:"food"`
-	Feed *feed.Config          `json:"feed"`
+	Feed *feed.Config `json:"feed"`
 }
 
 func Inform(exeDir, urlAddr string) {
@@ -69,8 +68,18 @@ func Inform(exeDir, urlAddr string) {
 
 	weekday := time.Now().Weekday()
 
-	if informerConfig.Food != nil && weekday != time.Sunday && weekday != time.Saturday {
-		foodorder.AddFoodAutoChose(buf, informerConfig.Food, exeDir)
+	foodorder.InitFoodorderDB(exeDir)
+	foodConfigs := foodorder.GetAllFoodConfig()
+	if len(foodConfigs) <= 0 {
+		logger.Info("No food config found, Init food config from informer.json")
+		// 初始化数据库
+		foodorder.InitFoodOrderData(data)
+		foodConfigs = foodorder.GetAllFoodConfig()
+	}
+	for _, foodConfig := range foodConfigs {
+		if foodConfig != nil && weekday != time.Sunday && weekday != time.Saturday {
+			foodorder.AddFoodAutoChose(buf, foodConfig, exeDir)
+		}
 	}
 
 	if informerConfig.Feed != nil {

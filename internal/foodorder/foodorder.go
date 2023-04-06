@@ -21,11 +21,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"math/rand"
-	"os"
-	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/vogo/informer/internal"
 	"github.com/vogo/logger"
 	"github.com/vogo/vogo/vrand"
 )
@@ -34,72 +33,192 @@ const (
 	previousChosenFileName = "previous_chosen.json"
 )
 
-// Menu 菜单.
-type Menu struct {
-	Type     string   `json:"type"`
-	ChoseNum int      `json:"chose_num"`
-	List     []string `json:"list"`
+// 初始化入库
+func InitFoodOrderData(data []byte) {
+	// 把data通过JSON反序列化成map
+	var informerConfig map[string]interface{}
+
+	if err := json.Unmarshal(data, &informerConfig); err != nil {
+		logger.Fatal(err)
+	}
+	// 取出food的配置，转成map[string]interface{}
+	foodConfig := informerConfig["food"].(map[string]interface{})
+	// 取出food的配置中的partners，转成[]string
+	partners := getStringArr(foodConfig, "partners")
+	addFoodConfig(partners)
+	addUser(partners)
+	// 取出food的配置中的restaurants，转成[]map[string]interface{}
+	restaurants := getMap(foodConfig, "restaurants")
+	// 遍历restaurants
+	for _, restaurant := range restaurants {
+		// 取出restaurant的name，转成string
+		name := getString(restaurant, "name")
+		// 取出restaurant的tel，转成string
+
+		tel := getString(restaurant, "tel")
+		restaurantId := addRestaurant(name, tel).ID
+		// 取出restaurant的menu，转成[]map[string]interface{}
+		menus := getMap(restaurant, "food_list")
+		// 遍历menu
+		for _, menu := range menus {
+			// 取出menu的type，转成string
+			menuType := getString(menu, "type")
+			// 取出menu的choseNum，转成int
+			choseNum := getInt(menu, "chose_num")
+			// 取出menu的list，转成[]string
+			foodList := getStringArr(menu, "list")
+			menu := addMenu(menuType, choseNum, restaurantId)
+			menuItems := []*MenuItem{}
+			// 遍历foodList
+			for _, food := range foodList {
+				// 把food按照空格分割成[]string
+				foodInfo := strings.Split(food, " ")
+				// 取出foodInfo的第一个元素，转成string
+				foodName := foodInfo[0]
+				// 取出foodInfo的第二个元素，转成float64
+				price, _ := strconv.ParseFloat(foodInfo[1], 64)
+				// 把name, foodName, price, choseNum, menuType, partners插入数据库
+				menuItems = append(menuItems, buildMenuItem(menu, foodName, price))
+			}
+			foodorderDB.Create(menuItems)
+		}
+	}
 }
 
-// FoodConfig 点餐配置.
-type FoodConfig struct {
-	Partners    []string      `json:"partners"`
-	Restaurants []*Restaurant `json:"restaurants"`
+func getString(data map[string]interface{}, key string) string {
+	// 判断data里有没有key
+	if _, ok := data[key]; ok {
+		return data[key].(string)
+	}
+	return ""
 }
 
-// Restaurant 餐厅.
-type Restaurant struct {
-	Name  string  `json:"name"`
-	Tel   string  `json:"tel"`
-	Menus []*Menu `json:"food_list"`
+func getStringArr(data map[string]interface{}, key string) []string {
+	// 判断data里有没有key
+	if _, ok := data[key]; ok {
+		arr := data[key].([]interface{})
+		var result []string
+		for _, v := range arr {
+			result = append(result, v.(string))
+		}
+		return result
+	}
+	return nil
 }
 
-// Order 下单.
-type Order struct {
-	RestaurantName string              `json:"name"`
-	User           string              `json:"user"`
-	Chose          map[string][]string `json:"chose"`
+func getInt(data map[string]interface{}, key string) int {
+	// 判断data里有没有key
+	if _, ok := data[key]; ok {
+		return int(data[key].(float64))
+	}
+	return 0
+}
+
+func getMap(data map[string]interface{}, key string) []map[string]interface{} {
+	if _, ok := data[key]; ok {
+		arr := data[key].([]interface{})
+		var result []map[string]interface{}
+		for _, v := range arr {
+			result = append(result, v.(map[string]interface{}))
+		}
+		return result
+	}
+	return nil
+}
+
+// 增加点餐配置
+func addFoodConfig(partners []string) {
+	partnersJson, _ := json.Marshal(partners)
+	foodConfig := &FoodConfig{
+		Partners: string(partnersJson),
+	}
+	foodorderDB.Create(foodConfig)
+}
+
+// 增加餐馆
+func addRestaurant(name, tel string) *Restaurant {
+	restaurant := &Restaurant{
+		Name: name,
+		Tel:  tel,
+	}
+	foodorderDB.Create(restaurant)
+	return getRestaurantByName(name)
+}
+
+// 增加用户
+func addUser(partners []string) {
+	users := []*User{}
+	for _, partner := range partners {
+		user := &User{
+			MobileNo: partner,
+			Name:     partner,
+		}
+		users = append(users, user)
+	}
+	foodorderDB.Create(users)
+}
+
+// 增加菜单
+func addMenu(menuType string, choseNum int, restaurantId int64) *Menu {
+	menu := &Menu{
+		ID:           generateMenuId(),
+		Type:         menuType,
+		ChoseNum:     choseNum,
+		RestaurantId: restaurantId,
+	}
+	foodorderDB.Create(menu)
+	return menu
+}
+
+// 构建菜单项
+func buildMenuItem(menu *Menu, foodName string, price float64) *MenuItem {
+	menuItem := &MenuItem{
+		MenuId: menu.ID,
+		Name:   foodName,
+		Price:  price,
+	}
+	return menuItem
 }
 
 func AddFoodAutoChose(buf *bytes.Buffer, foodConfig *FoodConfig, exeDir string) {
-	var previousFoodOrders []*Order
-
-	previousData, err := os.ReadFile(filepath.Join(exeDir, previousChosenFileName))
-	if err != nil {
-		logger.Infof("read previous chosen error: %v", err)
+	var orderUserMobileNo string
+	if len(foodConfig.Partners) <= 0 {
+		logger.Error("partners can not be empty")
+		buf.WriteString("不能没有点餐人")
+		return
 	}
+	var partners []string
+	json.Unmarshal([]byte(foodConfig.Partners), &partners)
+	orderUserMobileNo = partners[0]
+	var orderUser *User = getUser(orderUserMobileNo)
 
-	_ = json.Unmarshal(previousData, &previousFoodOrders)
-
-	var orderUser string
-	if len(foodConfig.Partners) > 0 {
-		orderUser = foodConfig.Partners[0]
-	}
-
-	if len(previousFoodOrders) > 0 {
-		previousLatestOrder := previousFoodOrders[len(previousFoodOrders)-1]
-		if previousLatestOrder.User != "" {
-			for i, u := range foodConfig.Partners {
-				if u == previousLatestOrder.User && i < len(foodConfig.Partners)-1 {
-					orderUser = foodConfig.Partners[i+1]
+	previousOrders := getPreviousOrder(orderUser)
+	if len(previousOrders) > 0 {
+		previousLatestOrder := previousOrders[len(previousOrders)-1]
+		if previousLatestOrder.UserId > 0 {
+			for i, u := range partners {
+				if u == previousLatestOrder.Partners && i < len(foodConfig.Partners)-1 {
+					// 上次点餐的人，这次换一个
+					orderUser = getUser(partners[i+1])
 				}
 			}
 		}
 	}
 
-	logger.Infof("order user: %s", orderUser)
+	logger.Infof("order user: %s", orderUser.Name)
 
-	autoChoseFood(buf, exeDir, foodConfig, previousFoodOrders, &orderUser)
+	autoChoseFood(buf, exeDir, foodConfig, previousOrders, orderUser)
 }
 
-func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, previousFoodOrders []*Order, orderUser *string) {
+func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, previousFoodOrders []*Order, orderUser *User) {
 	rand.Seed(time.Now().Unix())
 
-	if len(previousFoodOrders) == len(foodConfig.Restaurants) {
+	restaurants := getAllRestaurants()
+	if len(previousFoodOrders) == len(restaurants) {
 		previousFoodOrders = nil
 	}
 
-	restaurants := filterPreviousChosenRestaurants(previousFoodOrders, foodConfig.Restaurants)
+	restaurants = filterPreviousChosenRestaurants(previousFoodOrders, restaurants)
 
 	//nolint:gosec // ignore this
 	restaurantIndex := rand.Intn(len(restaurants))
@@ -114,28 +233,34 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 	rand.Seed(time.Now().Unix())
 
 	foodOrder := &Order{
-		RestaurantName: restaurant.Name,
-		User:           *orderUser,
-		Chose:          make(map[string][]string),
+		ID:           generateOrderId(),
+		RestaurantId: restaurant.ID,
+		UserId:       *&orderUser.ID,
+		Partners:     orderUser.MobileNo,
 	}
+
+	orderItems := []*OrderItem{}
 
 	buf.WriteString("\n\n")
 
-	if len(restaurant.Menus) == 0 {
-		*orderUser = ""
+	menus := getRestaurantMenu(restaurant.ID)
+	if len(menus) == 0 {
+
 	} else {
-		for _, foodMenu := range restaurant.Menus {
+		for _, foodMenu := range menus {
 			buf.WriteString(foodMenu.Type)
 			buf.WriteByte(':')
-			for i := 0; i < foodMenu.ChoseNum; i++ {
-				index := vrand.Intn(len(foodMenu.List))
+			menuItems := getRestaurantMenuItemList(foodMenu.ID)
+			randomChoseMenuItems := randomChoseMenuItems(menuItems, foodMenu.ChoseNum)
+			for i, item := range randomChoseMenuItems {
 				if i > 0 {
 					buf.WriteByte(',')
 				}
-				buf.WriteString(foodMenu.List[index])
-
-				foodOrder.Chose[foodMenu.Type] = append(foodOrder.Chose[foodMenu.Type], foodMenu.List[index])
-				foodMenu.List = append(foodMenu.List[:index], foodMenu.List[index+1:]...)
+				orderItems = append(orderItems, &OrderItem{
+					MenuItemId: item.ID,
+					OrderId:    foodOrder.ID,
+				})
+				buf.WriteString(item.Name)
 			}
 			buf.WriteByte('\n')
 		}
@@ -145,10 +270,28 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 		}
 	}
 
-	previousFoodOrders = append(previousFoodOrders, foodOrder)
-	if b, err := json.Marshal(previousFoodOrders); err == nil {
-		_ = os.WriteFile(filepath.Join(exeDir, previousChosenFileName), b, internal.DefaultDataFilePermission)
+	// 订单入库
+	saveOrder(foodOrder)
+
+	// 订单项入库
+	saveOrderItemList(orderItems)
+
+}
+
+// 随机从N个菜单项中选取M个菜单项
+func randomChoseMenuItems(menuItems []*MenuItem, choseNum int) []*MenuItem {
+	if len(menuItems) <= choseNum {
+		return menuItems
 	}
+
+	var results []*MenuItem
+	for i := 0; i < choseNum; i++ {
+		index := vrand.Intn(len(menuItems))
+		results = append(results, menuItems[index])
+		menuItems = append(menuItems[:index], menuItems[index+1:]...)
+	}
+
+	return results
 }
 
 func filterPreviousChosenRestaurants(previousFoodOrders []*Order, restaurants []*Restaurant) []*Restaurant {
@@ -160,7 +303,7 @@ func filterPreviousChosenRestaurants(previousFoodOrders []*Order, restaurants []
 LOOP1:
 	for _, r := range restaurants {
 		for _, t := range previousFoodOrders {
-			if t.RestaurantName == r.Name {
+			if t.RestaurantId == r.ID {
 				continue LOOP1
 			}
 		}
@@ -174,46 +317,11 @@ LOOP1:
 	return results
 }
 
-//nolint:deadcode,unused // ignore this
-func filterPreviousChosenMenus(previousFoodOrders []*Order, restaurant *Restaurant) {
-	var previousFoodOrder *Order
-
-	for _, o := range previousFoodOrders {
-		if o.RestaurantName == restaurant.Name {
-			previousFoodOrder = o
-
-			break
-		}
-	}
-
-	if previousFoodOrder == nil || len(previousFoodOrder.Chose) == 0 {
-		return
-	}
-
-	logger.Infof("previous chosen: %v", previousFoodOrder.Chose)
-
-	for key := range previousFoodOrder.Chose {
-		for _, foodMenu := range restaurant.Menus {
-			if foodMenu.Type == key {
-				filterItems(foodMenu, previousFoodOrder.Chose[key])
-
-				break
-			}
-		}
-	}
+// 生成订单ID，规则是yyyyMMddHHmmss加上1000000以内的随机数
+func generateOrderId() string {
+	return time.Now().Format("20060102150405") + strconv.Itoa(vrand.Intn(1000000))
 }
 
-// nolint:unused // ignore this
-func filterItems(menu *Menu, filters []string) {
-	for _, filter := range filters {
-		for index, name := range menu.List {
-			if name == filter {
-				menu.List = append(menu.List[:index], menu.List[index+1:]...)
-
-				break
-			}
-		}
-	}
-
-	logger.Infof("after filter for %s: %s", menu.Type, menu.List)
+func generateMenuId() string {
+	return time.Now().Format("20060102150405") + strconv.Itoa(vrand.Intn(1000000))
 }
