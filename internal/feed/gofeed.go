@@ -35,16 +35,23 @@ func ParseFeed(urlAddr string) (*gofeed.Feed, error) {
 		return nil, err
 	}
 
+	now := time.Now()
+
 	// sort feed items.
 	sort.Slice(feed.Items, func(i, j int) bool {
-		if feed.Items[i].PublishedParsed != nil && feed.Items[j].PublishedParsed != nil {
+		// some published time is in the future, so we need to check it.
+		if feed.Items[i].PublishedParsed != nil && feed.Items[j].PublishedParsed != nil &&
+			feed.Items[i].PublishedParsed.Before(now) && feed.Items[j].PublishedParsed.Before(now) {
 			return feed.Items[i].PublishedParsed.After(*feed.Items[j].PublishedParsed)
 		}
 
-		if feed.Items[i].UpdatedParsed != nil && feed.Items[j].UpdatedParsed != nil {
+		// some updated time is in the future, so we need to check it.
+		if feed.Items[i].UpdatedParsed != nil && feed.Items[j].UpdatedParsed != nil &&
+			feed.Items[i].UpdatedParsed.Before(now) && feed.Items[j].UpdatedParsed.Before(now) {
 			return feed.Items[i].UpdatedParsed.After(*feed.Items[j].UpdatedParsed)
 		}
 
+		// some published time is wrong format, so we need to compare it as string.
 		if feed.Items[i].Published != "" {
 			return feed.Items[i].Published > feed.Items[j].Published
 		}
