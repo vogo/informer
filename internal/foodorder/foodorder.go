@@ -80,6 +80,7 @@ func InitFoodOrderData(data []byte) {
 				// 把name, foodName, price, choseNum, menuType, partners插入数据库
 				menuItems = append(menuItems, buildMenuItem(menu, foodName, price))
 			}
+
 			foodorderDB.Create(menuItems)
 		}
 	}
@@ -90,6 +91,7 @@ func getString(data map[string]interface{}, key string) string {
 	if _, ok := data[key]; ok {
 		return data[key].(string)
 	}
+
 	return ""
 }
 
@@ -97,12 +99,16 @@ func getStringArr(data map[string]interface{}, key string) []string {
 	// 判断data里有没有key
 	if _, ok := data[key]; ok {
 		arr := data[key].([]interface{})
+
 		var result []string
+
 		for _, v := range arr {
 			result = append(result, v.(string))
 		}
+
 		return result
 	}
+
 	return nil
 }
 
@@ -118,9 +124,11 @@ func getMap(data map[string]interface{}, key string) []map[string]interface{} {
 	if _, ok := data[key]; ok {
 		arr := data[key].([]interface{})
 		var result []map[string]interface{}
+
 		for _, v := range arr {
 			result = append(result, v.(map[string]interface{}))
 		}
+
 		return result
 	}
 	return nil
@@ -148,6 +156,7 @@ func addRestaurant(name, tel string) *Restaurant {
 // 增加用户
 func addUser(partners []string) {
 	users := []*User{}
+
 	for _, partner := range partners {
 		user := &User{
 			MobileNo: partner,
@@ -155,6 +164,7 @@ func addUser(partners []string) {
 		}
 		users = append(users, user)
 	}
+
 	foodorderDB.Create(users)
 }
 
@@ -188,6 +198,7 @@ func AddFoodAutoChose(buf *bytes.Buffer, foodConfig *FoodConfig, exeDir string) 
 		return
 	}
 	var partners []string
+
 	json.Unmarshal([]byte(foodConfig.Partners), &partners)
 	orderUserMobileNo = partners[0]
 	var orderUser *User = getUser(orderUserMobileNo)
@@ -211,7 +222,7 @@ func AddFoodAutoChose(buf *bytes.Buffer, foodConfig *FoodConfig, exeDir string) 
 }
 
 func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, previousFoodOrders []*Order, orderUser *User) {
-	rand.Seed(time.Now().Unix())
+	r := rand.New(rand.NewSource(time.Now().Unix()))
 
 	restaurants := getAllRestaurants()
 	if len(previousFoodOrders) == len(restaurants) {
@@ -220,8 +231,7 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 
 	restaurants = filterPreviousChosenRestaurants(previousFoodOrders, restaurants)
 
-	//nolint:gosec // ignore this
-	restaurantIndex := rand.Intn(len(restaurants))
+	restaurantIndex := r.Intn(len(restaurants))
 	restaurant := restaurants[restaurantIndex]
 
 	buf.WriteString("中午为你推荐餐厅《" + restaurant.Name + "》")
@@ -230,12 +240,10 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 		buf.WriteString("(点餐电话" + restaurant.Tel + ")")
 	}
 
-	rand.Seed(time.Now().Unix())
-
 	foodOrder := &Order{
 		ID:           generateOrderId(),
 		RestaurantId: restaurant.ID,
-		UserId:       *&orderUser.ID,
+		UserId:       orderUser.ID,
 		Partners:     orderUser.MobileNo,
 	}
 
@@ -245,7 +253,6 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 
 	menus := getRestaurantMenu(restaurant.ID)
 	if len(menus) == 0 {
-
 	} else {
 		for _, foodMenu := range menus {
 			buf.WriteString(foodMenu.Type)
@@ -275,7 +282,6 @@ func autoChoseFood(buf *bytes.Buffer, exeDir string, foodConfig *FoodConfig, pre
 
 	// 订单项入库
 	saveOrderItemList(orderItems)
-
 }
 
 // 随机从N个菜单项中选取M个菜单项
@@ -285,6 +291,7 @@ func randomChoseMenuItems(menuItems []*MenuItem, choseNum int) []*MenuItem {
 	}
 
 	var results []*MenuItem
+
 	for i := 0; i < choseNum; i++ {
 		index := vrand.Intn(len(menuItems))
 		results = append(results, menuItems[index])
@@ -301,13 +308,13 @@ func filterPreviousChosenRestaurants(previousFoodOrders []*Order, restaurants []
 
 	var results []*Restaurant
 LOOP1:
-	for _, r := range restaurants {
+	for _, rest := range restaurants {
 		for _, t := range previousFoodOrders {
-			if t.RestaurantId == r.ID {
+			if t.RestaurantId == rest.ID {
 				continue LOOP1
 			}
 		}
-		results = append(results, r)
+		results = append(results, rest)
 	}
 
 	if len(results) == 0 {

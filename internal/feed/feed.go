@@ -114,7 +114,7 @@ func sortAndChoseArticles(config *Config) []*Article {
 }
 
 func choseArticle(list []*Article, config *Config) []*Article {
-	// nolint:prealloc //ignore this
+	//nolint:prealloc //ignore this
 	var articles []*Article
 
 	previousArticleHost := ""

@@ -20,8 +20,6 @@ package feed
 import (
 	"fmt"
 	"strconv"
-
-	"github.com/mmcdole/gofeed"
 )
 
 func Operate(ops []string) {
@@ -69,9 +67,7 @@ func parseSource(idStr string) {
 		return
 	}
 
-	fp := gofeed.NewParser()
-
-	feedData, err := fp.ParseURL(source.URL)
+	feedData, err := ParseGoFeed(source)
 	if err != nil {
 		fmt.Println(err)
 
@@ -84,10 +80,14 @@ func parseSource(idStr string) {
 }
 
 func AddSource(title, link string) {
-	feedDataDB.Create(&Source{
+	source := &Source{
 		Title: title,
 		URL:   link,
-	})
+	}
+
+	feedDataDB.Create(source)
+
+	fmt.Printf("%d,\t%s,\t%s\n", source.ID, source.Title, source.URL)
 }
 
 func removeSource(id string) {
@@ -114,6 +114,7 @@ func viewSource(idStr string) {
 	fmt.Printf("title_exp:\t%s\n", source.TitleExp)
 	fmt.Printf("url_exp:\t%s\n", source.URLExp)
 	fmt.Printf("redirect:\t%t\n", source.Redirect)
+	fmt.Printf("sort:\t%t\n", source.Sort)
 }
 
 func listSource() {

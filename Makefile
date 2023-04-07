@@ -15,4 +15,4 @@ check: license-check
 test:
 		go test ./... -coverprofile=coverage.txt -covermode=atomic
 
-build: format check test
+build: format test

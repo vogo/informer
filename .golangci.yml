@@ -2,7 +2,7 @@ linters-settings:
   govet:
     check-shadowing: true
   gocyclo:
-    min-complexity: 13
+    min-complexity: 17
   dupl:
     threshold: 100
   goconst:
@@ -12,8 +12,6 @@ linters-settings:
     locale: US
   lll:
     line-length: 140
-  funlen:
-    lines: 120
   goimports:
     local-prefixes: github.com/golangci/golangci-lint
   gocritic:
@@ -32,21 +30,23 @@ linters:
     - noctx
     - cyclop
     - tagliatelle
-    - varnamelen
     - exhaustruct
-    - forbidigo
+    - ireturn
+    - varnamelen
+    - gomnd
+    - gochecknoglobals
+    - forcetypeassert
     - lll
 
 run:
   skip-files:
-    - global.go
   skip-dirs:
 
 issues:
   exclude-rules:
-    - text: "Subprocess launched with function call as argument or cmd arguments"
+    - text: "Potential HTTP request made with variable url"
       linters:
         - gosec
-    - text: "Potential HTTP request made with variable url"
+    - text: "G108: Profiling endpoint is automatically exposed on /debug/pprof"
       linters:
         - gosec

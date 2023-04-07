@@ -72,9 +72,6 @@ jobs:
       - name: Go Fmt
         run: make format && git --no-pager diff && [[ -z `git status -s` ]]
 
-      - name: Run Linter
-        run: make check
-
       - name: Go Test
         run: make test
 

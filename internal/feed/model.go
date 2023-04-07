@@ -36,6 +36,7 @@ type Source struct {
 	TitleExp    string `json:"title_exp"`
 	URLExp      string `json:"url_exp"`
 	Redirect    bool   `json:"redirect"` // if redirect the parsed url
+	Sort        bool   `json:"sort"`     // whether sort the result
 }
 
 type Detail struct{}

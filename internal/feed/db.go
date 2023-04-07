@@ -22,7 +22,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// nolint:gochecknoglobals //ignore this.
+//nolint:gochecknoglobals //ignore this.
 var feedDataDB *gorm.DB
 
 func InitFeedDB(dataDir string) {
