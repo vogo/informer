@@ -49,7 +49,8 @@ func ParseFeed(urlAddr string) (*gofeed.Feed, error) {
 			return feed.Items[i].Published > feed.Items[j].Published
 		}
 
-		return feed.Items[i].Title > feed.Items[j].Title
+		// the link most likely contains id which can used to sort.
+		return feed.Items[i].Link > feed.Items[j].Link
 	})
 
 	return feed, nil
