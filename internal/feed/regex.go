@@ -80,7 +80,7 @@ func RegexParse(source *Source) ([]*Article, error) {
 		return nil, nil
 	}
 
-	// nolint:prealloc //ignore this.
+	//nolint:prealloc //ignore this.
 	var articles []*Article
 
 	for i, groups := range match {

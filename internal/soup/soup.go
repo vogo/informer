@@ -34,7 +34,7 @@ func GetDailySoup() string {
 	}
 	defer resp.Body.Close()
 
-	b, err := io.ReadAll(resp.Body)
+	buf, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Infof("err: %v", err)
 
@@ -42,16 +42,16 @@ func GetDailySoup() string {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Infof("err: %d, %s", resp.StatusCode, b)
+		logger.Infof("err: %d, %s", resp.StatusCode, buf)
 
 		return ""
 	}
 
 	data := struct {
-		Content string
+		Content string `json:"content"`
 	}{}
 
-	if err = json.Unmarshal(b, &data); err != nil {
+	if err = json.Unmarshal(buf, &data); err != nil {
 		logger.Infof("err: %v", err)
 
 		return ""

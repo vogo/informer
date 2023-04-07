@@ -30,13 +30,13 @@ func main() {
 	exePath, _ := os.Executable()
 	exeDir := filepath.Dir(exePath)
 
-	var op string
+	var action string
 
 	if len(os.Args) > 1 {
 		logger.SetLevel(logger.LevelDebug)
 
-		op = os.Args[1]
-		if op == "feed" {
+		action = os.Args[1]
+		if action == "feed" {
 			feed.InitFeedDB(exeDir)
 			feed.Operate(os.Args[2:])
 
@@ -44,5 +44,5 @@ func main() {
 		}
 	}
 
-	inform.Inform(exeDir, op)
+	inform.Inform(exeDir, action)
 }

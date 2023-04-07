@@ -20,8 +20,6 @@ package feed
 import (
 	"fmt"
 	"strconv"
-
-	"github.com/mmcdole/gofeed"
 )
 
 func Operate(ops []string) {
@@ -69,9 +67,7 @@ func parseSource(idStr string) {
 		return
 	}
 
-	fp := gofeed.NewParser()
-
-	feedData, err := fp.ParseURL(source.URL)
+	feedData, err := ParseFeed(source.URL)
 	if err != nil {
 		fmt.Println(err)
 

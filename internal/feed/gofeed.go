@@ -26,19 +26,14 @@ import (
 	"github.com/vogo/vogo/vnet/vurl"
 )
 
-func addGoFeed(config *Config, source *Source, expireTime int64) {
-	logger.Info("parse feed: ", source.URL)
-
+// ParseFeed parse feed.
+func ParseFeed(urlAddr string) (*gofeed.Feed, error) {
 	fp := gofeed.NewParser()
 
-	feed, err := fp.ParseURL(source.URL)
+	feed, err := fp.ParseURL(urlAddr)
 	if err != nil {
-		logger.Infof("parse feed url error! url: %s, error: %v", source.URL, err)
-
-		return
+		return nil, err
 	}
-
-	count := 0
 
 	// sort feed items.
 	sort.Slice(feed.Items, func(i, j int) bool {
@@ -56,6 +51,21 @@ func addGoFeed(config *Config, source *Source, expireTime int64) {
 
 		return feed.Items[i].Title > feed.Items[j].Title
 	})
+
+	return feed, nil
+}
+
+func addGoFeed(config *Config, source *Source, expireTime int64) {
+	logger.Info("parse feed: ", source.URL)
+
+	feed, err := ParseFeed(source.URL)
+	if err != nil {
+		logger.Warnf("parse feed url error! url: %s, error: %v", source.URL, err)
+
+		return
+	}
+
+	count := 0
 
 	for _, item := range feed.Items {
 		addGoFeedItem(source, expireTime, item)

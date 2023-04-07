@@ -37,11 +37,12 @@ const (
 	DefaultRequestTimeout = time.Second * 60
 )
 
-// nolint:gochecknoglobals //ignore this.
+//nolint:gochecknoglobals //ignore this.
 var jar, _ = cookiejar.New(nil)
 
 // HTTPClient the default http client.
-// nolint:exhaustivestruct,gochecknoglobals // ignore this
+//
+//nolint:exhaustivestruct,gochecknoglobals // ignore this
 var HTTPClient = &http.Client{
 	Transport: &http.Transport{
 		MaxIdleConns:        DefaultMaxIdleConns,
@@ -53,7 +54,7 @@ var HTTPClient = &http.Client{
 	Jar:     jar,
 }
 
-// nolint:gochecknoglobals //ignore this.
+//nolint:gochecknoglobals //ignore this.
 var defaultHTTPHeaders = map[string]string{
 	"accept":          "*/*",
 	"accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
@@ -62,7 +63,7 @@ var defaultHTTPHeaders = map[string]string{
 	"mode": "cors",
 }
 
-// nolint:gochecknoglobals //ignore this.
+//nolint:gochecknoglobals //ignore this.
 var wechatHTTPHeaders = map[string]string{
 	"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) MicroMessenger/6.8.0(0x16080000) MacWechat/3.4.1(0x13040110) Safari/605.1.15 NetType/WIFI",
 }
