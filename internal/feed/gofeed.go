@@ -45,7 +45,7 @@ func ParseFeed(urlAddr string) (*gofeed.Feed, error) {
 			return feed.Items[i].UpdatedParsed.After(*feed.Items[j].UpdatedParsed)
 		}
 
-		if feed.Items[i].Published == "" {
+		if feed.Items[i].Published != "" {
 			return feed.Items[i].Published > feed.Items[j].Published
 		}
 
