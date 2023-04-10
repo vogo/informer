@@ -192,16 +192,21 @@ func buildMenuItem(menu *Menu, foodName string, price float64) *MenuItem {
 
 func AddFoodAutoChose(buf *bytes.Buffer, foodConfig *FoodConfig, exeDir string) {
 	var orderUserMobileNo string
-	if len(foodConfig.Partners) <= 0 {
+	if foodConfig.Partners == "" {
 		logger.Error("partners can not be empty")
 		buf.WriteString("不能没有点餐人")
 		return
 	}
+
 	var partners []string
 
 	json.Unmarshal([]byte(foodConfig.Partners), &partners)
+	if len(partners) <= 0 {
+		return
+	}
+
 	orderUserMobileNo = partners[0]
-	var orderUser *User = getUser(orderUserMobileNo)
+	orderUser := getUser(orderUserMobileNo)
 
 	previousOrders := getPreviousOrder(orderUser)
 	if len(previousOrders) > 0 {
