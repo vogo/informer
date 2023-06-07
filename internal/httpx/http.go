@@ -58,9 +58,8 @@ var HTTPClient = &http.Client{
 var defaultHTTPHeaders = map[string]string{
 	"accept":          "*/*",
 	"accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
-	"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
-		"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36",
-	"mode": "cors",
+	"user-agent":      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.3",
+	"mode":            "cors",
 }
 
 //nolint:gochecknoglobals //ignore this.
