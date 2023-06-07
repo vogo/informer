@@ -72,23 +72,6 @@ func addGoFeed(config *Config, source *Source, expireTime int64) {
 
 	count := 0
 
-	// sort feed items.
-	sort.Slice(feed.Items, func(i, j int) bool {
-		if feed.Items[i].PublishedParsed != nil && feed.Items[j].PublishedParsed != nil {
-			return feed.Items[i].PublishedParsed.After(*feed.Items[j].PublishedParsed)
-		}
-
-		if feed.Items[i].UpdatedParsed != nil && feed.Items[j].UpdatedParsed != nil {
-			return feed.Items[i].UpdatedParsed.After(*feed.Items[j].UpdatedParsed)
-		}
-
-		if feed.Items[i].Published == "" {
-			return feed.Items[i].Published > feed.Items[j].Published
-		}
-
-		return feed.Items[i].Title > feed.Items[j].Title
-	})
-
 	for _, item := range feed.Items {
 		addGoFeedItem(source, expireTime, item)
 
