@@ -1,6 +1,6 @@
 module github.com/vogo/informer
 
-go 1.20
+go 1.22.0
 
 require (
 	github.com/mmcdole/gofeed v1.3.0
