@@ -28,7 +28,6 @@ var feedDataDB *gorm.DB
 func InitFeedDB(dataDir string) {
 	var err error
 	feedDataDB, err = gorm.Open(sqlite.Open(dataDir+"/feed.db"), &gorm.Config{})
-
 	if err != nil {
 		panic(err)
 	}

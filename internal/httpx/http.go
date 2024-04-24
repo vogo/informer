@@ -97,7 +97,6 @@ func getWithHeaders(link string, headers map[string]string) ([]byte, error) {
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(contentType, "charset") {
 		contentReader, err = charset.NewReader(contentReader, contentType)
-
 		if err != nil {
 			return nil, err
 		}

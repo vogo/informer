@@ -27,7 +27,6 @@ var foodorderDB *gorm.DB
 func InitFoodorderDB(dataDir string) {
 	var err error
 	foodorderDB, err = gorm.Open(sqlite.Open(dataDir+"/foodorder.db"), &gorm.Config{})
-
 	if err != nil {
 		panic(err)
 	}
