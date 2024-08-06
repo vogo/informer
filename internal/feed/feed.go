@@ -53,7 +53,9 @@ func UpdateAndFilterFeeds(config *Config) []*Article {
 	feedDataDB.Model(&Source{}).Order("id").Find(&sources)
 
 	for _, source := range sources {
-		if source.Regex != "" {
+		if source.IsJSON {
+			JsonParseFeed(config, source, expireTime)
+		} else if source.Regex != "" {
 			regexParseFeed(config, source, expireTime)
 		} else {
 			addGoFeed(config, source, expireTime)

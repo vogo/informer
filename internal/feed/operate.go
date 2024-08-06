@@ -115,6 +115,9 @@ func viewSource(idStr string) {
 	fmt.Printf("url_exp:\t%s\n", source.URLExp)
 	fmt.Printf("redirect:\t%t\n", source.Redirect)
 	fmt.Printf("sort:\t%t\n", source.Sort)
+	fmt.Printf("is_json:\t%t\n", source.IsJSON)
+	fmt.Printf("json_title_path:\t%s\n", source.JsonTitlePath)
+	fmt.Printf("json_url_path:\t%s\n", source.JsonURLPath)
 }
 
 func listSource() {
@@ -139,14 +142,18 @@ func copySource(srcID string) {
 	}
 
 	feedDataDB.Create(&Source{
-		Title:       source.Title,
-		URL:         source.URL,
-		CURL:        source.CURL,
-		Weight:      source.Weight,
-		MaxFetchNum: source.MaxFetchNum,
-		Regex:       source.Regex,
-		TitleExp:    source.TitleExp,
-		URLExp:      source.URLExp,
-		Redirect:    source.Redirect,
+		Title:         source.Title,
+		URL:           source.URL,
+		CURL:          source.CURL,
+		Weight:        source.Weight,
+		MaxFetchNum:   source.MaxFetchNum,
+		Regex:         source.Regex,
+		TitleExp:      source.TitleExp,
+		URLExp:        source.URLExp,
+		Redirect:      source.Redirect,
+		Sort:          source.Sort,
+		IsJSON:        source.IsJSON,
+		JsonTitlePath: source.JsonTitlePath,
+		JsonURLPath:   source.JsonURLPath,
 	})
 }

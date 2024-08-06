@@ -21,6 +21,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/vogo/informer/internal/httpx"
+	"github.com/vogo/vogo/vos"
+
 	"github.com/vogo/logger"
 )
 
@@ -81,6 +84,29 @@ func GetHostPrefix(link string) string {
 	hostIndex := strings.Index(link[protocolIndex+2:], "/")
 	if hostIndex > 0 {
 		return link[:protocolIndex+2+hostIndex]
+	}
+
+	return link
+}
+
+func readURLData(source *Source) ([]byte, error) {
+	var data []byte
+	var err error
+	if source.CURL != "" {
+		data, err = vos.ExecShell(source.CURL)
+	} else {
+		data, err = httpx.GetLinkData(source.URL)
+	}
+	return data, err
+}
+
+func adjustLink(hostPrefix, link string) string {
+	if !strings.HasPrefix(link, "http://") && !strings.HasPrefix(link, "https://") {
+		if link[0] != '/' {
+			link = hostPrefix + "/" + link
+		} else {
+			link = hostPrefix + link
+		}
 	}
 
 	return link

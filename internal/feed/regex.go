@@ -23,10 +23,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vogo/informer/internal/httpx"
 	"github.com/vogo/logger"
 	"github.com/vogo/vogo/vnet/vurl"
-	"github.com/vogo/vogo/vos"
 	"github.com/vogo/vogo/vregexp"
 )
 
@@ -60,13 +58,7 @@ func RegexParse(source *Source) ([]*Article, error) {
 		return strings.Join(strings.Fields(s), " ")
 	}
 
-	var data []byte
-	if source.CURL != "" {
-		data, err = vos.ExecShell(source.CURL)
-	} else {
-		data, err = httpx.GetLinkData(source.URL)
-	}
-
+	data, err := readURLData(source)
 	if err != nil {
 		return nil, err
 	}
@@ -108,16 +100,4 @@ func RegexParse(source *Source) ([]*Article, error) {
 	}
 
 	return articles, nil
-}
-
-func adjustLink(hostPrefix, link string) string {
-	if !strings.HasPrefix(link, "http://") && !strings.HasPrefix(link, "https://") {
-		if link[0] != '/' {
-			link = hostPrefix + "/" + link
-		} else {
-			link = hostPrefix + link
-		}
-	}
-
-	return link
 }
