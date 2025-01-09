@@ -1,6 +1,4 @@
 linters-settings:
-  govet:
-    check-shadowing: true
   gocyclo:
     min-complexity: 17
   dupl:
@@ -25,7 +23,6 @@ linters-settings:
 linters:
   enable-all: true
   disable:
-    - exhaustivestruct
     - wrapcheck
     - noctx
     - cyclop
@@ -37,6 +34,7 @@ linters:
     - gochecknoglobals
     - forcetypeassert
     - lll
+    - execinquery
 
 run:
   skip-files:

@@ -44,19 +44,15 @@ type Config struct {
 }
 
 func Inform(exeDir, urlAddr string) {
-	buf := bytes.NewBuffer(nil)
-
-	buf.WriteString(date.GetDateInfo())
-
-	if dailySoup := soup.GetDailySoup(); dailySoup != "" {
-		buf.WriteString(dailySoup)
-		buf.WriteByte('\n')
-		buf.WriteByte('\n')
+	configPath := filepath.Join(exeDir, configFileName)
+	dataPath := filepath.Join(exeDir, "data")
+	err := os.Mkdir(dataPath, os.ModePerm)
+	if err != nil {
+		logger.Fatal(err)
 	}
+	todayContentFilePath := filepath.Join(dataPath, time.Now().Format("2006-01-02")+".md")
 
-	dataPath := filepath.Join(exeDir, configFileName)
-
-	data, err := os.ReadFile(dataPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -66,6 +62,14 @@ func Inform(exeDir, urlAddr string) {
 		log.Fatal(err)
 	}
 
+	buf := bytes.NewBuffer(nil)
+	buf.WriteString(date.GetDateInfo())
+
+	if dailySoup := soup.GetDailySoup(); dailySoup != "" {
+		buf.WriteString(dailySoup)
+		buf.WriteByte('\n')
+		buf.WriteByte('\n')
+	}
 	weekday := time.Now().Weekday()
 
 	foodorder.InitFoodorderDB(exeDir)
@@ -96,5 +100,10 @@ func Inform(exeDir, urlAddr string) {
 		} else if strings.Contains(urlAddr, ding.Host) {
 			ding.Ding(urlAddr, content, "", weekday)
 		}
+	}
+
+	err = os.WriteFile(todayContentFilePath, []byte(content), os.ModePerm)
+	if err != nil {
+		logger.Warnf("write today content to file failed: %v", err)
 	}
 }
