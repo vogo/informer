@@ -31,23 +31,5 @@ func regexParseFeed(config *Config, source *Source, _ int64) {
 		return
 	}
 
-	count := 0
-
-	for _, a := range articles {
-		if source.MaxFetchNum > 0 {
-			if count >= source.MaxFetchNum {
-				break
-			}
-		} else if config.MaxFetchNum > 0 && count >= config.MaxFetchNum {
-			break
-		}
-
-		count++
-
-		if isFeedURLExists(a.URL) {
-			continue
-		}
-
-		feedDataDB.Save(a)
-	}
+	saveParsedArticles(config, source, articles)
 }

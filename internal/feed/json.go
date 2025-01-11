@@ -26,7 +26,18 @@ import (
 	"github.com/vogo/vogo/vnet/vurl"
 )
 
-func JsonParseFeed(config *Config, source *Source, expireTime int64) ([]*Article, error) {
+func jsonParseFeed(config *Config, source *Source, _ int64) {
+	articles, err := JsonParse(source)
+	if err != nil {
+		logger.Infof("regex parse feed url error! url: %s, error: %v", source.URL, err)
+
+		return
+	}
+
+	saveParsedArticles(config, source, articles)
+}
+
+func JsonParse(source *Source) ([]*Article, error) {
 	data, err := readURLData(source)
 	if err != nil {
 		return nil, err
@@ -52,7 +63,7 @@ func JsonParseFeed(config *Config, source *Source, expireTime int64) ([]*Article
 	}
 	//nolint:prealloc //ignore this.
 	var articles []*Article
-
+	logger.Infof("json parse, titles: %v, urls: %v", titles, urls)
 	for i, titleValue := range titles {
 		if source.MaxFetchNum > 0 && i >= source.MaxFetchNum {
 			break

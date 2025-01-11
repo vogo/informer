@@ -54,7 +54,7 @@ func UpdateAndFilterFeeds(config *Config) []*Article {
 
 	for _, source := range sources {
 		if source.IsJSON {
-			JsonParseFeed(config, source, expireTime)
+			jsonParseFeed(config, source, expireTime)
 		} else if source.Regex != "" {
 			regexParseFeed(config, source, expireTime)
 		} else {
@@ -157,4 +157,26 @@ func isFeedURLExists(url string) bool {
 	}
 
 	return false
+}
+
+func saveParsedArticles(config *Config, source *Source, articles []*Article) {
+	count := 0
+
+	for _, a := range articles {
+		if source.MaxFetchNum > 0 {
+			if count >= source.MaxFetchNum {
+				break
+			}
+		} else if config.MaxFetchNum > 0 && count >= config.MaxFetchNum {
+			break
+		}
+
+		count++
+
+		if isFeedURLExists(a.URL) {
+			continue
+		}
+
+		feedDataDB.Save(a)
+	}
 }

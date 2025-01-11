@@ -67,6 +67,30 @@ func parseSource(idStr string) {
 		return
 	}
 
+	if source.IsJSON || source.Regex != "" {
+		var articles []*Article
+		var err error
+		if source.IsJSON {
+			articles, err = JsonParse(source)
+		} else if source.Regex != "" {
+			articles, err = RegexParse(source)
+		}
+
+		if err != nil {
+			fmt.Println(err)
+
+			return
+		}
+
+		if len(articles) > 0 {
+			for _, item := range articles {
+				fmt.Println(item.Title, ":", item.URL)
+			}
+		}
+
+		return
+	}
+
 	feedData, err := ParseGoFeed(source)
 	if err != nil {
 		fmt.Println(err)
