@@ -46,10 +46,12 @@ type Config struct {
 func Inform(exeDir, urlAddr string) {
 	configPath := filepath.Join(exeDir, configFileName)
 	dataPath := filepath.Join(exeDir, "data")
-	err := os.Mkdir(dataPath, os.ModePerm)
+	dataPath = filepath.Join(dataPath, time.Now().Format("2006"))
+	err := os.MkdirAll(dataPath, os.ModePerm)
 	if err != nil && !os.IsExist(err) {
 		logger.Fatal(err)
 	}
+
 	todayContentFilePath := filepath.Join(dataPath, time.Now().Format("2006-01-02")+".md")
 
 	data, err := os.ReadFile(configPath)
