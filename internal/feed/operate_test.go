@@ -1,8 +1,9 @@
 package feed
 
 import (
-	"github.com/vogo/vogo/vos"
 	"testing"
+
+	"github.com/vogo/vogo/vos"
 )
 
 func TestOperate(t *testing.T) {
