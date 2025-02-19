@@ -19,6 +19,7 @@ package feed
 
 import (
 	"bytes"
+	"errors"
 	"regexp"
 	"strings"
 	"time"
@@ -69,8 +70,12 @@ func RegexParse(source *Source) ([]*Article, error) {
 	if len(match) == 0 {
 		logger.Warnf("no match, url: %s, data: %s", source.URL, data)
 
+		updateSourceError(source, errors.New("no match"))
+
 		return nil, nil
 	}
+
+	updateSourceNormal(source)
 
 	//nolint:prealloc //ignore this.
 	var articles []*Article
@@ -94,6 +99,7 @@ func RegexParse(source *Source) ([]*Article, error) {
 			Title:     title,
 			Timestamp: time.Now().Unix(),
 			Weight:    source.Weight,
+			SourceID:  source.ID,
 		}
 
 		articles = append(articles, article)

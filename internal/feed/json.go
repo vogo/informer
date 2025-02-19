@@ -31,8 +31,12 @@ func jsonParseFeed(config *Config, source *Source, _ int64) {
 	if err != nil {
 		logger.Infof("regex parse feed url error! url: %s, error: %v", source.URL, err)
 
+		updateSourceError(source, err)
+
 		return
 	}
+
+	updateSourceNormal(source)
 
 	saveParsedArticles(config, source, articles)
 }
@@ -83,6 +87,7 @@ func JsonParse(source *Source) ([]*Article, error) {
 			Title:     title,
 			Timestamp: time.Now().Unix(),
 			Weight:    source.Weight,
+			SourceID:  source.ID,
 		}
 
 		articles = append(articles, article)

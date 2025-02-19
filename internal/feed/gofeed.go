@@ -67,8 +67,12 @@ func addGoFeed(config *Config, source *Source, expireTime int64) {
 	if err != nil {
 		logger.Warnf("parse feed url error! url: %s, error: %v", source.URL, err)
 
+		updateSourceError(source, err)
+
 		return
 	}
+
+	updateSourceNormal(source)
 
 	count := 0
 
@@ -127,6 +131,7 @@ func addGoFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
 		Weight:    source.Weight,
 		Informed:  false,
 		URL:       urlAddr,
+		SourceID:  source.ID,
 	}
 
 	feedDataDB.Save(article)

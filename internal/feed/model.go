@@ -25,6 +25,11 @@ type Config struct {
 	MaxFetchNum       int   `json:"max_fetch_num"`
 }
 
+const (
+	StatusNormal = 1
+	StatusError  = 2
+)
+
 type Source struct {
 	ID            int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
 	Title         string `json:"title"`
@@ -40,6 +45,8 @@ type Source struct {
 	IsJSON        bool   `json:"is_json"`
 	JsonTitlePath string `json:"json_title_path"`
 	JsonURLPath   string `json:"json_url_path"`
+	Status        int    `json:"status"`
+	ErrorInfo     string `json:"error_info"`
 }
 
 type Detail struct{}
@@ -52,4 +59,5 @@ type Article struct {
 	Weight    int64  `json:"weight"`
 	Informed  bool   `json:"informed" gorm:"index"`
 	Score     int64  `json:"score" gorm:"index"`
+	SourceID  int64  `json:"source_id" gorm:"index"`
 }

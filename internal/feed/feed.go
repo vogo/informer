@@ -180,3 +180,15 @@ func saveParsedArticles(config *Config, source *Source, articles []*Article) {
 		feedDataDB.Save(a)
 	}
 }
+
+func updateSourceError(source *Source, err error) {
+	source.Status = StatusError
+	source.ErrorInfo = err.Error()
+	feedDataDB.Save(source)
+}
+
+func updateSourceNormal(source *Source) {
+	source.Status = StatusNormal
+	source.ErrorInfo = ""
+	feedDataDB.Save(source)
+}
