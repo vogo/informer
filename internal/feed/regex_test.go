@@ -27,6 +27,10 @@ import (
 func TestRegexParse(t *testing.T) {
 	t.Parallel()
 
+	if testing.Short() {
+		t.Skip("network test")
+	}
+
 	articles, err := feed.RegexParse(&feed.Source{
 		URL:         "https://kaifa.baidu.com/rest/v1/home/github?optionLanguage=go&optionSince=DAILY",
 		Weight:      50,
@@ -46,6 +50,10 @@ func TestRegexParse(t *testing.T) {
 func TestRegexParse2(t *testing.T) {
 	t.Parallel()
 
+	if testing.Short() {
+		t.Skip("network test")
+	}
+
 	articles, err := feed.RegexParse(&feed.Source{
 		URL:         "https://www.infoq.cn/profile/7A6A18227E53FA/publish/article",
 		Weight:      50,
@@ -64,6 +72,10 @@ func TestRegexParse2(t *testing.T) {
 
 func TestRegexParse3(t *testing.T) {
 	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("network test")
+	}
 
 	articles, err := feed.RegexParse(&feed.Source{
 		URL:         "https://www.infoq.cn/topic/architecture",

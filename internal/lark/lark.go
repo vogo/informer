@@ -20,13 +20,17 @@ package lark
 import (
 	"bytes"
 	"encoding/json"
-	"log"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/vogo/logger"
 )
 
 const Host = "feishu.cn"
+
+// ErrLarkResponse marks a lark bot answering with a non successful status.
+var ErrLarkResponse = errors.New("lark response error")
 
 type Content struct {
 	Text string `json:"text"`
@@ -37,7 +41,10 @@ type Message struct {
 	Content *Content `json:"content"`
 }
 
-func Lark(url, content string) {
+// Lark sends the content to a lark bot. It reports delivery failures to the caller
+// instead of killing the process, so the caller can tell a delivered notification
+// from a failed one.
+func Lark(url, content string) error {
 	msg := &Message{
 		Type: "text",
 		Content: &Content{
@@ -47,7 +54,7 @@ func Lark(url, content string) {
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		logger.Info(err)
+		return fmt.Errorf("marshal lark message: %w", err)
 	}
 
 	logger.Infof("lark url: %s", url)
@@ -55,9 +62,15 @@ func Lark(url, content string) {
 
 	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("post lark message: %w", err)
 	}
 	defer resp.Body.Close()
 
 	logger.Infof("lark response: %v", resp)
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("%w: %s", ErrLarkResponse, resp.Status)
+	}
+
+	return nil
 }

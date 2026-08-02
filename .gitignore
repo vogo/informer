@@ -1,8 +1,12 @@
 .idea
-previous_chosen.json
+.DS_Store
 feed_data.json
 /informer
 coverage.txt
 informer.json
+
+# 本地运行产生的数据目录（日报、sqlite 库）
+/data
+*.db
 
 dist

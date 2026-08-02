@@ -5,9 +5,57 @@
 GOBIN=$(pwd) go install github.com/vogo/informer@master
 ```
 
+## 数据目录
+
+informer 的所有数据（`informer.json`、`feed.db`、`data/<年份>/<日期>.md`）都存放在**同一个数据主目录**中：
+
+| `INFORMER_HOME` | 数据主目录 |
+| --- | --- |
+| 未设置或为空 | `~/.informer`（Windows 为 `%USERPROFILE%\.informer`） |
+| 已设置 | 该环境变量指向的目录（相对路径会转成绝对路径） |
+
+数据目录不再依赖可执行文件所在位置，因此从 Finder / 桌面快捷方式启动时（不继承 shell 环境变量）也能找到同一份数据。
+如果 `INFORMER_HOME` 指向的目录无法创建或不可写，informer 会直接报错退出，**不会**退回到另一份数据继续跑。
+
+### 从旧版本迁移
+
+旧版本把数据放在可执行文件所在目录。首次启动新版本时，informer 会自动把旧目录里的应用数据**复制**（不是移动）到数据主目录：
+
+- 复制的内容：`informer.json`、`feed.db`（含 `-wal` / `-shm`）、`feed_data.json`、以及整个 `data/` 目录，**目录层级保持不变**；可执行文件本身和目录下的其它无关文件不会被复制。
+- **冲突时保留目标并跳过**：数据主目录中已存在的同名文件一律保留，不会被旧文件覆盖。
+- 旧目录的文件**不会被删除或清理**，请自行确认无误后再处理。
+- 复制成功后会在数据主目录写入 `.migrated` 标记，后续启动不再重复迁移；若中途失败，informer 会报错退出，已复制的文件保留，修复后重跑会跳过已存在的文件继续完成。
+
+**建议先备份**再升级：
+
+```bash
+# 假设旧数据在 /root/informer
+cp -a /root/informer /root/informer.backup.$(date +%Y%m%d)
+```
+
+### crontab 中设置 / 切换 INFORMER_HOME
+
+crontab 不会加载 shell 的 profile，需要在命令里显式设置：
+
+```bash
+# 显式指定数据目录（推荐，路径确定，便于备份）
+00 10 * * * INFORMER_HOME=/root/.informer /root/informer/informer "https://oapi.dingtalk.com/robot/send?access_token=xxxxx" >> /root/informer/cron.log 2>&1
+```
+
+不设置时使用 `~/.informer`；注意 crontab 中 `~` 取决于运行该任务的用户，显式写绝对路径更稳妥。
+
+切换到另一个目录时，先把当前数据主目录整体复制过去，再修改 crontab 中的 `INFORMER_HOME`：
+
+```bash
+cp -a ~/.informer /data/informer-home
+# 然后把 crontab 里的 INFORMER_HOME 改成 /data/informer-home
+```
+
+informer 不会自动同步多个数据主目录，也不支持同时使用多个 `INFORMER_HOME`。
+
 ## 创建配置文件
 
-参考[配置范例](informer.json)
+参考[配置范例](informer.json)，把它放到数据主目录下并命名为 `informer.json`。
 
 ## 通过命令添加订阅
 
@@ -32,8 +80,11 @@ GOBIN=$(pwd) go install github.com/vogo/informer@master
 # title_exp:
 # url_exp:
 # redirect:	false
+# parse_type:	feed
+# category_id:	1
+# enabled:	true
 
-# 测试抓取
+# 测试抓取（只解析并打印，不写库、不改订阅状态）
 ./informer feed parse 1
 # 科技爱好者周刊（第 243 期）：与孔子 AI 聊天 : http://www.ruanyifeng.com/blog/2023/02/weekly-issue-243.html
 # 科技爱好者周刊（第 242 期）：一次尴尬的服务器被黑 : http://www.ruanyifeng.com/blog/2023/02/weekly-issue-242.html
@@ -67,6 +118,23 @@ GOBIN=$(pwd) go install github.com/vogo/informer@master
 # What to do with your life : https://www.julian.com/blog/life-planning
 ```
 
+订阅分类与启停:
+```bash
+# 列出所有分类，格式为 id,名称,排序值；id=1 的「未分类」是内置分类，不可删除
+./informer feed category
+# 1,	未分类,	0
+
+# 把订阅归到某个分类下
+./informer feed update 1 category_id 2
+
+# 显式指定解析方式，合法值为 feed / regex / json
+# 留空时仍按旧规则推导：is_json 为真用 json，否则 regex 非空用 regex，其余用 feed
+./informer feed update 1 parse_type regex
+
+# 停用订阅：停用后不再参与定时抓取，但 feed parse 仍可正常测试
+./informer feed update 1 enabled false
+```
+
 ## 配置机器人
 
 配置钉钉或飞书机器人, 关键字审核模式，得到机器人地址 https://oapi.dingtalk.com/robot/send?access_token=xxxxx。
@@ -75,10 +143,12 @@ GOBIN=$(pwd) go install github.com/vogo/informer@master
 
 每天早上10点发到钉钉：
 ```
-00 10 * * * /root/informer/informer "https://oapi.dingtalk.com/robot/send?access_token=xxxxx >> /root/informer/cron.log"
+00 10 * * * INFORMER_HOME=/root/.informer /root/informer/informer "https://oapi.dingtalk.com/robot/send?access_token=xxxxx" >> /root/informer/cron.log 2>&1
 ```
 
 或每天早上10点发到飞书：
 ```
-00 10 * * * /root/informer/informer "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxx >> /root/informer/cron.log"
+00 10 * * * INFORMER_HOME=/root/.informer /root/informer/informer "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxx" >> /root/informer/cron.log 2>&1
 ```
+
+不写 `INFORMER_HOME` 时使用 `~/.informer`；数据目录与迁移方式见上文[数据目录](#数据目录)。

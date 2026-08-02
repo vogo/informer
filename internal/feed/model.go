@@ -30,6 +30,29 @@ const (
 	StatusError  = 2
 )
 
+// Parse types of a Source. An explicit legal value decides the parser;
+// an empty or unknown value keeps falling back to the historical derivation.
+const (
+	ParseTypeFeed  = "feed"
+	ParseTypeRegex = "regex"
+	ParseTypeJSON  = "json"
+)
+
+const (
+	// DefaultCategoryID is the id of the seeded "未分类" category.
+	DefaultCategoryID = 1
+
+	// DefaultCategoryName is the name of the seeded default category.
+	DefaultCategoryName = "未分类"
+)
+
+// Category groups sources. Listing order is Sort ascending, then ID.
+type Category struct {
+	ID   int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
+	Name string `json:"name" gorm:"uniqueIndex"`
+	Sort int    `json:"sort" gorm:"index"`
+}
+
 type Source struct {
 	ID            int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
 	Title         string `json:"title"`
@@ -47,6 +70,42 @@ type Source struct {
 	JsonURLPath   string `json:"json_url_path"`
 	Status        int    `json:"status"`
 	ErrorInfo     string `json:"error_info"`
+	ParseType     string `json:"parse_type"`
+	CategoryID    int64  `json:"category_id" gorm:"index"`
+	Enabled       bool   `json:"enabled" gorm:"index"`
+}
+
+// IsLegalParseType reports whether the value is one of the supported parse types.
+func IsLegalParseType(parseType string) bool {
+	switch parseType {
+	case ParseTypeFeed, ParseTypeRegex, ParseTypeJSON:
+		return true
+	default:
+		return false
+	}
+}
+
+// ResolveParseType returns the parser to use for the source.
+// The explicit ParseType wins when it is legal; otherwise the historical
+// derivation from IsJSON/Regex is kept as a long lived fallback.
+func (s *Source) ResolveParseType() string {
+	if IsLegalParseType(s.ParseType) {
+		return s.ParseType
+	}
+
+	return DeriveParseType(s)
+}
+
+// DeriveParseType derives the parse type from the legacy fields only.
+func DeriveParseType(s *Source) string {
+	switch {
+	case s.IsJSON:
+		return ParseTypeJSON
+	case s.Regex != "":
+		return ParseTypeRegex
+	default:
+		return ParseTypeFeed
+	}
 }
 
 type Detail struct{}
@@ -60,4 +119,12 @@ type Article struct {
 	Informed  bool   `json:"informed" gorm:"index"`
 	Score     int64  `json:"score" gorm:"index"`
 	SourceID  int64  `json:"source_id" gorm:"index"`
+
+	// FetchedAt is the unix second the article was first persisted by a fetch.
+	// It stays NULL for articles stored before this field existed.
+	FetchedAt *int64 `json:"fetched_at" gorm:"index"`
+
+	// InformedAt is the unix second a notification actually delivered the article.
+	// It stays NULL for historical articles, even when Informed is already true.
+	InformedAt *int64 `json:"informed_at" gorm:"index"`
 }

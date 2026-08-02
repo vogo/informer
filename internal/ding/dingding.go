@@ -20,7 +20,8 @@ package ding
 import (
 	"bytes"
 	"encoding/json"
-	"log"
+	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -28,6 +29,9 @@ import (
 )
 
 const Host = "dingtalk.com"
+
+// ErrDingResponse marks a dingtalk bot answering with a non successful status.
+var ErrDingResponse = errors.New("ding response error")
 
 type MsgText struct {
 	Content string `json:"content"`
@@ -43,7 +47,10 @@ type MsgBody struct {
 	At      MsgAt   `json:"at"`
 }
 
-func Ding(url, content, user string, weekday time.Weekday) {
+// Ding sends the content to a dingtalk bot. It reports delivery failures to the caller
+// instead of killing the process, so the caller can tell a delivered notification
+// from a failed one.
+func Ding(url, content, user string, weekday time.Weekday) error {
 	msg := &MsgBody{
 		MsgType: "text",
 		Text: MsgText{
@@ -57,7 +64,7 @@ func Ding(url, content, user string, weekday time.Weekday) {
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		logger.Info(err)
+		return fmt.Errorf("marshal ding message: %w", err)
 	}
 
 	logger.Infof("ding url: %s", url)
@@ -65,10 +72,16 @@ func Ding(url, content, user string, weekday time.Weekday) {
 
 	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("post ding message: %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	logger.Infof("ding response: %v", resp)
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("%w: %s", ErrDingResponse, resp.Status)
+	}
+
+	return nil
 }

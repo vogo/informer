@@ -24,6 +24,10 @@ import (
 )
 
 func TestJsonParseFeed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("network test")
+	}
+
 	src := &Source{
 		ID:            0,
 		Title:         "test",
