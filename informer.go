@@ -21,8 +21,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/vogo/informer/internal/feed"
-	"github.com/vogo/informer/internal/inform"
+	"github.com/vogo/informer/internal/cli"
+	"github.com/vogo/informer/internal/home"
+	"github.com/vogo/informer/internal/service"
 	"github.com/vogo/logger"
 )
 
@@ -30,19 +31,35 @@ func main() {
 	exePath, _ := os.Executable()
 	exeDir := filepath.Dir(exePath)
 
+	// the active data directory is resolved once and migrated from the legacy
+	// executable directory, so a Finder launched app finds the same data as crontab.
+	homeDir, err := home.Init(exeDir)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
 	var action string
 
 	if len(os.Args) > 1 {
 		logger.SetLevel(logger.LevelDebug)
 
 		action = os.Args[1]
-		if action == "feed" {
-			feed.InitFeedDB(exeDir)
-			feed.Operate(os.Args[2:])
-
-			return
-		}
 	}
 
-	inform.Inform(exeDir, action)
+	svc, err := service.New(homeDir)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	if action == "feed" {
+		if err = cli.Feed(svc, os.Args[2:]); err != nil {
+			logger.Fatal(err)
+		}
+
+		return
+	}
+
+	if _, err = svc.TriggerInform(action); err != nil {
+		logger.Fatal(err)
+	}
 }

@@ -17,23 +17,19 @@
 
 package feed
 
-import (
-	"github.com/vogo/logger"
-)
-
-func regexParseFeed(config *Config, source *Source, _ int64) {
-	logger.Info("regex parse feed: ", source.URL)
-
-	articles, err := RegexParse(source)
-	if err != nil {
-		logger.Infof("regex parse feed url error! url: %s, error: %v", source.URL, err)
-
-		updateSourceError(source, err)
-
-		return
+// ParseArticles parses a source with the parser its ParseType selects, falling back
+// to the historical derivation when no legal parse type is set.
+//
+// It performs network reads only: no source, article, status, timestamp or config
+// record is created or modified, so it can be called repeatedly without changing
+// any persisted state.
+func ParseArticles(source *Source) ([]*Article, error) {
+	switch source.ResolveParseType() {
+	case ParseTypeJSON:
+		return JsonParse(source)
+	case ParseTypeRegex:
+		return RegexParse(source)
+	default:
+		return GoFeedArticles(source)
 	}
-
-	updateSourceNormal(source)
-
-	saveParsedArticles(config, source, articles)
 }

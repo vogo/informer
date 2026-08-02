@@ -19,8 +19,7 @@ package inform
 
 import (
 	"bytes"
-	"encoding/json"
-	"log"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,34 +34,56 @@ import (
 	"github.com/vogo/logger"
 )
 
-const (
-	configFileName = "informer.json"
-)
+// ConfigFileName is the informer configuration file inside the active data directory.
+const ConfigFileName = "informer.json"
 
+// Config is the layout of informer.json.
 type Config struct {
 	Feed *feed.Config `json:"feed"`
 }
 
-func Inform(exeDir, urlAddr string) {
-	configPath := filepath.Join(exeDir, configFileName)
-	dataPath := filepath.Join(exeDir, "data")
-	dataPath = filepath.Join(dataPath, time.Now().Format("2006"))
-	err := os.MkdirAll(dataPath, os.ModePerm)
-	if err != nil && !os.IsExist(err) {
-		logger.Fatal(err)
+// Options describes one inform run. The feed database is expected to be
+// initialised by the caller, so this package never opens it itself.
+type Options struct {
+	// HomeDir is the active data directory holding informer.json and data/<year>.
+	HomeDir string
+
+	// URLAddr is the bot webhook; an empty value skips the notification step.
+	URLAddr string
+
+	// FeedConfig is the effective feed configuration; a nil value skips feeds.
+	FeedConfig *feed.Config
+
+	// RawConfig is the raw informer.json content used to seed the food order data.
+	RawConfig []byte
+}
+
+// Result is the outcome of one inform run.
+type Result struct {
+	// Content is the generated message body.
+	Content string
+
+	// Articles are the feed articles selected for this run.
+	Articles []*feed.Article
+
+	// ContentFilePath is the daily markdown file the content was written to.
+	ContentFilePath string
+
+	// Notified reports whether a bot actually accepted the message.
+	// It is false when no webhook was configured.
+	Notified bool
+}
+
+// Run builds the daily content, stores it and delivers it to the configured bot.
+// A notification failure is returned as an error after the content has been written,
+// so the caller can decide not to record a delivery that never happened.
+func Run(opts *Options) (*Result, error) {
+	dataPath := filepath.Join(opts.HomeDir, "data", time.Now().Format("2006"))
+	if err := os.MkdirAll(dataPath, os.ModePerm); err != nil && !os.IsExist(err) {
+		return nil, fmt.Errorf("create data directory %q: %w", dataPath, err)
 	}
 
 	todayContentFilePath := filepath.Join(dataPath, time.Now().Format("2006-01-02")+".md")
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var informerConfig Config
-	if err := json.Unmarshal(data, &informerConfig); err != nil {
-		log.Fatal(err)
-	}
 
 	buf := bytes.NewBuffer(nil)
 	buf.WriteString(date.GetDateInfo())
@@ -72,40 +93,77 @@ func Inform(exeDir, urlAddr string) {
 		buf.WriteByte('\n')
 		buf.WriteByte('\n')
 	}
+
 	weekday := time.Now().Weekday()
 
-	foodorder.InitFoodorderDB(exeDir)
-	foodConfigs := foodorder.GetAllFoodConfig()
-	if len(foodConfigs) <= 0 {
-		logger.Info("No food config found, Init food config from informer.json")
-		// 初始化数据库
-		foodorder.InitFoodOrderData(data)
-		foodConfigs = foodorder.GetAllFoodConfig()
-	}
-	for _, foodConfig := range foodConfigs {
-		if foodConfig != nil && weekday != time.Sunday && weekday != time.Saturday {
-			foodorder.AddFoodAutoChose(buf, foodConfig, exeDir)
-		}
-	}
+	addFoodOrders(buf, opts, weekday)
 
-	if informerConfig.Feed != nil {
-		feed.InitFeedDB(exeDir)
-		feed.AddFeeds(buf, informerConfig.Feed)
+	var articles []*feed.Article
+	if opts.FeedConfig != nil {
+		articles = feed.AddFeeds(buf, opts.FeedConfig)
 	}
 
 	content := buf.String()
 	logger.Info(content)
 
-	if urlAddr != "" {
-		if strings.Contains(urlAddr, lark.Host) {
-			lark.Lark(urlAddr, content)
-		} else if strings.Contains(urlAddr, ding.Host) {
-			ding.Ding(urlAddr, content, "", weekday)
-		}
+	result := &Result{
+		Content:         content,
+		Articles:        articles,
+		ContentFilePath: todayContentFilePath,
 	}
 
-	err = os.WriteFile(todayContentFilePath, []byte(content), os.ModePerm)
-	if err != nil {
+	if err := os.WriteFile(todayContentFilePath, []byte(content), os.ModePerm); err != nil {
 		logger.Warnf("write today content to file failed: %v", err)
+	}
+
+	notified, err := notify(opts.URLAddr, content, weekday)
+	result.Notified = notified
+
+	if err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+func addFoodOrders(buf *bytes.Buffer, opts *Options, weekday time.Weekday) {
+	foodorder.InitFoodorderDB(opts.HomeDir)
+
+	foodConfigs := foodorder.GetAllFoodConfig()
+	if len(foodConfigs) <= 0 {
+		logger.Info("No food config found, Init food config from informer.json")
+		foodorder.InitFoodOrderData(opts.RawConfig)
+		foodConfigs = foodorder.GetAllFoodConfig()
+	}
+
+	for _, foodConfig := range foodConfigs {
+		if foodConfig != nil && weekday != time.Sunday && weekday != time.Saturday {
+			foodorder.AddFoodAutoChose(buf, foodConfig, opts.HomeDir)
+		}
+	}
+}
+
+// notify delivers the content and reports whether a bot accepted it.
+func notify(urlAddr, content string, weekday time.Weekday) (bool, error) {
+	if urlAddr == "" {
+		return false, nil
+	}
+
+	switch {
+	case strings.Contains(urlAddr, lark.Host):
+		if err := lark.Lark(urlAddr, content); err != nil {
+			return false, err
+		}
+
+		return true, nil
+	case strings.Contains(urlAddr, ding.Host):
+		if err := ding.Ding(urlAddr, content, "", weekday); err != nil {
+			return false, err
+		}
+
+		return true, nil
+	default:
+		// an unknown address is not a bot webhook, the same as before.
+		return false, nil
 	}
 }

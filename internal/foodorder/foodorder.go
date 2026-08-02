@@ -41,8 +41,13 @@ func InitFoodOrderData(data []byte) {
 	if err := json.Unmarshal(data, &informerConfig); err != nil {
 		logger.Fatal(err)
 	}
-	// 取出food的配置，转成map[string]interface{}
-	foodConfig := informerConfig["food"].(map[string]interface{})
+	// 取出food的配置，转成map[string]interface{}；只订阅 feed 的配置没有 food 段，直接跳过
+	foodConfig, ok := informerConfig["food"].(map[string]interface{})
+	if !ok {
+		logger.Info("no food config in informer.json, skip food order init")
+
+		return
+	}
 	// 取出food的配置中的partners，转成[]string
 	partners := getStringArr(foodConfig, "partners")
 	addFoodConfig(partners)
