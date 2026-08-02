@@ -1,0 +1,27 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Informer">
+  <defs>
+    <mask id="knock">
+      <rect x="0" y="0" width="24" height="24" fill="#fff"/>
+      <circle cx="18.4" cy="5.6" r="4.1" fill="#000"/>
+    </mask>
+  </defs>
+
+  <!-- inherits currentColor so it adapts to light/dark UI -->
+  <g mask="url(#knock)" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 6.3
+             C 10.1 5.0, 7.4 4.6, 4.8 5.1
+             L 4.8 17.7
+             C 7.4 17.2, 10.1 17.6, 12 18.9
+             C 13.9 17.6, 16.6 17.2, 19.2 17.7
+             L 19.2 5.1
+             C 16.6 4.6, 13.9 5.0, 12 6.3 Z"/>
+    <path d="M12 6.3 L12 18.9"/>
+    <path d="M7.3 9.6 h2.7"/>
+    <path d="M7.3 12.0 h2.7"/>
+    <path d="M7.3 14.4 h2.0"/>
+    <path d="M14.0 12.0 h2.7"/>
+    <path d="M14.0 14.4 h2.0"/>
+  </g>
+
+  <circle cx="18.4" cy="5.6" r="3.0" fill="currentColor"/>
+</svg>
