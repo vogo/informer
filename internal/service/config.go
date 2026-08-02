@@ -92,23 +92,21 @@ func (s *Service) ConfigFilePath() string {
 	return filepath.Join(s.homeDir, inform.ConfigFileName)
 }
 
-// ReadFileConfig reads informer.json from the active data directory.
-// It returns the parsed configuration together with the raw bytes, which the
-// food order initialisation still consumes as a whole.
-func (s *Service) ReadFileConfig() (*inform.Config, []byte, error) {
+// ReadFileConfig reads and parses informer.json from the active data directory.
+func (s *Service) ReadFileConfig() (*inform.Config, error) {
 	path := s.ConfigFilePath()
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read config file %q: %w", path, err)
+		return nil, fmt.Errorf("read config file %q: %w", path, err)
 	}
 
 	var config inform.Config
 	if err = json.Unmarshal(raw, &config); err != nil {
-		return nil, nil, fmt.Errorf("parse config file %q: %w", path, err)
+		return nil, fmt.Errorf("parse config file %q: %w", path, err)
 	}
 
-	return &config, raw, nil
+	return &config, nil
 }
 
 // EffectiveFeedConfig resolves the feed configuration used by a real inform run.

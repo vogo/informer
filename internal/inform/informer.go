@@ -28,7 +28,6 @@ import (
 	"github.com/vogo/informer/internal/date"
 	"github.com/vogo/informer/internal/ding"
 	"github.com/vogo/informer/internal/feed"
-	"github.com/vogo/informer/internal/foodorder"
 	"github.com/vogo/informer/internal/lark"
 	"github.com/vogo/informer/internal/soup"
 	"github.com/vogo/logger"
@@ -53,9 +52,6 @@ type Options struct {
 
 	// FeedConfig is the effective feed configuration; a nil value skips feeds.
 	FeedConfig *feed.Config
-
-	// RawConfig is the raw informer.json content used to seed the food order data.
-	RawConfig []byte
 }
 
 // Result is the outcome of one inform run.
@@ -96,8 +92,6 @@ func Run(opts *Options) (*Result, error) {
 
 	weekday := time.Now().Weekday()
 
-	addFoodOrders(buf, opts, weekday)
-
 	var articles []*feed.Article
 	if opts.FeedConfig != nil {
 		articles = feed.AddFeeds(buf, opts.FeedConfig)
@@ -124,23 +118,6 @@ func Run(opts *Options) (*Result, error) {
 	}
 
 	return result, nil
-}
-
-func addFoodOrders(buf *bytes.Buffer, opts *Options, weekday time.Weekday) {
-	foodorder.InitFoodorderDB(opts.HomeDir)
-
-	foodConfigs := foodorder.GetAllFoodConfig()
-	if len(foodConfigs) <= 0 {
-		logger.Info("No food config found, Init food config from informer.json")
-		foodorder.InitFoodOrderData(opts.RawConfig)
-		foodConfigs = foodorder.GetAllFoodConfig()
-	}
-
-	for _, foodConfig := range foodConfigs {
-		if foodConfig != nil && weekday != time.Sunday && weekday != time.Saturday {
-			foodorder.AddFoodAutoChose(buf, foodConfig, opts.HomeDir)
-		}
-	}
 }
 
 // notify delivers the content and reports whether a bot accepted it.

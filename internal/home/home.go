@@ -53,10 +53,6 @@ var legacyEntries = []string{
 	"feed.db",
 	"feed.db-wal",
 	"feed.db-shm",
-	"foodorder.db",
-	"foodorder.db-wal",
-	"foodorder.db-shm",
-	"previous_chosen.json",
 	"feed_data.json",
 	"data",
 }
@@ -148,7 +144,7 @@ func Migrate(legacyDir, activeDir string) error {
 // isLegacyDataDir reports whether the directory actually holds informer data,
 // so that an executable placed in an unrelated directory triggers no migration.
 func isLegacyDataDir(dir string) bool {
-	for _, name := range []string{"informer.json", "feed.db", "foodorder.db", "data"} {
+	for _, name := range []string{"informer.json", "feed.db", "data"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
 			return true
 		}

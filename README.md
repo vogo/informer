@@ -7,7 +7,7 @@ GOBIN=$(pwd) go install github.com/vogo/informer@master
 
 ## 数据目录
 
-informer 的所有数据（`informer.json`、`feed.db`、`foodorder.db`、`data/<年份>/<日期>.md`）都存放在**同一个数据主目录**中：
+informer 的所有数据（`informer.json`、`feed.db`、`data/<年份>/<日期>.md`）都存放在**同一个数据主目录**中：
 
 | `INFORMER_HOME` | 数据主目录 |
 | --- | --- |
@@ -21,7 +21,7 @@ informer 的所有数据（`informer.json`、`feed.db`、`foodorder.db`、`data/
 
 旧版本把数据放在可执行文件所在目录。首次启动新版本时，informer 会自动把旧目录里的应用数据**复制**（不是移动）到数据主目录：
 
-- 复制的内容：`informer.json`、`feed.db`、`foodorder.db`（含 `-wal` / `-shm`）、`previous_chosen.json`、`feed_data.json`、以及整个 `data/` 目录，**目录层级保持不变**；可执行文件本身和目录下的其它无关文件不会被复制。
+- 复制的内容：`informer.json`、`feed.db`（含 `-wal` / `-shm`）、`feed_data.json`、以及整个 `data/` 目录，**目录层级保持不变**；可执行文件本身和目录下的其它无关文件不会被复制。
 - **冲突时保留目标并跳过**：数据主目录中已存在的同名文件一律保留，不会被旧文件覆盖。
 - 旧目录的文件**不会被删除或清理**，请自行确认无误后再处理。
 - 复制成功后会在数据主目录写入 `.migrated` 标记，后续启动不再重复迁移；若中途失败，informer 会报错退出，已复制的文件保留，修复后重跑会跳过已存在的文件继续完成。

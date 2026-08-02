@@ -141,7 +141,7 @@ func legacyLayout(t *testing.T) string {
 	legacy := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(legacy, "informer.json"), []byte(`{"feed":{}}`), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(legacy, "feed.db"), []byte("legacy-db"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(legacy, "foodorder.db"), []byte("legacy-food"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(legacy, "feed_data.json"), []byte("legacy-json"), 0o600))
 	require.NoError(t, os.MkdirAll(filepath.Join(legacy, "data", "2024"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(legacy, "data", "2024", "2024-01-02.md"), []byte("old day"), 0o600))
 	require.NoError(t, os.MkdirAll(filepath.Join(legacy, "data", "2025"), 0o700))
@@ -167,7 +167,7 @@ func TestInitCopiesLegacyLayout(t *testing.T) {
 	for name, want := range map[string]string{
 		"informer.json":           `{"feed":{}}`,
 		"feed.db":                 "legacy-db",
-		"foodorder.db":            "legacy-food",
+		"feed_data.json":          "legacy-json",
 		"data/2024/2024-01-02.md": "old day",
 		"data/2025/2025-06-01.md": "new day",
 	} {

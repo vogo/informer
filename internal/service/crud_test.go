@@ -383,9 +383,8 @@ func TestPageLimitBounds(t *testing.T) {
 func TestEffectiveFeedConfigPrefersFile(t *testing.T) {
 	svc := newService(t)
 
-	fileConfig, raw, err := svc.ReadFileConfig()
+	fileConfig, err := svc.ReadFileConfig()
 	require.NoError(t, err)
-	require.NotEmpty(t, raw)
 	require.NotNil(t, fileConfig.Feed)
 
 	// informer.json stays authoritative for an existing installation.
@@ -408,11 +407,11 @@ func TestReadFileConfigErrors(t *testing.T) {
 	svc, err := service.New(dir)
 	require.NoError(t, err)
 
-	_, _, err = svc.ReadFileConfig()
+	_, err = svc.ReadFileConfig()
 	require.ErrorContains(t, err, "read config file")
 
 	require.NoError(t, writeRaw(dir, "not json"))
 
-	_, _, err = svc.ReadFileConfig()
+	_, err = svc.ReadFileConfig()
 	require.ErrorContains(t, err, "parse config file")
 }

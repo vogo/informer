@@ -32,7 +32,7 @@ import (
 // The inform timestamp of the selected articles is written only after the
 // notification step actually succeeded, so a failed delivery leaves InformedAt empty.
 func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
-	fileConfig, raw, err := s.ReadFileConfig()
+	fileConfig, err := s.ReadFileConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,6 @@ func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 		HomeDir:    s.homeDir,
 		URLAddr:    urlAddr,
 		FeedConfig: s.EffectiveFeedConfig(fileConfig),
-		RawConfig:  raw,
 	})
 	if err != nil {
 		return result, err
