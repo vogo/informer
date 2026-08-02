@@ -18,6 +18,7 @@
 package service_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -124,4 +125,28 @@ func TestSaveScheduleConfigRejectsTimesTheSchedulerCouldNotActOn(t *testing.T) {
 	view, err := svc.ReadFileConfigView()
 	require.NoError(t, err)
 	assert.Nil(t, view.Schedule)
+}
+
+func TestScheduleLastRunDateRoundTripsThroughTheStateFile(t *testing.T) {
+	svc := newService(t)
+
+	day, err := svc.ReadScheduleLastRunDate()
+	require.NoError(t, err)
+	assert.Empty(t, day, "a fresh data directory has never pushed on a schedule")
+
+	require.NoError(t, svc.MarkScheduleLastRunDate("2026-08-02"))
+
+	day, err = svc.ReadScheduleLastRunDate()
+	require.NoError(t, err)
+	assert.Equal(t, "2026-08-02", day)
+	assert.FileExists(t, svc.ScheduleStatePath())
+
+	// a corrupt marker is treated as "no prior run" so the scheduler can recover.
+	require.NoError(t, os.WriteFile(svc.ScheduleStatePath(), []byte("not-a-day\n"), 0o644))
+	day, err = svc.ReadScheduleLastRunDate()
+	require.NoError(t, err)
+	assert.Empty(t, day)
+
+	require.ErrorIs(t, svc.MarkScheduleLastRunDate("08/02/2026"), service.ErrInvalidArgument)
+	require.ErrorIs(t, svc.MarkScheduleLastRunDate(""), service.ErrInvalidArgument)
 }

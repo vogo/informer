@@ -18,7 +18,11 @@
 package service
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/vogo/informer/internal/configstore"
@@ -27,9 +31,17 @@ import (
 // scheduleSectionKey is the top level key of the schedule section inside informer.json.
 const scheduleSectionKey = "schedule"
 
+// ScheduleStateFileName is the file that records the calendar day of the last
+// successful desktop scheduled push. It lives next to informer.json so a restarted
+// app can honour the once-per-day guard without asking the bot again.
+const ScheduleStateFileName = "informer.schedule-state"
+
 // scheduleTimeLayout is the 24 hour clock format the schedule section stores,
 // Go's reference hour and minute.
 const scheduleTimeLayout = "15:04"
+
+// scheduleDateLayout is the calendar day written into the schedule state file.
+const scheduleDateLayout = "2006-01-02"
 
 // Schedule is the daily push schedule of the desktop app. The command line entry
 // never reads it: a CLI run stays scheduled by the operator's crontab, while the
@@ -100,4 +112,49 @@ func ValidateScheduleConfig(schedule *Schedule) error {
 	}
 
 	return nil
+}
+
+// ScheduleStatePath is the once-per-day state file of the active data directory.
+func (s *Service) ScheduleStatePath() string {
+	return filepath.Join(s.homeDir, ScheduleStateFileName)
+}
+
+// ReadScheduleLastRunDate returns the calendar day of the last successful desktop
+// scheduled push, or an empty string when none is stored yet. A missing or blank
+// file is not an error: the scheduler then treats today as not yet pushed.
+func (s *Service) ReadScheduleLastRunDate() (string, error) {
+	data, err := os.ReadFile(s.ScheduleStatePath())
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("read schedule state file: %w", err)
+	}
+
+	day := strings.TrimSpace(string(data))
+	if day == "" {
+		return "", nil
+	}
+
+	_, err = time.Parse(scheduleDateLayout, day)
+	if err != nil {
+		// a corrupt marker must not freeze the scheduler forever: pretend there is
+		// no prior run and let the next success overwrite the file.
+		return "", nil
+	}
+
+	return day, nil
+}
+
+// MarkScheduleLastRunDate records that the desktop scheduler successfully pushed
+// on the given calendar day. The next process start reads this file and skips the
+// catch-up fire for that day.
+func (s *Service) MarkScheduleLastRunDate(day string) error {
+	_, err := time.Parse(scheduleDateLayout, day)
+	if err != nil {
+		return fmt.Errorf("%w: schedule last run date must be YYYY-MM-DD, got %q", ErrInvalidArgument, day)
+	}
+
+	return configstore.WriteAtomic(s.ScheduleStatePath(), []byte(day+"\n"), configstore.PermConfig)
 }

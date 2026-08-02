@@ -244,6 +244,7 @@ async function rebuild() {
       <n-card size="small" title="定时任务" style="margin-bottom: 16px">
         <n-alert type="info" :bordered="false">
           桌面端定时仅在应用保持打开时生效，关闭后不会触发；当天已过设定时间才打开应用，会补推一次。
+          成功推送后会记下日期，同一天重启不会再补推；失败则在下次轮询重试。
           若服务器同时用系统 crontab 运行命令行版本，两边可能重复推送。
         </n-alert>
 

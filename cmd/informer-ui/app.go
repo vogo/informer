@@ -24,8 +24,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/vogo/logger"
-
 	"github.com/vogo/informer/internal/home"
 	"github.com/vogo/informer/internal/inform"
 	"github.com/vogo/informer/internal/scheduler"
@@ -118,19 +116,23 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 
-	a.sched = scheduler.New(func() (bool, string, error) {
-		schedule, err := a.svc.ReadScheduleConfig()
-		if err != nil {
-			return false, "", err
-		}
+	a.sched = scheduler.New(
+		func() (bool, string, error) {
+			schedule, err := a.svc.ReadScheduleConfig()
+			if err != nil {
+				return false, "", err
+			}
 
-		return schedule.Enabled, schedule.Time, nil
-	}, func() {
-		_, err := a.runInform()
-		if err != nil {
-			logger.Warnf("scheduled inform run failed: %v", err)
-		}
-	})
+			return schedule.Enabled, schedule.Time, nil
+		},
+		a.svc.ReadScheduleLastRunDate,
+		a.svc.MarkScheduleLastRunDate,
+		func() error {
+			_, err := a.runInform()
+
+			return err
+		},
+	)
 	a.sched.Start()
 }
 

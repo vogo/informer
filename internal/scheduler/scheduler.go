@@ -23,6 +23,10 @@
 // after the configured time - or a schedule enabled that late - still pushes the
 // same day, and never twice.
 //
+// The once-per-day guard survives restarts: the last successful run date is read
+// and written through the injected persistence callbacks. A failed run does not
+// consume the day, so the next tick retries.
+//
 // The command line entry does not use this package; a CLI run stays scheduled by
 // the operator's crontab.
 package scheduler
@@ -44,6 +48,13 @@ const timeLayout = "15:04"
 // dateLayout is the calendar day key the once-per-day guard records.
 const dateLayout = "2006-01-02"
 
+// runOutcome is one finished runner invocation, delivered back to the loop so only
+// that goroutine mutates the once-per-day state.
+type runOutcome struct {
+	day string
+	err error
+}
+
 // Scheduler polls a schedule and fires one runner per day. The zero value is not
 // usable; build one with New, or assemble the struct in white box tests.
 type Scheduler struct {
@@ -51,28 +62,48 @@ type Scheduler struct {
 	// edit of the configuration file takes effect without a restart.
 	readConfig func() (enabled bool, at string, err error)
 
-	// runner performs one inform run. It is invoked in its own goroutine, so a
-	// slow fetch never delays the loop, and concurrent fires from other entry
-	// points are the runner's own problem to serialize.
-	runner func()
+	// readLastRun returns the calendar day of the last successful run, or an empty
+	// string when none is stored. It is how a restarted process learns that today
+	// was already pushed.
+	readLastRun func() (string, error)
+
+	// writeLastRun records a successful run day so a later process does not catch
+	// up again on the same calendar day.
+	writeLastRun func(day string) error
+
+	// runner performs one inform run and reports whether it finished cleanly.
+	// It is invoked in its own goroutine, so a slow fetch never delays the loop.
+	runner func() error
 
 	// tick is the polling interval; New sets the default, tests shorten it.
 	tick time.Duration
 
-	stop chan struct{}
-	done chan struct{}
+	stop    chan struct{}
+	done    chan struct{}
+	results chan runOutcome
 
-	// lastRunDate is the calendar day the scheduler last fired on, empty before
-	// the first fire. Only the loop goroutine ever touches it, so it needs no lock.
+	// lastRunDate is the calendar day of the last successful run known to this
+	// process, empty before the first success. Only the loop goroutine touches it.
 	lastRunDate string
+
+	// inFlight is true while a runner goroutine is still outstanding. Only the
+	// loop goroutine touches it, together with lastRunDate.
+	inFlight bool
 }
 
-// New builds a scheduler over one schedule source and one runner.
-func New(readConfig func() (enabled bool, at string, err error), runner func()) *Scheduler {
+// New builds a scheduler over one schedule source, one once-per-day store and one runner.
+func New(
+	readConfig func() (enabled bool, at string, err error),
+	readLastRun func() (string, error),
+	writeLastRun func(day string) error,
+	runner func() error,
+) *Scheduler {
 	return &Scheduler{
-		readConfig: readConfig,
-		runner:     runner,
-		tick:       defaultTick,
+		readConfig:   readConfig,
+		readLastRun:  readLastRun,
+		writeLastRun: writeLastRun,
+		runner:       runner,
+		tick:         defaultTick,
 	}
 }
 
@@ -81,6 +112,9 @@ func New(readConfig func() (enabled bool, at string, err error), runner func()) 
 func (s *Scheduler) Start() {
 	s.stop = make(chan struct{})
 	s.done = make(chan struct{})
+	// buffer one outcome so a finishing runner never blocks on a loop that is
+	// mid-check; Stop still cancels a send when the loop has already exited.
+	s.results = make(chan runOutcome, 1)
 
 	go s.loop()
 }
@@ -105,15 +139,45 @@ func (s *Scheduler) loop() {
 			return
 		case now := <-ticker.C:
 			s.check(now)
+		case outcome := <-s.results:
+			s.handleOutcome(outcome)
 		}
 	}
 }
 
+// handleOutcome clears the in-flight mark and, on success only, records the day
+// both in memory and through the persistence callback.
+func (s *Scheduler) handleOutcome(outcome runOutcome) {
+	s.inFlight = false
+
+	if outcome.err != nil {
+		logger.Warnf("scheduler: daily inform run of %s failed: %v", outcome.day, outcome.err)
+
+		return
+	}
+
+	if s.writeLastRun != nil {
+		err := s.writeLastRun(outcome.day)
+		if err != nil {
+			// still remember the day in this process so the next tick does not
+			// deliver a second bot message after a successful push.
+			logger.Warnf("scheduler: persist last run date %s failed: %v", outcome.day, err)
+		}
+	}
+
+	s.lastRunDate = outcome.day
+	logger.Infof("scheduler: finished the daily inform run of %s", outcome.day)
+}
+
 // check fires the runner when the schedule is due at now: enabled, the clock past
-// today's configured minute, and no fire yet today. A broken configuration is
-// logged and skipped, never fatal: a scheduler that exits on a typo would push
-// nothing at all until a restart.
+// today's configured minute, and no successful fire yet today. A broken
+// configuration is logged and skipped, never fatal: a scheduler that exits on a
+// typo would push nothing at all until a restart.
 func (s *Scheduler) check(now time.Time) {
+	if s.inFlight {
+		return
+	}
+
 	enabled, at, err := s.readConfig()
 	if err != nil {
 		logger.Warnf("scheduler: read the schedule config failed: %v", err)
@@ -137,13 +201,51 @@ func (s *Scheduler) check(now time.Time) {
 		return
 	}
 
+	if s.alreadyRan(today) {
+		return
+	}
+
 	target := time.Date(now.Year(), now.Month(), now.Day(), hourMinute.Hour(), hourMinute.Minute(), 0, 0, now.Location())
 	if now.Before(target) {
 		return
 	}
 
-	s.lastRunDate = today
+	s.inFlight = true
 	logger.Infof("scheduler: start the daily inform run of %s", today)
 
-	go s.runner()
+	day := today
+
+	go func() {
+		runErr := s.runner()
+
+		select {
+		case s.results <- runOutcome{day: day, err: runErr}:
+		case <-s.stop:
+		}
+	}()
+}
+
+// alreadyRan loads the persisted successful day and, when it matches today,
+// caches it on lastRunDate so later ticks skip the disk read.
+func (s *Scheduler) alreadyRan(today string) bool {
+	if s.readLastRun == nil {
+		return false
+	}
+
+	stored, err := s.readLastRun()
+	if err != nil {
+		logger.Warnf("scheduler: read last run date failed: %v", err)
+
+		// refuse to fire when the store is unreadable: a duplicate bot message is
+		// worse than waiting for the file to become readable again.
+		return true
+	}
+
+	if stored != today {
+		return false
+	}
+
+	s.lastRunDate = today
+
+	return true
 }
