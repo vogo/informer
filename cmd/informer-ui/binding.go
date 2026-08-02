@@ -29,6 +29,11 @@ import (
 // frontend shows it like any other binding error and offers a restart.
 var ErrNotReady = errors.New("informer did not finish starting up, see the startup error")
 
+// ErrInformRunning marks a trigger issued while another inform run of this
+// process is still in flight. The frontend shows it like any other binding
+// error; the user simply tries again once the running push has finished.
+var ErrInformRunning = errors.New("an inform run is already in progress, try again in a moment")
+
 // SourceDTO is the flat subscription record the frontend sees. It carries
 // every column a source owns but no persistence detail, so the wails binding
 // can never turn the gorm model into the public desktop contract.

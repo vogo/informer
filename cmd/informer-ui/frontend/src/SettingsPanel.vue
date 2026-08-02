@@ -11,17 +11,21 @@ import {
   NFormItem,
   NInput,
   NInputNumber,
+  NPopconfirm,
   NSpace,
   NSpin,
+  NSwitch,
   NTag,
   NText,
+  NTimePicker,
   useMessage
 } from 'naive-ui'
-import {ReadConfig, ReadSecrets, RebuildHistoryIndex, SaveConfig, SaveWebhook} from '../wailsjs/go/main/App'
+import {ReadConfig, ReadSecrets, RebuildHistoryIndex, SaveConfig, SaveSchedule, SaveWebhook, TriggerNow} from '../wailsjs/go/main/App'
 import type {main} from '../wailsjs/go/models'
 import {errorText} from './errors'
 
 type HistoryIndexDTO = main.HistoryIndexDTO
+type InformResultDTO = main.InformResultDTO
 
 const message = useMessage()
 
@@ -46,6 +50,16 @@ const webhook = ref('')
 const webhookInput = ref('')
 const webhookSaving = ref(false)
 
+const schedule = reactive({
+  enabled: false,
+  time: '10:00'
+})
+const scheduleSaving = ref(false)
+
+const triggering = ref(false)
+const triggerResult = ref<InformResultDTO | null>(null)
+const triggerError = ref('')
+
 const rebuilding = ref(false)
 const rebuildResult = ref<HistoryIndexDTO | null>(null)
 const rebuildError = ref('')
@@ -62,6 +76,7 @@ async function load() {
     configExists.value = config.exists
     preservedKeys.value = config.preservedKeys
     Object.assign(form, config.feed)
+    Object.assign(schedule, config.schedule)
 
     secretsPath.value = secrets.path
     webhookConfigured.value = secrets.webhookConfigured
@@ -88,6 +103,35 @@ async function save() {
     message.error(`保存失败：${errorText(e)}`)
   } finally {
     saving.value = false
+  }
+}
+
+async function saveSchedule() {
+  scheduleSaving.value = true
+  try {
+    await SaveSchedule({
+      enabled: schedule.enabled,
+      time: schedule.time
+    })
+    message.success('定时任务已保存，应用保持打开时按时推送')
+    await load()
+  } catch (e) {
+    message.error(`保存失败：${errorText(e)}`)
+  } finally {
+    scheduleSaving.value = false
+  }
+}
+
+async function triggerNow() {
+  triggering.value = true
+  triggerError.value = ''
+  triggerResult.value = null
+  try {
+    triggerResult.value = await TriggerNow()
+  } catch (e) {
+    triggerError.value = errorText(e)
+  } finally {
+    triggering.value = false
   }
 }
 
@@ -193,6 +237,75 @@ async function rebuild() {
               命令行显式传入的地址仍然优先，不传时使用这里保存的地址。
             </n-text>
             <n-button :loading="webhookSaving" type="primary" @click="saveWebhook">保存地址</n-button>
+          </n-space>
+        </template>
+      </n-card>
+
+      <n-card size="small" title="定时任务" style="margin-bottom: 16px">
+        <n-alert type="info" :bordered="false">
+          桌面端定时仅在应用保持打开时生效，关闭后不会触发；当天已过设定时间才打开应用，会补推一次。
+          若服务器同时用系统 crontab 运行命令行版本，两边可能重复推送。
+        </n-alert>
+
+        <n-form label-placement="left" label-width="auto" style="margin-top: 12px">
+          <n-form-item label="启用定时推送">
+            <n-switch v-model:value="schedule.enabled" />
+          </n-form-item>
+          <n-form-item label="每日推送时间">
+            <n-time-picker
+              v-model:formatted-value="schedule.time"
+              value-format="HH:mm"
+              format="HH:mm"
+              :disabled="!schedule.enabled"
+              style="width: 200px"
+            />
+          </n-form-item>
+        </n-form>
+
+        <template #footer>
+          <n-space justify="end">
+            <n-button :loading="scheduleSaving" type="primary" @click="saveSchedule">保存定时任务</n-button>
+          </n-space>
+        </template>
+      </n-card>
+
+      <n-card size="small" title="手动推送" style="margin-bottom: 16px">
+        <n-text depth="3" style="font-size: 12px">
+          立即执行一次完整流程：抓取所有启用的订阅、生成今日日报 Markdown，并推送给机器人；
+          未配置机器人地址时只生成日报，不发送。
+        </n-text>
+
+        <n-alert v-if="triggerError" type="error" title="推送失败" style="margin-top: 12px">
+          {{ triggerError }}
+        </n-alert>
+
+        <n-alert v-else-if="triggerResult && !triggerResult.success" type="warning" title="推送未完成" style="margin-top: 12px">
+          {{ triggerResult.errorInfo }}
+          <div v-if="triggerResult.contentFilePath" style="margin-top: 4px">
+            日报已写入：<n-code :code="triggerResult.contentFilePath" inline />
+          </div>
+        </n-alert>
+
+        <n-alert v-else-if="triggerResult" type="success" title="推送完成" style="margin-top: 12px">
+          <template v-if="triggerResult.notified">
+            已推送 {{ triggerResult.articleCount }} 篇文章到机器人。
+          </template>
+          <template v-else>
+            日报已生成，但未配置机器人地址（或地址无法识别），未发送推送。
+          </template>
+          <div v-if="triggerResult.contentFilePath" style="margin-top: 4px">
+            日报文件：<n-code :code="triggerResult.contentFilePath" inline />
+          </div>
+        </n-alert>
+
+        <template #footer>
+          <n-space justify="end">
+            <n-popconfirm @positive-click="() => { triggerNow() }">
+              <template #trigger>
+                <n-button :loading="triggering" type="primary">立即推送</n-button>
+              </template>
+              将抓取所有启用的订阅并发送到机器人，确认立即推送？
+            </n-popconfirm>
           </n-space>
         </template>
       </n-card>

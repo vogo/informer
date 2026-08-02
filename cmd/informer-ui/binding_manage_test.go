@@ -321,6 +321,53 @@ func TestConfigBindingsRoundTrip(t *testing.T) {
 	assert.Equal(t, 15, view.Feed.MaxInformFeedSize)
 }
 
+func TestScheduleBindingsRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+
+	view, err := app.ReadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, view.ScheduleDefaults, view.Schedule, "a missing file offers the documented defaults")
+	assert.False(t, view.Schedule.Enabled)
+	assert.Equal(t, "10:00", view.Schedule.Time)
+
+	require.NoError(t, app.SaveSchedule(&ScheduleDTO{Enabled: true, Time: "21:45"}))
+
+	view, err = app.ReadConfig()
+	require.NoError(t, err)
+	require.NotNil(t, view.Schedule)
+	assert.True(t, view.Schedule.Enabled)
+	assert.Equal(t, "21:45", view.Schedule.Time)
+
+	// the desktop scheduler reads the very same file through its own path.
+	schedule, err := app.svc.ReadScheduleConfig()
+	require.NoError(t, err)
+	assert.True(t, schedule.Enabled)
+	assert.Equal(t, "21:45", schedule.Time)
+
+	// an invalid time is refused and the stored file keeps its previous content.
+	require.ErrorIs(t, app.SaveSchedule(&ScheduleDTO{Enabled: true, Time: "25:00"}), service.ErrInvalidArgument)
+	require.ErrorIs(t, app.SaveSchedule(nil), service.ErrInvalidArgument)
+
+	view, err = app.ReadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "21:45", view.Schedule.Time)
+
+	// a schedule save leaves the feed section alone, and the other way around.
+	require.NoError(t, app.SaveConfig(&FeedConfigDTO{
+		MaxInformFeedSize: 12,
+		FeedExpireDays:    60,
+		SameSiteMaxCount:  4,
+		MaxFetchNum:       1,
+	}))
+
+	view, err = app.ReadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, 12, view.Feed.MaxInformFeedSize)
+	assert.Equal(t, "21:45", view.Schedule.Time)
+}
+
 func TestWebhookBindingReturnsTheStoredAddress(t *testing.T) {
 	t.Parallel()
 
@@ -374,6 +421,11 @@ func TestNewBindingsReportAStartupFailure(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotReady)
 
 	require.ErrorIs(t, app.SaveWebhook("x"), ErrNotReady)
+
+	require.ErrorIs(t, app.SaveSchedule(&ScheduleDTO{Enabled: true, Time: "10:00"}), ErrNotReady)
+
+	_, err = app.TriggerNow()
+	require.ErrorIs(t, err, ErrNotReady)
 }
 
 func categoryNames(categories []*CategoryDTO) []string {

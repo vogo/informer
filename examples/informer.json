@@ -4,5 +4,9 @@
     "feed_expire_days": 150,
     "max_inform_feed_size": 20,
     "max_fetch_num": 1
+  },
+  "schedule": {
+    "enabled": false,
+    "time": "10:00"
   }
 }

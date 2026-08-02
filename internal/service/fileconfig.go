@@ -64,6 +64,9 @@ type FileConfigView struct {
 	// Feed is the editable feed section, nil when the file defines none.
 	Feed *feed.Config `json:"feed"`
 
+	// Schedule is the editable schedule section, nil when the file defines none.
+	Schedule *Schedule `json:"schedule"`
+
 	// PreservedKeys lists the top level keys this build does not edit but keeps on
 	// save, so the page can state plainly that nothing else is dropped.
 	PreservedKeys []string `json:"preserved_keys"`
@@ -108,8 +111,19 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 		}
 	}
 
+	var schedule Schedule
+
+	scheduleFound, err := doc.Unmarshal(scheduleSectionKey, &schedule)
+	if err != nil {
+		return nil, err
+	}
+
+	if scheduleFound {
+		view.Schedule = &schedule
+	}
+
 	for _, key := range doc.Keys() {
-		if key != feedSectionKey {
+		if key != feedSectionKey && key != scheduleSectionKey {
 			view.PreservedKeys = append(view.PreservedKeys, key)
 		}
 	}
@@ -132,6 +146,20 @@ func (s *Service) SaveFeedConfig(config *feed.Config) error {
 		return err
 	}
 
+	return s.saveConfigSection(feedSectionKey, feedSection{
+		SameSiteMaxCount:  config.SameSiteMaxCount,
+		FeedExpireDays:    config.FeedExpireDays,
+		MaxInformFeedSize: config.MaxInformFeedSize,
+		MaxFetchNum:       config.MaxFetchNum,
+	})
+}
+
+// saveConfigSection stores one top level section of informer.json.
+//
+// The whole document is re-read inside the write lock and only the named section is
+// replaced, so a field written by another build - or by hand - survives the save, and
+// a second writer running at the same time cannot lose the update it just made.
+func (s *Service) saveConfigSection(key string, section any) error {
 	path := s.ConfigFilePath()
 
 	return configstore.WithLock(path, configstore.DefaultLockTimeout, func() error {
@@ -140,12 +168,7 @@ func (s *Service) SaveFeedConfig(config *feed.Config) error {
 			return err
 		}
 
-		setErr := doc.Set(feedSectionKey, feedSection{
-			SameSiteMaxCount:  config.SameSiteMaxCount,
-			FeedExpireDays:    config.FeedExpireDays,
-			MaxInformFeedSize: config.MaxInformFeedSize,
-			MaxFetchNum:       config.MaxFetchNum,
-		})
+		setErr := doc.Set(key, section)
 		if setErr != nil {
 			return setErr
 		}
