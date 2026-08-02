@@ -202,12 +202,15 @@ jobs:
           tar -czf "informer-ui-${{ github.ref_name }}-linux-amd64.tar.gz" \
             -C cmd/informer-ui/build/bin informer-ui
 
+      # nfpm resolves the contents paths against the working directory, so the
+      # job runs it from cmd/informer-ui; the target is absolute because the
+      # verify and upload steps back in the workspace root look for it there.
       - name: Package deb
         run: |
           cd cmd/informer-ui
           INFORMER_UI_VERSION="${GITHUB_REF_NAME#v}" \
             nfpm package --config build/nfpm.yaml --packager deb \
-            --target "../informer-ui-${{ github.ref_name }}-linux-amd64.deb"
+            --target "${GITHUB_WORKSPACE}/informer-ui-${{ github.ref_name }}-linux-amd64.deb"
 
       - name: Verify deb metadata and layout
         run: |
