@@ -170,11 +170,20 @@ jobs:
           ldd cmd/informer-ui/build/bin/informer-ui | tee /tmp/ldd.txt
           grep -q "libwebkit2gtk-4.${{ matrix.webkit_abi }}.so" /tmp/ldd.txt
 
+      # the executable lands in a different place per platform: a bare binary on
+      # linux, an .exe on windows and inside the .app bundle on macOS, which is
+      # the layout release.yml already reads.
       - name: Smoke version sub command
         shell: bash
         run: |
-          bin="cmd/informer-ui/build/bin/informer-ui"
-          if [ ! -f "$bin" ]; then bin="cmd/informer-ui/build/bin/informer-ui.exe"; fi
+          bin=""
+          for candidate in \
+            cmd/informer-ui/build/bin/informer-ui \
+            cmd/informer-ui/build/bin/informer-ui.exe \
+            cmd/informer-ui/build/bin/informer-ui.app/Contents/MacOS/informer-ui; do
+            if [ -f "$candidate" ]; then bin="$candidate"; break; fi
+          done
+          test -n "$bin" || { echo "no informer-ui executable in build/bin"; ls -R cmd/informer-ui/build/bin; exit 1; }
           "$bin" version | grep -q "ci-${{ github.sha }}"
 
       - name: Upload build artifact

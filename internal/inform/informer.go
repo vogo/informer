@@ -25,16 +25,43 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vogo/logger"
+
 	"github.com/vogo/informer/internal/date"
 	"github.com/vogo/informer/internal/ding"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/lark"
 	"github.com/vogo/informer/internal/soup"
-	"github.com/vogo/logger"
 )
 
 // ConfigFileName is the informer configuration file inside the active data directory.
 const ConfigFileName = "informer.json"
+
+const (
+	// DataDirName is the directory holding the generated daily markdown files.
+	DataDirName = "data"
+
+	// DayLayout is the date layout of one daily markdown file, without the extension.
+	DayLayout = "2006-01-02"
+
+	// YearLayout is the layout of the year directory holding the daily files of one year.
+	YearLayout = "2006"
+
+	// DailyFileExt is the extension of a daily markdown file.
+	DailyFileExt = ".md"
+)
+
+// DailyDirPath is the directory holding the daily markdown files of one year.
+func DailyDirPath(homeDir string, day time.Time) string {
+	return filepath.Join(homeDir, DataDirName, day.Format(YearLayout))
+}
+
+// DailyFilePath is the markdown file one inform run writes for the given day.
+// It is the single definition of the daily layout: the writer here and every
+// reader - the daily browser and the history index rebuild - share it.
+func DailyFilePath(homeDir string, day time.Time) string {
+	return filepath.Join(DailyDirPath(homeDir, day), day.Format(DayLayout)+DailyFileExt)
+}
 
 // Config is the layout of informer.json.
 type Config struct {
@@ -74,12 +101,14 @@ type Result struct {
 // A notification failure is returned as an error after the content has been written,
 // so the caller can decide not to record a delivery that never happened.
 func Run(opts *Options) (*Result, error) {
-	dataPath := filepath.Join(opts.HomeDir, "data", time.Now().Format("2006"))
+	today := time.Now()
+
+	dataPath := DailyDirPath(opts.HomeDir, today)
 	if err := os.MkdirAll(dataPath, os.ModePerm); err != nil && !os.IsExist(err) {
 		return nil, fmt.Errorf("create data directory %q: %w", dataPath, err)
 	}
 
-	todayContentFilePath := filepath.Join(dataPath, time.Now().Format("2006-01-02")+".md")
+	todayContentFilePath := DailyFilePath(opts.HomeDir, today)
 
 	buf := bytes.NewBuffer(nil)
 	buf.WriteString(date.GetDateInfo())
@@ -90,7 +119,7 @@ func Run(opts *Options) (*Result, error) {
 		buf.WriteByte('\n')
 	}
 
-	weekday := time.Now().Weekday()
+	weekday := today.Weekday()
 
 	var articles []*feed.Article
 	if opts.FeedConfig != nil {

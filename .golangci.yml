@@ -49,6 +49,13 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      # feed.InitFeedDB installs a package level database handle, so two services
+      # opening at the same time would race. Every test of the service package
+      # therefore has to stay sequential; this is a structural constraint of the
+      # feed package, not an omission in the tests.
+      - linters:
+          - paralleltest
+        path: internal/service/.*_test\.go
       - linters:
           - gosec
         text: Potential HTTP request made with variable url

@@ -9,11 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "dompurify": "^3.4.12",
+    "markdown-it": "^15.0.0",
     "naive-ui": "^2.40.0",
     "vue": "^3.5.0"
   },
   "devDependencies": {
     "@babel/types": "^7.26.0",
+    "@types/markdown-it": "^14.1.2",
     "@vitejs/plugin-vue": "^6.0.0",
     "typescript": "^5.6.3",
     "vite": "^7.0.0",
