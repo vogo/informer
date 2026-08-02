@@ -27,20 +27,14 @@ import (
 const (
 	// SecretsFileName is the credential file of one data directory. It is kept out of
 	// informer.json on purpose: informer.json is meant to be readable, diffable and
-	// shareable, a bot webhook is not.
+	// shareable, while the bot webhook stays in its own locked-down file.
 	SecretsFileName = "informer.secret.json"
 
 	// webhookKey is the top level key holding the bot webhook.
 	webhookKey = "webhook"
-
-	// maskKeepChars is how many leading characters of a webhook stay visible when the
-	// settings page shows which credential is configured.
-	maskKeepChars = 24
 )
 
 // SecretsView is what the settings page learns about the credential file.
-// The webhook itself never leaves the backend: the page only sees whether one is
-// configured and a masked hint identifying it.
 type SecretsView struct {
 	// Path is the absolute location of the credential file.
 	Path string `json:"path"`
@@ -51,8 +45,9 @@ type SecretsView struct {
 	// WebhookConfigured reports whether a non empty webhook is stored.
 	WebhookConfigured bool `json:"webhook_configured"`
 
-	// WebhookMasked identifies the stored webhook without revealing its token.
-	WebhookMasked string `json:"webhook_masked"`
+	// Webhook is the stored bot address. It is a plain endpoint rather than a
+	// secret, so the settings page shows it in full.
+	Webhook string `json:"webhook"`
 }
 
 // SecretsFilePath is the credential file of the active data directory.
@@ -73,7 +68,7 @@ func (s *Service) ReadSecretsView() (*SecretsView, error) {
 		Path:              path,
 		Exists:            stored.exists,
 		WebhookConfigured: stored.webhook != "",
-		WebhookMasked:     maskSecret(stored.webhook),
+		Webhook:           stored.webhook,
 	}, nil
 }
 
@@ -148,18 +143,4 @@ func (s *Service) readWebhook() (storedSecrets, error) {
 	}
 
 	return storedSecrets{webhook: strings.TrimSpace(webhook), exists: doc.Exists()}, nil
-}
-
-// maskSecret keeps the identifying prefix of a credential and hides the rest.
-func maskSecret(secret string) string {
-	if secret == "" {
-		return ""
-	}
-
-	runes := []rune(secret)
-	if len(runes) <= maskKeepChars {
-		return strings.Repeat("*", len(runes))
-	}
-
-	return string(runes[:maskKeepChars]) + strings.Repeat("*", 8)
 }

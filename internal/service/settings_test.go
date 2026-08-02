@@ -164,7 +164,7 @@ func TestSaveWebhookWritesASensitiveFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, view.Exists)
 	assert.False(t, view.WebhookConfigured)
-	assert.Empty(t, view.WebhookMasked)
+	assert.Empty(t, view.Webhook)
 
 	const webhook = "https://oapi.dingtalk.com/robot/send?access_token=super-secret-token"
 
@@ -174,8 +174,9 @@ func TestSaveWebhookWritesASensitiveFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, view.Exists)
 	assert.True(t, view.WebhookConfigured)
-	assert.NotContains(t, view.WebhookMasked, "super-secret-token")
-	assert.Contains(t, view.WebhookMasked, "oapi.dingtalk.co")
+
+	// the bot address is a plain endpoint, so the settings page sees it in full.
+	assert.Equal(t, webhook, view.Webhook)
 
 	assertSecretPermission(t, svc.SecretsFilePath())
 

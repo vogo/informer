@@ -42,7 +42,7 @@ const form = reactive({
 
 const secretsPath = ref('')
 const webhookConfigured = ref(false)
-const webhookMasked = ref('')
+const webhook = ref('')
 const webhookInput = ref('')
 const webhookSaving = ref(false)
 
@@ -65,7 +65,7 @@ async function load() {
 
     secretsPath.value = secrets.path
     webhookConfigured.value = secrets.webhookConfigured
-    webhookMasked.value = secrets.webhookMasked
+    webhook.value = secrets.webhook
   } catch (e) {
     loadError.value = errorText(e)
   } finally {
@@ -167,7 +167,7 @@ async function rebuild() {
         </template>
       </n-card>
 
-      <n-card size="small" title="机器人地址（敏感配置）" style="margin-bottom: 16px">
+      <n-card size="small" title="机器人地址" style="margin-bottom: 16px">
         <n-text depth="3" style="font-size: 12px">
           存放于独立文件 <n-code :code="secretsPath" inline />，权限固定为 0600，不写入 informer.json，也不入库。
         </n-text>
@@ -177,15 +177,13 @@ async function rebuild() {
             <n-space :size="8" align="center">
               <n-tag v-if="webhookConfigured" size="small" type="success">已配置</n-tag>
               <n-tag v-else size="small" :bordered="false">未配置</n-tag>
-              <n-text v-if="webhookMasked" depth="3" style="font-size: 12px">{{ webhookMasked }}</n-text>
+              <n-text v-if="webhook" depth="3" style="font-size: 12px">{{ webhook }}</n-text>
             </n-space>
           </n-descriptions-item>
         </n-descriptions>
 
         <n-input
           v-model:value="webhookInput"
-          type="password"
-          show-password-on="click"
           placeholder="粘贴钉钉 / 飞书机器人 webhook；留空保存表示清除"
         />
 
