@@ -1,50 +1,82 @@
-linters-settings:
-  gocyclo:
-    min-complexity: 17
-  dupl:
-    threshold: 100
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  misspell:
-    locale: US
-  lll:
-    line-length: 140
-  goimports:
-    local-prefixes: github.com/golangci/golangci-lint
-  gocritic:
-    enabled-tags:
-      - performance
-      - style
-      - experimental
-    disabled-checks:
-      - wrapperFunc
-
+version: "2"
 linters:
-  enable-all: true
+  default: all
   disable:
-    - wrapcheck
-    - noctx
     - cyclop
-    - tagliatelle
+    - depguard
     - exhaustruct
-    - ireturn
-    - varnamelen
-    - gomnd
-    - gochecknoglobals
     - forcetypeassert
+    - gochecknoglobals
+    - gomodguard
+    - ireturn
     - lll
-    - execinquery
-
-run:
-  skip-files:
-  skip-dirs:
-
-issues:
-  exclude-rules:
-    - text: "Potential HTTP request made with variable url"
-      linters:
-        - gosec
-    - text: "G108: Profiling endpoint is automatically exposed on /debug/pprof"
-      linters:
-        - gosec
+    - mnd
+    - noctx
+    - tagliatelle
+    - varnamelen
+    - wrapcheck
+    - wsl
+  settings:
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      disabled-checks:
+        - wrapperFunc
+      enabled-tags:
+        - performance
+        - style
+        - experimental
+    gocyclo:
+      min-complexity: 17
+    gomoddirectives:
+      # the desktop entry is a nested module that shares the root service
+      # layer through a local replace; that is the intended monorepo layout.
+      replace-local: true
+      replace-allow-list:
+        - github.com/vogo/informer
+    lll:
+      line-length: 140
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gosec
+        text: Potential HTTP request made with variable url
+      - linters:
+          - gosec
+        text: 'G108: Profiling endpoint is automatically exposed on /debug/pprof'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/vogo/informer)
+    goimports:
+      local-prefixes:
+        - github.com/vogo/informer
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

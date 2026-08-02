@@ -1,0 +1,29 @@
+# nfpm package definition for the informer-ui desktop entry.
+# INFORMER_UI_VERSION is the tag without its leading v (set by release.yml),
+# the paths are relative to cmd/informer-ui where the release job runs nfpm.
+name: informer-ui
+arch: amd64
+platform: linux
+version: ${INFORMER_UI_VERSION}
+section: utils
+priority: optional
+maintainer: tiltwind <tiltwind@163.com>
+description: |
+  informer desktop client. Manages subscriptions of informer and previews
+  fetched articles through a native WebView, backed by the same data
+  directory as the informer command line.
+vendor: vogo
+homepage: https://github.com/vogo/informer
+license: Apache-2.0
+
+depends:
+  - libgtk-3-0
+  - libwebkit2gtk-4.1-0
+
+contents:
+  - src: build/bin/informer-ui
+    dst: /usr/bin/informer-ui
+  - src: build/package/informer-ui.desktop
+    dst: /usr/share/applications/informer-ui.desktop
+  - src: build/appicon.png
+    dst: /usr/share/icons/hicolor/512x512/apps/informer-ui.png
