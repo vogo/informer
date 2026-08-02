@@ -32,6 +32,12 @@ type FeedConfigDTO struct {
 	MaxFetchNum       int `json:"maxFetchNum"`
 }
 
+// ScheduleDTO is the editable schedule section of informer.json.
+type ScheduleDTO struct {
+	Enabled bool   `json:"enabled"`
+	Time    string `json:"time"`
+}
+
 // ConfigViewDTO is the whole settings page state of informer.json.
 type ConfigViewDTO struct {
 	// Path is where the file lives, so the user can also edit it by hand.
@@ -44,8 +50,14 @@ type ConfigViewDTO struct {
 	// Feed is the stored section, or the defaults when the file has none.
 	Feed *FeedConfigDTO `json:"feed"`
 
-	// Defaults are the documented starting values.
+	// Schedule is the stored section, or the defaults when the file has none.
+	Schedule *ScheduleDTO `json:"schedule"`
+
+	// Defaults are the documented starting values of the feed section.
 	Defaults *FeedConfigDTO `json:"defaults"`
+
+	// ScheduleDefaults are the documented starting values of the schedule section.
+	ScheduleDefaults *ScheduleDTO `json:"scheduleDefaults"`
 
 	// PreservedKeys are the top level fields this build does not edit and keeps
 	// on every save, listed so the page can state that nothing is dropped.
@@ -93,17 +105,24 @@ func (a *App) ReadConfig() (*ConfigViewDTO, error) {
 	}
 
 	defaults := toFeedConfigDTO(service.DefaultFeedConfig())
+	scheduleDefaults := toScheduleDTO(service.DefaultScheduleConfig())
 
 	dto := &ConfigViewDTO{
-		Path:          view.Path,
-		Exists:        view.Exists,
-		Feed:          defaults,
-		Defaults:      defaults,
-		PreservedKeys: view.PreservedKeys,
+		Path:             view.Path,
+		Exists:           view.Exists,
+		Feed:             defaults,
+		Schedule:         scheduleDefaults,
+		Defaults:         defaults,
+		ScheduleDefaults: scheduleDefaults,
+		PreservedKeys:    view.PreservedKeys,
 	}
 
 	if view.Feed != nil {
 		dto.Feed = toFeedConfigDTO(view.Feed)
+	}
+
+	if view.Schedule != nil {
+		dto.Schedule = toScheduleDTO(view.Schedule)
 	}
 
 	if dto.PreservedKeys == nil {
@@ -198,11 +217,37 @@ func (a *App) RebuildHistoryIndex() (*HistoryIndexDTO, error) {
 	}, nil
 }
 
+// SaveSchedule validates and stores the schedule section of informer.json.
+// The desktop scheduler reads the file on every tick, so the new switch and time
+// take effect without a restart.
+func (a *App) SaveSchedule(req *ScheduleDTO) error {
+	if req == nil {
+		return fmt.Errorf("%w: request is nil", service.ErrInvalidArgument)
+	}
+
+	err := a.ready()
+	if err != nil {
+		return err
+	}
+
+	return a.svc.SaveScheduleConfig(&service.Schedule{
+		Enabled: req.Enabled,
+		Time:    req.Time,
+	})
+}
+
 func toFeedConfigDTO(config *feed.Config) *FeedConfigDTO {
 	return &FeedConfigDTO{
 		MaxInformFeedSize: config.MaxInformFeedSize,
 		FeedExpireDays:    config.FeedExpireDays,
 		SameSiteMaxCount:  config.SameSiteMaxCount,
 		MaxFetchNum:       config.MaxFetchNum,
+	}
+}
+
+func toScheduleDTO(schedule *service.Schedule) *ScheduleDTO {
+	return &ScheduleDTO{
+		Enabled: schedule.Enabled,
+		Time:    schedule.Time,
 	}
 }
