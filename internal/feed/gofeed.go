@@ -92,20 +92,34 @@ func addGoFeed(config *Config, source *Source, expireTime int64) {
 }
 
 func addGoFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
-	urlAddr, ok := FormatURL(item.Link)
+	article, ok := goFeedItemArticle(source, item)
 	if !ok {
 		return
+	}
+
+	if isFeedURLExists(article.URL) {
+		return
+	}
+
+	logger.Infof("add feed: %s, %s", item.Title, item.Link)
+
+	if article.Timestamp < expireTime {
+		return
+	}
+
+	saveNewArticle(article)
+}
+
+// goFeedItemArticle converts a feed item into an article without touching the database.
+func goFeedItemArticle(source *Source, item *gofeed.Item) (*Article, bool) {
+	urlAddr, ok := FormatURL(item.Link)
+	if !ok {
+		return nil, false
 	}
 
 	if source.Redirect {
 		urlAddr = vurl.RedirectURL(urlAddr)
 	}
-
-	if isFeedURLExists(urlAddr) {
-		return
-	}
-
-	logger.Infof("add feed: %s, %s", item.Title, item.Link)
 
 	now := time.Now()
 	date := now
@@ -120,19 +134,39 @@ func addGoFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
 		date = now
 	}
 
-	timestamp := date.Unix()
-	if timestamp < expireTime {
-		return
-	}
-
-	article := &Article{
+	return &Article{
 		Title:     item.Title,
-		Timestamp: timestamp,
+		Timestamp: date.Unix(),
 		Weight:    source.Weight,
 		Informed:  false,
 		URL:       urlAddr,
 		SourceID:  source.ID,
+	}, true
+}
+
+// GoFeedArticles parses the source as a feed and returns the candidate articles
+// without reading or writing any persisted record.
+func GoFeedArticles(source *Source) ([]*Article, error) {
+	feedData, err := ParseGoFeed(source)
+	if err != nil {
+		return nil, err
 	}
 
-	feedDataDB.Save(article)
+	//nolint:prealloc //ignore this.
+	var articles []*Article
+
+	for i, item := range feedData.Items {
+		if source.MaxFetchNum > 0 && i >= source.MaxFetchNum {
+			break
+		}
+
+		article, ok := goFeedItemArticle(source, item)
+		if !ok {
+			continue
+		}
+
+		articles = append(articles, article)
+	}
+
+	return articles, nil
 }

@@ -29,6 +29,13 @@ import (
 	"github.com/vogo/vogo/vregexp"
 )
 
+// ErrNoRegexMatch is returned when the source regex matches nothing.
+// The caller decides whether that marks the source unhealthy; parsing itself
+// never writes to the database so that Preview stays side effect free.
+var ErrNoRegexMatch = errors.New("no match")
+
+// RegexParse parses the source with its regex. It performs network reads only
+// and leaves every persisted record untouched.
 func RegexParse(source *Source) ([]*Article, error) {
 	re, err := regexp.Compile(source.Regex)
 	if err != nil {
@@ -70,12 +77,8 @@ func RegexParse(source *Source) ([]*Article, error) {
 	if len(match) == 0 {
 		logger.Warnf("no match, url: %s, data: %s", source.URL, data)
 
-		updateSourceError(source, errors.New("no match"))
-
-		return nil, nil
+		return nil, ErrNoRegexMatch
 	}
-
-	updateSourceNormal(source)
 
 	//nolint:prealloc //ignore this.
 	var articles []*Article

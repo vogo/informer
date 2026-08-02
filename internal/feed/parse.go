@@ -15,47 +15,21 @@
  * limitations under the License.
  */
 
-package foodorder
+package feed
 
-import (
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-)
-
-var foodorderDB *gorm.DB
-
-func InitFoodorderDB(dataDir string) {
-	var err error
-	foodorderDB, err = gorm.Open(sqlite.Open(dataDir+"/foodorder.db"), &gorm.Config{})
-	if err != nil {
-		panic(err)
-	}
-
-	if err = foodorderDB.AutoMigrate(&FoodConfig{}); err != nil {
-		panic(err)
-	}
-
-	if err = foodorderDB.AutoMigrate(&Menu{}); err != nil {
-		panic(err)
-	}
-
-	if err = foodorderDB.AutoMigrate(&MenuItem{}); err != nil {
-		panic(err)
-	}
-
-	if err = foodorderDB.AutoMigrate(&Restaurant{}); err != nil {
-		panic(err)
-	}
-
-	if err = foodorderDB.AutoMigrate(&Order{}); err != nil {
-		panic(err)
-	}
-
-	if err = foodorderDB.AutoMigrate(&OrderItem{}); err != nil {
-		panic(err)
-	}
-
-	if err = foodorderDB.AutoMigrate(&User{}); err != nil {
-		panic(err)
+// ParseArticles parses a source with the parser its ParseType selects, falling back
+// to the historical derivation when no legal parse type is set.
+//
+// It performs network reads only: no source, article, status, timestamp or config
+// record is created or modified, so it can be called repeatedly without changing
+// any persisted state.
+func ParseArticles(source *Source) ([]*Article, error) {
+	switch source.ResolveParseType() {
+	case ParseTypeJSON:
+		return JsonParse(source)
+	case ParseTypeRegex:
+		return RegexParse(source)
+	default:
+		return GoFeedArticles(source)
 	}
 }

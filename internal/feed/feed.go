@@ -29,7 +29,9 @@ const (
 	oneDaySeconds = int64(24 * time.Hour / time.Second)
 )
 
-func AddFeeds(buf io.StringWriter, config *Config) {
+// AddFeeds writes the recommended articles into buf and returns them so that the
+// caller can record the delivery once a notification actually succeeded.
+func AddFeeds(buf io.StringWriter, config *Config) []*Article {
 	articles := UpdateAndFilterFeeds(config)
 	if len(articles) > 0 {
 		_, _ = buf.WriteString("文章推荐:\n")
@@ -38,6 +40,8 @@ func AddFeeds(buf io.StringWriter, config *Config) {
 			_, _ = buf.WriteString("- " + a.Title + ", " + a.URL + "\n")
 		}
 	}
+
+	return articles
 }
 
 func UpdateAndFilterFeeds(config *Config) []*Article {
@@ -50,14 +54,16 @@ func UpdateAndFilterFeeds(config *Config) []*Article {
 
 	var sources []*Source
 
-	feedDataDB.Model(&Source{}).Order("id").Find(&sources)
+	// only enabled sources take part in a real fetch; Preview is not restricted by Enabled.
+	feedDataDB.Model(&Source{}).Where("enabled = ?", true).Order("id").Find(&sources)
 
 	for _, source := range sources {
-		if source.IsJSON {
+		switch source.ResolveParseType() {
+		case ParseTypeJSON:
 			jsonParseFeed(config, source, expireTime)
-		} else if source.Regex != "" {
+		case ParseTypeRegex:
 			regexParseFeed(config, source, expireTime)
-		} else {
+		default:
 			addGoFeed(config, source, expireTime)
 		}
 
@@ -177,8 +183,38 @@ func saveParsedArticles(config *Config, source *Source, articles []*Article) {
 			continue
 		}
 
-		feedDataDB.Save(a)
+		saveNewArticle(a)
 	}
+}
+
+// saveNewArticle persists a freshly fetched article and stamps its first fetch time.
+// Duplicate urls never reach this function, so FetchedAt is never overwritten.
+func saveNewArticle(article *Article) {
+	if article.FetchedAt == nil {
+		fetchedAt := time.Now().Unix()
+		article.FetchedAt = &fetchedAt
+	}
+
+	feedDataDB.Save(article)
+}
+
+// MarkArticlesInformed records the moment a notification actually delivered the articles.
+// It is called only after the notification step succeeded, so a failed delivery never
+// produces an inform timestamp.
+func MarkArticlesInformed(articles []*Article, informedAt int64) error {
+	if len(articles) == 0 {
+		return nil
+	}
+
+	ids := make([]int64, 0, len(articles))
+	for _, a := range articles {
+		ids = append(ids, a.ID)
+		a.Informed = true
+		a.InformedAt = &informedAt
+	}
+
+	return feedDataDB.Model(&Article{}).Where("id IN ?", ids).
+		Updates(map[string]any{"informed": true, "informed_at": informedAt}).Error
 }
 
 func updateSourceError(source *Source, err error) {
