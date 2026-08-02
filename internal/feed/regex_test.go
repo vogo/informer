@@ -18,11 +18,21 @@
 package feed_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/vogo/informer/internal/feed"
 )
+
+// regexFixtureHTML keeps the markup shape the historical live target had, so
+// the regex parse stays verified without depending on a third-party site that
+// can change or block CI at any time.
+const regexFixtureHTML = `<html><body>
+<h6 class="favorite"><a data-v="7e6a1822" href="/article/armageddon" target="_blank" rel="" class="com-article-title"><!----> Armageddon </a></h6>
+<h6 class="favorite"><a data-v="7e6a1822" href="/article/life-planning" target="_blank" rel="" class="com-article-title"><!----> What to do when you have no idea </a></h6>
+</body></html>`
 
 func TestRegexParse(t *testing.T) {
 	t.Parallel()
@@ -50,12 +60,16 @@ func TestRegexParse(t *testing.T) {
 func TestRegexParse2(t *testing.T) {
 	t.Parallel()
 
-	if testing.Short() {
-		t.Skip("network test")
-	}
+	// the historical live target became a client rendered page, so the same
+	// parse now runs against a local fixture with the identical markup shape.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(regexFixtureHTML))
+	}))
+	defer server.Close()
 
 	articles, err := feed.RegexParse(&feed.Source{
-		URL:         "https://www.infoq.cn/profile/7A6A18227E53FA/publish/article",
+		URL:         server.URL,
 		Weight:      50,
 		MaxFetchNum: 5,
 		Regex:       `<h6[^>]+class="favorite"><a[^>]+ href="([^"]+)" target="_blank" rel="" class="com-article-title"><!----> ([^<>]+) </a></h6>`,
@@ -65,8 +79,11 @@ func TestRegexParse2(t *testing.T) {
 
 	assert.Nil(t, err)
 
-	for _, a := range articles {
-		t.Log(a.Title, a.URL)
+	if assert.Len(t, articles, 2) {
+		assert.Equal(t, "Armageddon", articles[0].Title)
+		assert.Equal(t, server.URL+"/article/armageddon", articles[0].URL)
+		assert.Equal(t, "What to do when you have no idea", articles[1].Title)
+		assert.Equal(t, server.URL+"/article/life-planning", articles[1].URL)
 	}
 }
 

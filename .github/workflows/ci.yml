@@ -1,0 +1,185 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+
+  check:
+    name: header / lint / test / codecov
+    runs-on: ubuntu-24.04
+    steps:
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: |
+            go.sum
+            cmd/informer-ui/go.sum
+
+      - name: Install tools
+        run: go install github.com/vogo/license-header-checker/cmd/license-header-checker@latest
+
+      # applies the header and fails when any file changed, so a missing
+      # Apache header is a hard CI failure instead of a local afterthought.
+      - name: Apache header check
+        run: |
+          license-header-checker -v -a -r apache-license.txt . go
+          git --no-pager diff
+          test -z "$(git status --porcelain)"
+
+      # golangci-lint owns formatting (gci/gofumpt/goimports) and the full
+      # enable-all linter set; only-new-issues keeps the historical baseline
+      # while failing loudly on anything a change introduces.
+      - name: golangci-lint (root module)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12.2
+          only-new-issues: true
+          args: --timeout=10m
+
+      - name: golangci-lint (desktop module)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12.2
+          working-directory: cmd/informer-ui
+          only-new-issues: true
+          args: --timeout=10m
+
+      - name: Go test (root module)
+        run: go test ./... -coverprofile=coverage.txt -covermode=atomic
+
+      - name: Go test (desktop module)
+        run: cd cmd/informer-ui && go test ./... -coverprofile=coverage.txt -covermode=atomic
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.txt,cmd/informer-ui/coverage.txt
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      # the CLI entry must stay buildable without cgo so that
+      # `go install github.com/vogo/informer@master` works everywhere.
+      - name: CLI build check (CGO_ENABLED=0)
+        run: |
+          CGO_ENABLED=0 go build -o /tmp/informer-root .
+          CGO_ENABLED=0 go build -o /tmp/informer-cmd ./cmd/informer
+          test -x /tmp/informer-root
+          test -x /tmp/informer-cmd
+
+  # every platform builds natively - no cross compile - and stores its result
+  # as a run artifact. CI never creates a release; release.yml owns that.
+  wails-build:
+    name: wails build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # WebKitGTK 4.0 path, the historical Linux ABI.
+          - platform: linux-ubuntu22
+            os: ubuntu-22.04
+            webkit_packages: libgtk-3-dev libwebkit2gtk-4.0-dev
+            webkit_abi: '0'
+            build_tags: ''
+          # WebKitGTK 4.1 path, required on ubuntu 24.04 and newer.
+          - platform: linux-ubuntu24
+            os: ubuntu-24.04
+            webkit_packages: libgtk-3-dev libwebkit2gtk-4.1-dev
+            webkit_abi: '1'
+            build_tags: '-tags webkit2_41'
+          - platform: macos
+            os: macos-14
+            webkit_packages: ''
+            webkit_abi: ''
+            build_tags: ''
+          - platform: windows
+            os: windows-2022
+            webkit_packages: ''
+            webkit_abi: ''
+            build_tags: ''
+    steps:
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: |
+            go.sum
+            cmd/informer-ui/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config ${{ matrix.webkit_packages }}
+
+      - name: Install wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+
+      # -webview2 embed bakes the WebView2 bootstrapper into the NSIS installer,
+      # exercised on every CI run so a broken bootstrap strategy fails early.
+      - name: Wails build
+        shell: bash
+        run: |
+          cd cmd/informer-ui
+          wails build ${{ matrix.build_tags }} -webview2 embed \
+            -ldflags "-X main.version=ci-${{ github.sha }}"
+
+      # pins the Linux binary to the WebKitGTK ABI the runner actually ships.
+      - name: Linux dynamic dependency check
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          ldd cmd/informer-ui/build/bin/informer-ui | tee /tmp/ldd.txt
+          grep -q "libwebkit2gtk-4.${{ matrix.webkit_abi }}.so" /tmp/ldd.txt
+
+      - name: Smoke version sub command
+        shell: bash
+        run: |
+          bin="cmd/informer-ui/build/bin/informer-ui"
+          if [ ! -f "$bin" ]; then bin="cmd/informer-ui/build/bin/informer-ui.exe"; fi
+          "$bin" version | grep -q "ci-${{ github.sha }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: informer-ui-ci-${{ matrix.platform }}
+          path: cmd/informer-ui/build/bin/
+          if-no-files-found: error

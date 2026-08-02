@@ -1,9 +1,10 @@
 version := v1.0.0
 
+# formatting is driven by the same golangci-lint configuration CI lints with,
+# so local formatting and CI expectations never diverge.
 format:
-		goimports -w -l .
-		go fmt
-		gofumpt -w .
+		golangci-lint fmt ./...
+		cd cmd/informer-ui && golangci-lint fmt ./...
 
 license-check:
 	# go install github.com/vogo/license-header-checker/cmd/license-header-checker@latest

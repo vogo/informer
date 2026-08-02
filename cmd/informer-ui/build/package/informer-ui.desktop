@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=informer
+GenericName=Subscription fetcher
+Comment=informer desktop client
+Exec=informer-ui
+Icon=informer-ui
+Terminal=false
+Type=Application
+Categories=Utility;Network;

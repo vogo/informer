@@ -1,0 +1,249 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+name: Release
+
+# only v* tags publish; a plain push or a non v* tag never reaches these jobs.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+
+  macos:
+    name: macOS (darwin/universal, unsigned dmg)
+    runs-on: macos-14
+    steps:
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: |
+            go.sum
+            cmd/informer-ui/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+
+      - name: Wails build (darwin/universal)
+        run: |
+          cd cmd/informer-ui
+          wails build -platform darwin/universal \
+            -ldflags "-X main.version=${{ github.ref_name }}"
+
+      # a universal build must really contain both architectures; publishing
+      # a half universal app is worse than failing the job.
+      - name: Verify universal binary
+        run: |
+          archs=$(lipo -archs cmd/informer-ui/build/bin/informer-ui.app/Contents/MacOS/informer-ui)
+          echo "architectures: $archs"
+          echo "$archs" | grep -q x86_64
+          echo "$archs" | grep -q arm64
+
+      - name: Verify injected version
+        run: |
+          shown=$(cmd/informer-ui/build/bin/informer-ui.app/Contents/MacOS/informer-ui version)
+          test "$shown" = "${{ github.ref_name }}"
+
+      - name: Package dmg (unsigned)
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "informer-ui ${{ github.ref_name }}" \
+            --window-size 600 400 \
+            --icon-size 96 \
+            --icon "informer-ui.app" 180 190 \
+            --app-drop-link 420 190 \
+            --no-internet-enable \
+            "informer-ui-${{ github.ref_name }}-darwin-universal.dmg" \
+            "cmd/informer-ui/build/bin/informer-ui.app"
+
+      - name: Upload dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-darwin
+          path: informer-ui-${{ github.ref_name }}-darwin-universal.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Windows (NSIS + WebView2 bootstrap)
+    runs-on: windows-2022
+    steps:
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: |
+            go.sum
+            cmd/informer-ui/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install wails
+        shell: bash
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+
+      # embed bakes the WebView2 bootstrapper into the installer itself, so a
+      # machine without WebView2 can install offline; the bare build success
+      # does not prove the bootstrap made it into NSIS, hence the smoke check.
+      - name: Wails build (NSIS, WebView2 embed)
+        shell: bash
+        run: |
+          cd cmd/informer-ui
+          wails build -platform windows/amd64 -webview2 embed \
+            -ldflags "-X main.version=${{ github.ref_name }}"
+
+      - name: Verify injected version
+        shell: bash
+        run: |
+          shown=$(./cmd/informer-ui/build/bin/informer-ui.exe version)
+          test "$shown" = "${{ github.ref_name }}"
+
+      - name: Rename installer asset
+        shell: bash
+        run: |
+          mv cmd/informer-ui/build/bin/informer-ui-amd64-installer.exe \
+            "informer-ui-${{ github.ref_name }}-windows-amd64-setup.exe"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: informer-ui-${{ github.ref_name }}-windows-amd64-setup.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux (x86_64 tar.gz + deb)
+    runs-on: ubuntu-24.04
+    steps:
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: |
+            go.sum
+            cmd/informer-ui/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # ubuntu 24.04 ships WebKitGTK 4.1 only, so the build carries the
+      # matching wails build tag; the runner, the packages and the tag are
+      # pinned together on purpose.
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install wails and nfpm
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1
+
+      - name: Wails build (linux/amd64)
+        run: |
+          cd cmd/informer-ui
+          wails build -platform linux/amd64 -tags webkit2_41 \
+            -ldflags "-X main.version=${{ github.ref_name }}"
+
+      - name: Verify dynamic WebKitGTK ABI
+        run: |
+          ldd cmd/informer-ui/build/bin/informer-ui | tee /tmp/ldd.txt
+          grep -q "libwebkit2gtk-4.1.so" /tmp/ldd.txt
+
+      - name: Verify injected version
+        run: |
+          shown=$(cmd/informer-ui/build/bin/informer-ui version)
+          test "$shown" = "${{ github.ref_name }}"
+
+      - name: Package tar.gz
+        run: |
+          tar -czf "informer-ui-${{ github.ref_name }}-linux-amd64.tar.gz" \
+            -C cmd/informer-ui/build/bin informer-ui
+
+      - name: Package deb
+        run: |
+          cd cmd/informer-ui
+          INFORMER_UI_VERSION="${GITHUB_REF_NAME#v}" \
+            nfpm package --config build/nfpm.yaml --packager deb \
+            --target "../informer-ui-${{ github.ref_name }}-linux-amd64.deb"
+
+      - name: Verify deb metadata and layout
+        run: |
+          dpkg-deb --info "informer-ui-${{ github.ref_name }}-linux-amd64.deb"
+          dpkg-deb --contents "informer-ui-${{ github.ref_name }}-linux-amd64.deb" | grep /usr/bin/informer-ui
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: |
+            informer-ui-${{ github.ref_name }}-linux-amd64.tar.gz
+            informer-ui-${{ github.ref_name }}-linux-amd64.deb
+          if-no-files-found: error
+
+  # the aggregate job only collects and publishes. It depends on every
+  # platform job, so a partial set of assets never becomes a release; a rerun
+  # of the same tag updates the same release with identically named assets.
+  publish:
+    name: Publish GitHub Release
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-24.04
+    steps:
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release assets
+        run: ls -la artifacts
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*

@@ -5,6 +5,27 @@
 GOBIN=$(pwd) go install github.com/vogo/informer@master
 ```
 
+命令行入口为 `cmd/informer`（根包入口为保持上面的安装方式而保留，两者行为完全一致）。
+CLI 可以在 `CGO_ENABLED=0` 下构建。
+
+## 桌面版 informer-ui
+
+`cmd/informer-ui` 是 Wails v2 + Vue 3 + Naive UI 的桌面入口，与 CLI 共用同一数据目录和 Service 层，
+提供订阅的新增 / 编辑 / 删除与「测试抓取」预览（真实抓取，但不写库、不改订阅状态）。
+桌面版需要 CGO（原生 WebView 与 mattn/go-sqlite3）。
+
+本地开发（需要安装 [wails v2 CLI](https://wails.io/docs/gettingstarted/installation)、Node.js 与 C 编译器）：
+
+```bash
+cd cmd/informer-ui
+wails dev      # 本地运行
+wails build    # 出包，产物在 build/bin/
+```
+
+发布：打 `v*` 标签后由 `release.yml` 在 macOS / Windows / Linux 三个原生 runner 上构建，
+并聚合发布到 GitHub Release（macOS 为未签名 universal dmg，Windows 为内置 WebView2 引导的
+NSIS 安装包，Linux 为 x86_64 tar.gz 与 deb）。本阶段不做代码签名 / 公证。
+
 ## 数据目录
 
 informer 的所有数据（`informer.json`、`feed.db`、`data/<年份>/<日期>.md`）都存放在**同一个数据主目录**中：

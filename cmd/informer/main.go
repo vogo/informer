@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-// Package main is the thin root entry kept so that `go install
-// github.com/vogo/informer@master` still produces the informer binary. It
-// shares the exact startup function with cmd/informer, the formal command
-// line entry, so the two cannot fork.
+// Command informer is the formal command line entry of informer. It shares the
+// exact startup function with the root package compat entry, so `go build
+// ./cmd/informer` and `go install github.com/vogo/informer@master` behave
+// identically. The CLI stays CGO free at build time.
 package main
 
 import (
