@@ -52,13 +52,13 @@ type ConfigViewDTO struct {
 	PreservedKeys []string `json:"preservedKeys"`
 }
 
-// SecretsViewDTO is the credential state of the settings page. The webhook itself
-// never crosses the binding: the page only learns that one is configured.
+// SecretsViewDTO is the credential state of the settings page. The webhook is a
+// plain bot address rather than a secret, so the page shows it in full.
 type SecretsViewDTO struct {
 	Path              string `json:"path"`
 	Exists            bool   `json:"exists"`
 	WebhookConfigured bool   `json:"webhookConfigured"`
-	WebhookMasked     string `json:"webhookMasked"`
+	Webhook           string `json:"webhook"`
 }
 
 // HistoryIndexDTO reports what one history index rebuild did.
@@ -151,7 +151,7 @@ func (a *App) ReadSecrets() (*SecretsViewDTO, error) {
 		Path:              view.Path,
 		Exists:            view.Exists,
 		WebhookConfigured: view.WebhookConfigured,
-		WebhookMasked:     view.WebhookMasked,
+		Webhook:           view.Webhook,
 	}, nil
 }
 

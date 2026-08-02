@@ -321,7 +321,7 @@ func TestConfigBindingsRoundTrip(t *testing.T) {
 	assert.Equal(t, 15, view.Feed.MaxInformFeedSize)
 }
 
-func TestWebhookBindingKeepsTheSecretOutOfTheFrontend(t *testing.T) {
+func TestWebhookBindingReturnsTheStoredAddress(t *testing.T) {
 	t.Parallel()
 
 	app := newTestApp(t)
@@ -337,7 +337,7 @@ func TestWebhookBindingKeepsTheSecretOutOfTheFrontend(t *testing.T) {
 	view, err = app.ReadSecrets()
 	require.NoError(t, err)
 	assert.True(t, view.WebhookConfigured)
-	assert.NotContains(t, view.WebhookMasked, "secret-token")
+	assert.Equal(t, webhook, view.Webhook)
 
 	if runtime.GOOS != "windows" {
 		info, statErr := os.Stat(view.Path)
