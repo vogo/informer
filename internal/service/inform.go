@@ -20,14 +20,18 @@ package service
 import (
 	"time"
 
+	"github.com/vogo/logger"
+
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/inform"
-	"github.com/vogo/logger"
 )
 
 // TriggerInform runs one full inform cycle: fetch, deduplicate, score, apply the
 // same site limit, build the message, store the daily file and deliver it to the bot
 // at urlAddr. It is the single entry point of the scheduled CLI notification.
+//
+// An empty urlAddr falls back to the webhook stored in the credential file, so a run
+// started without an argument still delivers what the desktop app configured.
 //
 // The inform timestamp of the selected articles is written only after the
 // notification step actually succeeded, so a failed delivery leaves InformedAt empty.
@@ -39,7 +43,7 @@ func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 
 	result, err := inform.Run(&inform.Options{
 		HomeDir:    s.homeDir,
-		URLAddr:    urlAddr,
+		URLAddr:    s.ResolveWebhook(urlAddr),
 		FeedConfig: s.EffectiveFeedConfig(fileConfig),
 	})
 	if err != nil {

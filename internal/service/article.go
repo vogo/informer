@@ -20,8 +20,9 @@ package service
 import (
 	"fmt"
 
-	"github.com/vogo/informer/internal/feed"
 	"gorm.io/gorm"
+
+	"github.com/vogo/informer/internal/feed"
 )
 
 // articleOrder is the stable listing order of articles: newest id first.
@@ -102,9 +103,82 @@ func (s *Service) DeleteArticle(id int64) error {
 	return nil
 }
 
+// ArticleCursor asks for one slice of the descending id ordered article list.
+type ArticleCursor struct {
+	// Before is exclusive: only articles with a smaller id are returned.
+	// A zero value starts at the newest article.
+	Before int64 `json:"before"`
+
+	// Limit is the page size, clamped into the supported bounds.
+	Limit int `json:"limit"`
+}
+
+// ArticleCursorPage is one cursor page of articles, newest first.
+type ArticleCursorPage struct {
+	Items []*feed.Article `json:"items"`
+
+	// NextCursor is the Before value of the following page. It is zero when the
+	// page is the last one, so a caller can stop without a second query.
+	NextCursor int64 `json:"next_cursor"`
+
+	// Limit is the page size actually applied after clamping.
+	Limit int `json:"limit"`
+
+	HasMore bool `json:"has_more"`
+}
+
 // ListArticles returns one page of articles, newest first.
 func (s *Service) ListArticles(query ArticleQuery, page PageRequest) (*Page[*feed.Article], error) {
 	return findPage[*feed.Article](s.articleQuery(query), articleOrder, page)
+}
+
+// ListArticlesByCursor returns one cursor page of articles, newest id first.
+//
+// The cursor is the article id itself, which is unique and never reused, so a page
+// boundary cannot drop or repeat a row while articles are being inserted - unlike an
+// offset, which shifts under every new article. Paging back is the caller's job: it
+// remembers the cursor of each page it opened, because a stable "previous" cursor
+// cannot be derived from the current page alone.
+func (s *Service) ListArticlesByCursor(query ArticleQuery, cursor ArticleCursor) (*ArticleCursorPage, error) {
+	limit := cursor.Limit
+	if limit <= 0 {
+		limit = DefaultPageLimit
+	}
+
+	if limit > MaxPageLimit {
+		limit = MaxPageLimit
+	}
+
+	if cursor.Before < 0 {
+		return nil, fmt.Errorf("%w: article cursor %d is negative", ErrInvalidArgument, cursor.Before)
+	}
+
+	db := s.articleQuery(query)
+	if cursor.Before > 0 {
+		db = db.Where("articles.id < ?", cursor.Before)
+	}
+
+	// one extra row answers "is there a next page" without a second count query.
+	var items []*feed.Article
+
+	err := db.Order(articleOrder).Limit(limit + 1).Find(&items).Error
+	if err != nil {
+		return nil, fmt.Errorf("list articles by cursor: %w", err)
+	}
+
+	page := &ArticleCursorPage{Items: items, Limit: limit}
+
+	if len(items) > limit {
+		page.Items = items[:limit]
+		page.HasMore = true
+		page.NextCursor = page.Items[limit-1].ID
+	}
+
+	if page.Items == nil {
+		page.Items = []*feed.Article{}
+	}
+
+	return page, nil
 }
 
 func (s *Service) articleQuery(query ArticleQuery) *gorm.DB {

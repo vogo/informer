@@ -20,6 +20,8 @@ package service
 import (
 	"fmt"
 
+	"gorm.io/gorm"
+
 	"github.com/vogo/informer/internal/feed"
 )
 
@@ -96,6 +98,93 @@ func (s *Service) DeleteCategory(id int64) error {
 	}
 
 	return nil
+}
+
+// DeleteCategoryReassigning removes a category after moving every source it still
+// owns to targetID. It is the explicit second half of the delete rule: DeleteCategory
+// refuses a category in use, and a caller that wants the delete anyway has to name the
+// category the orphans go to. Both statements run in one transaction, so a failure
+// leaves neither a dangling source nor a half applied move.
+//
+// It returns the number of sources actually moved.
+func (s *Service) DeleteCategoryReassigning(id, targetID int64) (int64, error) {
+	if id == feed.DefaultCategoryID {
+		return 0, fmt.Errorf("%w: the default category cannot be deleted", ErrInvalidArgument)
+	}
+
+	if targetID == id {
+		return 0, fmt.Errorf("%w: cannot reassign sources to the deleted category %d", ErrInvalidArgument, id)
+	}
+
+	_, err := s.GetCategory(id)
+	if err != nil {
+		return 0, err
+	}
+
+	err = s.requireCategory(targetID)
+	if err != nil {
+		return 0, err
+	}
+
+	var moved int64
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&feed.Source{}).Where("category_id = ?", id).Update("category_id", targetID)
+		if result.Error != nil {
+			return fmt.Errorf("move sources of category %d to %d: %w", id, targetID, result.Error)
+		}
+
+		moved = result.RowsAffected
+
+		deleteErr := tx.Where("id = ?", id).Delete(&feed.Category{}).Error
+		if deleteErr != nil {
+			return fmt.Errorf("delete category %d: %w", id, deleteErr)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return moved, nil
+}
+
+// CountCategorySources reports how many sources point at one category, the number the
+// UI shows before asking whether the sources should be moved or the delete canceled.
+func (s *Service) CountCategorySources(id int64) (int64, error) {
+	var count int64
+
+	err := s.db.Model(&feed.Source{}).Where("category_id = ?", id).Count(&count).Error
+	if err != nil {
+		return 0, fmt.Errorf("count sources of category %d: %w", id, err)
+	}
+
+	return count, nil
+}
+
+// CategorySourceCounts returns the number of sources of every category in one query,
+// so the category tree can show its counts without a lookup per row.
+func (s *Service) CategorySourceCounts() (map[int64]int64, error) {
+	var rows []struct {
+		CategoryID int64
+		Total      int64
+	}
+
+	err := s.db.Model(&feed.Source{}).
+		Select("category_id, count(*) as total").
+		Group("category_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("count sources per category: %w", err)
+	}
+
+	counts := make(map[int64]int64, len(rows))
+	for _, row := range rows {
+		counts[row.CategoryID] = row.Total
+	}
+
+	return counts, nil
 }
 
 // ListCategories returns one page of categories ordered by sort value, then id.

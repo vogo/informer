@@ -109,15 +109,16 @@ func toSourceDTO(source *feed.Source) *SourceDTO {
 	}
 }
 
-// ListSources returns every subscription ordered by id. The result is never
-// nil so an empty database renders as an empty table, not a failure.
-func (a *App) ListSources() ([]*SourceDTO, error) {
+// ListSources returns the subscriptions of one category ordered by id, or every
+// subscription when categoryID is zero. The result is never nil so an empty
+// database renders as an empty list, not a failure.
+func (a *App) ListSources(categoryID int64) ([]*SourceDTO, error) {
 	err := a.ready()
 	if err != nil {
 		return nil, err
 	}
 
-	sources, err := a.svc.AllSources(service.SourceQuery{})
+	sources, err := a.svc.AllSources(service.SourceQuery{CategoryID: categoryID})
 	if err != nil {
 		return nil, err
 	}
