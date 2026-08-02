@@ -125,7 +125,7 @@ jobs:
         shell: bash
         run: |
           cd cmd/informer-ui
-          wails build -platform windows/amd64 -webview2 embed \
+          wails build -platform windows/amd64 -nsis -webview2 embed \
             -ldflags "-X main.version=${{ github.ref_name }}"
 
       - name: Verify injected version
