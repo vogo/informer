@@ -23,10 +23,41 @@ import (
 	"net/http"
 
 	"github.com/vogo/logger"
+
+	"github.com/vogo/informer/internal/httpx"
 )
 
+// dailyURL is the endpoint of the daily sentence. It is a variable so tests
+// can aim the fetch at a local server instead of the public one.
+var dailyURL = "http://open.iciba.com/dsapi/"
+
+// client fetches the daily sentence. It is the shared httpx client whose 60s
+// timeout turns a hung connection into the empty fallback, so a frozen
+// endpoint can never occupy the inform run forever. It is a variable so tests
+// can shorten the deadline without touching the production default.
+var client = httpx.HTTPClient
+
+// SetClientForTest swaps the fetch client and returns a restore function.
+// It is the seam the timeout tests use to degrade a frozen endpoint in
+// milliseconds instead of waiting out the full production deadline.
+func SetClientForTest(c *http.Client) func() {
+	previous := client
+	client = c
+
+	return func() { client = previous }
+}
+
+// SetURLForTest swaps the daily sentence endpoint and returns a restore
+// function, so tests can hermetically exercise the fetch and its fallback.
+func SetURLForTest(url string) func() {
+	previous := dailyURL
+	dailyURL = url
+
+	return func() { dailyURL = previous }
+}
+
 func GetDailySoup() string {
-	resp, err := http.Get("http://open.iciba.com/dsapi/")
+	resp, err := client.Get(dailyURL)
 	if err != nil {
 		logger.Infof("err: %v", err)
 

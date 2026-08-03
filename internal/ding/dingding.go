@@ -26,12 +26,30 @@ import (
 	"time"
 
 	"github.com/vogo/logger"
+
+	"github.com/vogo/informer/internal/httpx"
 )
 
 const Host = "dingtalk.com"
 
 // ErrDingResponse marks a dingtalk bot answering with a non successful status.
 var ErrDingResponse = errors.New("ding response error")
+
+// client delivers the webhook request. It is the shared httpx client whose 60s
+// timeout turns a hung connection into a delivery failure, so one frozen bot
+// can never occupy the inform run forever. It is a variable so tests can
+// shorten the deadline without touching the production default.
+var client = httpx.HTTPClient
+
+// SetClientForTest swaps the delivery client and returns a restore function.
+// It is the seam the timeout tests use to fail a frozen webhook in
+// milliseconds instead of waiting out the full production deadline.
+func SetClientForTest(c *http.Client) func() {
+	previous := client
+	client = c
+
+	return func() { client = previous }
+}
 
 type MsgText struct {
 	Content string `json:"content"`
@@ -70,7 +88,7 @@ func Ding(url, content, user string, weekday time.Weekday) error {
 	logger.Infof("ding url: %s", url)
 	logger.Infof("ding data: %s", data)
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
+	resp, err := client.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("post ding message: %w", err)
 	}
