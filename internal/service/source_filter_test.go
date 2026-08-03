@@ -223,7 +223,7 @@ func TestSourceQueryRejectsUnknownFilterValues(t *testing.T) {
 func TestAllSourcesCombinesEveryFilterWithAnd(t *testing.T) {
 	svc := newService(t)
 
-	category := &feed.Category{Name: "过滤组合", Sort: 1}
+	category := &feed.Category{Name: "filter-combination", Sort: 1}
 	require.NoError(t, svc.CreateCategory(category))
 
 	// the one record that satisfies all four dimensions: in the category, json

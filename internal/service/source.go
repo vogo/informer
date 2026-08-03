@@ -193,7 +193,8 @@ func (s *Service) AllSources(query SourceQuery) ([]*feed.Source, error) {
 
 	var sources []*feed.Source
 
-	if err := db.Order("id asc").Find(&sources).Error; err != nil {
+	err = db.Order("id asc").Find(&sources).Error
+	if err != nil {
 		return nil, fmt.Errorf("list sources: %w", err)
 	}
 
