@@ -20,11 +20,28 @@ package service
 import (
 	"fmt"
 
-	"github.com/vogo/informer/internal/feed"
 	"gorm.io/gorm"
+
+	"github.com/vogo/informer/internal/feed"
 )
 
-// SourceQuery filters a source listing.
+// Fetch health states a source listing can be restricted to. They name the same
+// three buckets the subscription cards show, so a filter can never select a
+// state the card labels differently.
+const (
+	// FetchStatusNormal is feed.StatusNormal: the last fetch succeeded.
+	FetchStatusNormal = "normal"
+
+	// FetchStatusError is feed.StatusError: the last fetch failed.
+	FetchStatusError = "error"
+
+	// FetchStatusUnfetched is every other stored value, zero included: the
+	// source has no recorded fetch outcome yet.
+	FetchStatusUnfetched = "unfetched"
+)
+
+// SourceQuery filters a source listing. Every field is optional and the set of
+// filled ones is combined with AND; an empty query lists everything.
 type SourceQuery struct {
 	// CategoryID restricts the result to one category when it is greater than zero.
 	CategoryID int64 `json:"category_id"`
@@ -34,6 +51,18 @@ type SourceQuery struct {
 
 	// Keyword matches the title or the url when it is not empty.
 	Keyword string `json:"keyword"`
+
+	// ParseType restricts the result to one resolved parse type when it is not
+	// empty. It matches feed.Source.ResolveParseType, not the stored column, so
+	// a record that still derives its type from the historical IsJSON and Regex
+	// fields is filtered exactly as the list renders it. An unsupported value is
+	// an ErrInvalidArgument rather than a silent "everything".
+	ParseType string `json:"parse_type"`
+
+	// FetchStatus restricts the result to one of FetchStatusNormal,
+	// FetchStatusError or FetchStatusUnfetched when it is not empty. Any other
+	// value is an ErrInvalidArgument.
+	FetchStatus string `json:"fetch_status"`
 }
 
 // CreateSource stores a new source. A source is enabled by default and belongs to
@@ -147,21 +176,32 @@ func (s *Service) DeleteSource(id int64) error {
 
 // ListSources returns one page of sources ordered by id.
 func (s *Service) ListSources(query SourceQuery, page PageRequest) (*Page[*feed.Source], error) {
-	return findPage[*feed.Source](s.sourceQuery(query), "id asc", page)
+	db, err := s.sourceQuery(query)
+	if err != nil {
+		return nil, err
+	}
+
+	return findPage[*feed.Source](db, "id asc", page)
 }
 
 // AllSources returns every source ordered by id, for callers that need the whole set.
 func (s *Service) AllSources(query SourceQuery) ([]*feed.Source, error) {
+	db, err := s.sourceQuery(query)
+	if err != nil {
+		return nil, err
+	}
+
 	var sources []*feed.Source
 
-	if err := s.sourceQuery(query).Order("id asc").Find(&sources).Error; err != nil {
+	err = db.Order("id asc").Find(&sources).Error
+	if err != nil {
 		return nil, fmt.Errorf("list sources: %w", err)
 	}
 
 	return sources, nil
 }
 
-func (s *Service) sourceQuery(query SourceQuery) *gorm.DB {
+func (s *Service) sourceQuery(query SourceQuery) (*gorm.DB, error) {
 	db := s.db.Model(&feed.Source{})
 
 	if query.CategoryID > 0 {
@@ -177,5 +217,93 @@ func (s *Service) sourceQuery(query SourceQuery) *gorm.DB {
 		db = db.Where("title LIKE ? OR url LIKE ?", like, like)
 	}
 
-	return db
+	if query.ParseType != "" {
+		condition, err := resolvedParseTypeCondition(query.ParseType)
+		if err != nil {
+			return nil, err
+		}
+
+		db = db.Where(condition.sql, condition.args...)
+	}
+
+	if query.FetchStatus != "" {
+		condition, err := fetchStatusCondition(query.FetchStatus)
+		if err != nil {
+			return nil, err
+		}
+
+		db = db.Where(condition.sql, condition.args...)
+	}
+
+	return db, nil
+}
+
+// sourceCondition is one SQL fragment and the arguments it binds.
+type sourceCondition struct {
+	sql  string
+	args []any
+}
+
+// resolvedParseTypeCondition renders feed.Source.ResolveParseType as SQL: the
+// explicit column wins when it holds a supported value, otherwise the historical
+// derivation from IsJSON and Regex decides. Both branches are needed because a
+// record written before the parse type column existed still carries an empty -
+// or an unknown, since removed - value there.
+func resolvedParseTypeCondition(parseType string) (sourceCondition, error) {
+	if !feed.IsLegalParseType(parseType) {
+		return sourceCondition{}, fmt.Errorf("%w: unknown parse type %q", ErrInvalidArgument, parseType)
+	}
+
+	// the explicit branch alone already answers the whole question for a parse
+	// type the legacy columns cannot express - a parser added after they were
+	// frozen - because deriving would never name it either.
+	const explicit = "COALESCE(parse_type, '') = ?"
+
+	legacy := legacyParseTypeCondition(parseType)
+	if legacy.sql == "" {
+		return sourceCondition{sql: "(" + explicit + ")", args: []any{parseType}}, nil
+	}
+
+	return sourceCondition{
+		sql:  "(" + explicit + " OR (COALESCE(parse_type, '') NOT IN ? AND " + legacy.sql + "))",
+		args: append([]any{parseType, feed.LegalParseTypes()}, legacy.args...),
+	}, nil
+}
+
+// legacyParseTypeCondition mirrors feed.DeriveParseType over the historical
+// columns. It returns an empty condition for a parse type the old fields have
+// no way to express.
+func legacyParseTypeCondition(parseType string) sourceCondition {
+	switch parseType {
+	case feed.ParseTypeJSON:
+		return sourceCondition{sql: "is_json = ?", args: []any{true}}
+	case feed.ParseTypeRegex:
+		return sourceCondition{sql: "is_json = ? AND COALESCE(regex, '') != ''", args: []any{false}}
+	case feed.ParseTypeFeed:
+		return sourceCondition{sql: "is_json = ? AND COALESCE(regex, '') = ''", args: []any{false}}
+	default:
+		return sourceCondition{}
+	}
+}
+
+// fetchStatusCondition maps one health bucket to SQL. "Unfetched" is defined as
+// the complement of the two known states, so a stray value stored by an older
+// build lands in the same bucket the card shows it in instead of disappearing
+// from every filter.
+func fetchStatusCondition(status string) (sourceCondition, error) {
+	const knownStatus = "status = ?"
+
+	switch status {
+	case FetchStatusNormal:
+		return sourceCondition{sql: knownStatus, args: []any{feed.StatusNormal}}, nil
+	case FetchStatusError:
+		return sourceCondition{sql: knownStatus, args: []any{feed.StatusError}}, nil
+	case FetchStatusUnfetched:
+		return sourceCondition{
+			sql:  "COALESCE(status, 0) NOT IN ?",
+			args: []any{[]int{feed.StatusNormal, feed.StatusError}},
+		}, nil
+	default:
+		return sourceCondition{}, fmt.Errorf("%w: unknown fetch status %q", ErrInvalidArgument, status)
+	}
 }

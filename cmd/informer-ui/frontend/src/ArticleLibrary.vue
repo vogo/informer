@@ -49,7 +49,12 @@ onMounted(async () => {
 
 async function loadFilters() {
   try {
-    const [categories, sources] = await Promise.all([ListCategories(), ListSources(0)])
+    // the article library names every subscription that ever produced an
+    // article, so it asks for the unfiltered set on purpose.
+    const [categories, sources] = await Promise.all([
+      ListCategories(),
+      ListSources({categoryId: 0, parseType: '', fetchStatus: '', enabledState: ''})
+    ])
 
     categoryOptions.value = [
       {label: '全部分类', value: 0},

@@ -114,16 +114,57 @@ func toSourceDTO(source *feed.Source) *SourceDTO {
 	}
 }
 
-// ListSources returns the subscriptions of one category ordered by id, or every
-// subscription when categoryID is zero. The result is never nil so an empty
-// database renders as an empty list, not a failure.
-func (a *App) ListSources(categoryID int64) ([]*SourceDTO, error) {
+// Enabled states a subscription listing can be restricted to. The tri state is
+// spelled out instead of sent as a nullable boolean, because the sidebar has to
+// distinguish "no opinion" from "explicitly disabled" across the json boundary.
+const (
+	EnabledStateOn  = "enabled"
+	EnabledStateOff = "disabled"
+)
+
+// SourceQueryRequest is the filter snapshot the subscription page submits. Every
+// field is optional and an empty one drops that dimension; the filled ones are
+// combined with AND. An unknown value is a reported error rather than a
+// silently unfiltered list, so a stale frontend cannot claim a filter took hold.
+type SourceQueryRequest struct {
+	// CategoryID restricts the listing to one category, zero means every category.
+	CategoryID int64 `json:"categoryId"`
+
+	// ParseType is one of SupportedParseTypes and matches the resolved type -
+	// the same value SourceDTO.ResolvedParseType carries and the card shows.
+	ParseType string `json:"parseType"`
+
+	// FetchStatus is "normal", "error" or "unfetched".
+	FetchStatus string `json:"fetchStatus"`
+
+	// EnabledState is EnabledStateOn or EnabledStateOff.
+	EnabledState string `json:"enabledState"`
+}
+
+// SupportedParseTypes returns the parse types a subscription can be filtered by,
+// in presentation order. It answers from the parser set itself, so a sidebar
+// built from this list offers exactly the types the query accepts. It reads no
+// database and therefore stays available while the app reports a startup error.
+func (a *App) SupportedParseTypes() []string {
+	return feed.LegalParseTypes()
+}
+
+// ListSources returns the subscriptions matching the filter snapshot, ordered by
+// id. A nil request lists every subscription. The result is never nil so an
+// empty database - or a filter nothing matches - renders as an empty list,
+// not a failure.
+func (a *App) ListSources(req *SourceQueryRequest) ([]*SourceDTO, error) {
 	err := a.ready()
 	if err != nil {
 		return nil, err
 	}
 
-	sources, err := a.svc.AllSources(service.SourceQuery{CategoryID: categoryID})
+	query, err := toSourceQuery(req)
+	if err != nil {
+		return nil, err
+	}
+
+	sources, err := a.svc.AllSources(query)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +175,36 @@ func (a *App) ListSources(categoryID int64) ([]*SourceDTO, error) {
 	}
 
 	return dtos, nil
+}
+
+// toSourceQuery maps the frontend filter snapshot onto the service query. The
+// parse type and the fetch status pass through untouched: the service owns their
+// vocabulary and rejects an unknown value there, in one place.
+func toSourceQuery(req *SourceQueryRequest) (service.SourceQuery, error) {
+	if req == nil {
+		return service.SourceQuery{}, nil
+	}
+
+	query := service.SourceQuery{
+		CategoryID:  req.CategoryID,
+		ParseType:   req.ParseType,
+		FetchStatus: req.FetchStatus,
+	}
+
+	switch req.EnabledState {
+	case "":
+	case EnabledStateOn:
+		enabled := true
+		query.Enabled = &enabled
+	case EnabledStateOff:
+		disabled := false
+		query.Enabled = &disabled
+	default:
+		return service.SourceQuery{},
+			fmt.Errorf("%w: unknown enabled state %q", service.ErrInvalidArgument, req.EnabledState)
+	}
+
+	return query, nil
 }
 
 // CreateSource stores a new subscription and returns the stored record.

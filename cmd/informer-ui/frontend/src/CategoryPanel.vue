@@ -23,9 +23,24 @@ import {errorText} from './errors'
 
 type CategoryDTO = main.CategoryDTO
 
-const props = defineProps<{selectedId: number}>()
+const props = defineProps<{
+  selectedId: number
+  // the three filter dimensions the page owns; this panel only renders them and
+  // reports a pick, so the query snapshot never lives in two places.
+  parseType: string
+  fetchStatus: string
+  enabledState: string
+  // parseTypeOptions are the parse types the backend supports, in its own order.
+  // A type added there shows up here without touching this file.
+  parseTypeOptions: string[]
+}>()
 const emit = defineEmits<{
   (e: 'update:selectedId', id: number): void
+  (e: 'update:parseType', value: string): void
+  (e: 'update:fetchStatus', value: string): void
+  (e: 'update:enabledState', value: string): void
+  // clearFilters resets the category and all three dimensions at once.
+  (e: 'clearFilters'): void
   // changed fires whenever the tree or a subscription assignment moved, so the
   // subscription list next to it reloads instead of showing a stale category.
   (e: 'changed'): void
@@ -47,6 +62,47 @@ const reassignTo = ref<number | null>(null)
 const deleteBusy = ref(false)
 
 const totalSources = computed(() => categories.value.reduce((sum, c) => sum + c.sourceCount, 0))
+
+// FilterChoice is one selectable value of a dimension; an empty value is the
+// "no constraint" entry every dimension starts on.
+interface FilterChoice {
+  label: string
+  value: string
+}
+
+// the fetch health wording is the wording the subscription cards use, so a pick
+// here and a tag over there can never name the same state differently.
+const fetchStatusChoices: FilterChoice[] = [
+  {label: '全部', value: ''},
+  {label: '正常', value: 'normal'},
+  {label: '抓取失败', value: 'error'},
+  {label: '未抓取', value: 'unfetched'}
+]
+
+const enabledStateChoices: FilterChoice[] = [
+  {label: '全部', value: ''},
+  {label: '启用', value: 'enabled'},
+  {label: '停用', value: 'disabled'}
+]
+
+// a parse type is shown under the name the backend uses, which is also the name
+// printed on every card, so an unfamiliar future type still renders correctly.
+const parseTypeChoices = computed<FilterChoice[]>(() => [
+  {label: '全部', value: ''},
+  ...props.parseTypeOptions.map(value => ({label: value, value}))
+])
+
+const filterGroups = computed(() => [
+  {key: 'parseType' as const, title: '来源类型', value: props.parseType, choices: parseTypeChoices.value},
+  {key: 'fetchStatus' as const, title: '抓取状态', value: props.fetchStatus, choices: fetchStatusChoices},
+  {key: 'enabledState' as const, title: '启停状态', value: props.enabledState, choices: enabledStateChoices}
+])
+
+// the clear entry stays out of the way until something is actually filtered,
+// the category tree included: clearing returns the page to its default view.
+const hasActiveFilter = computed(
+  () => props.selectedId !== 0 || props.parseType !== '' || props.fetchStatus !== '' || props.enabledState !== ''
+)
 const editorTitle = computed(() => (form.id === 0 ? '新增分类' : `编辑分类 #${form.id}`))
 
 // the deleted category is never a valid destination for its own subscriptions.
@@ -80,6 +136,22 @@ defineExpose({reload: load})
 
 function select(id: number) {
   emit('update:selectedId', id)
+}
+
+// pick reports a single value per dimension; picking the active one again is a
+// no-op rather than a toggle, so a dimension always names exactly one state.
+function pick(key: 'parseType' | 'fetchStatus' | 'enabledState', value: string) {
+  if (props[key] === value) {
+    return
+  }
+
+  if (key === 'parseType') {
+    emit('update:parseType', value)
+  } else if (key === 'fetchStatus') {
+    emit('update:fetchStatus', value)
+  } else {
+    emit('update:enabledState', value)
+  }
 }
 
 function openCreate() {
@@ -185,7 +257,7 @@ async function confirmReassignDelete() {
       </div>
     </n-alert>
 
-    <n-spin v-else :show="loading">
+    <n-spin v-else :show="loading" class="tree-area">
       <div class="tree">
         <div class="node" :class="{active: selectedId === 0}" @click="select(0)">
           <span class="node-name">全部订阅</span>
@@ -221,6 +293,31 @@ async function confirmReassignDelete() {
         />
       </div>
     </n-spin>
+
+    <div class="filters">
+      <div class="filter-header">
+        <n-text strong>过滤</n-text>
+        <n-button v-if="hasActiveFilter" size="tiny" text type="primary" @click="emit('clearFilters')">
+          清除过滤
+        </n-button>
+      </div>
+
+      <div v-for="group in filterGroups" :key="group.key" class="filter-group">
+        <n-text depth="3" class="filter-title">{{ group.title }}</n-text>
+        <div class="filter-choices">
+          <n-tag
+            v-for="choice in group.choices"
+            :key="choice.value"
+            size="small"
+            checkable
+            :checked="group.value === choice.value"
+            @update:checked="pick(group.key, choice.value)"
+          >
+            {{ choice.label }}
+          </n-tag>
+        </div>
+      </div>
+    </div>
 
     <n-modal v-model:show="showEditor" preset="card" :title="editorTitle" style="width: 420px" :mask-closable="false">
       <n-form :model="form" label-placement="left" label-width="auto">
@@ -291,9 +388,44 @@ async function confirmReassignDelete() {
   border-bottom: 1px solid var(--n-border-color, #efeff5);
 }
 
+/* the tree takes the space the filter block below it does not need, so a long
+   category list scrolls instead of pushing the filters out of view. */
+.tree-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .tree {
   padding: 6px;
-  overflow-y: auto;
+}
+
+.filters {
+  flex: none;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--n-border-color, #efeff5);
+}
+
+.filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 22px;
+}
+
+.filter-group {
+  margin-top: 8px;
+}
+
+.filter-title {
+  font-size: 12px;
+}
+
+.filter-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
 }
 
 .node {

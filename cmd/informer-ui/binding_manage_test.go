@@ -102,7 +102,7 @@ func TestDeleteCategoryReportsUseBeforeMoving(t *testing.T) {
 	assert.True(t, done.Deleted)
 	assert.Equal(t, int64(1), done.Moved)
 
-	sources, err := app.ListSources(0)
+	sources, err := app.ListSources(nil)
 	require.NoError(t, err)
 	require.Len(t, sources, 1)
 	assert.Equal(t, source.ID, sources[0].ID)
@@ -132,11 +132,11 @@ func TestListSourcesFiltersByCategory(t *testing.T) {
 	_, err = app.CreateSource(elsewhere)
 	require.NoError(t, err)
 
-	all, err := app.ListSources(0)
+	all, err := app.ListSources(nil)
 	require.NoError(t, err)
 	assert.Len(t, all, 2)
 
-	filtered, err := app.ListSources(tech.ID)
+	filtered, err := app.ListSources(&SourceQueryRequest{CategoryID: tech.ID})
 	require.NoError(t, err)
 	require.Len(t, filtered, 1)
 	assert.Equal(t, "in tech", filtered[0].Title)
@@ -145,9 +145,163 @@ func TestListSourcesFiltersByCategory(t *testing.T) {
 	empty, err := app.CreateCategory(&SaveCategoryRequest{Name: "empty"})
 	require.NoError(t, err)
 
-	none, err := app.ListSources(empty.ID)
+	none, err := app.ListSources(&SourceQueryRequest{CategoryID: empty.ID})
 	require.NoError(t, err)
 	assert.Empty(t, none)
+	assert.NotNil(t, none, "a filter nothing matches is an empty list, not a nil one")
+}
+
+// titlesOf flattens a listing the way the subscription page renders it: the set
+// of cards left visible under the current filter.
+func titlesOf(sources []*SourceDTO) []string {
+	titles := make([]string, 0, len(sources))
+	for _, source := range sources {
+		titles = append(titles, source.Title)
+	}
+
+	return titles
+}
+
+// The filter vocabulary and the seeded titles the listing cases share.
+const (
+	parseTypeFeed = "feed"
+	parseTypeJSON = "json"
+
+	fetchStatusUnfetched = "unfetched"
+
+	titleLegacyJSON   = "legacy json"
+	titleExplicitFeed = "explicit feed"
+	titleDisabled     = "disabled feed"
+)
+
+// seedFilterSources stores the three subscriptions the filter cases share and
+// returns the category two of them belong to.
+func seedFilterSources(t *testing.T, app *App) int64 {
+	t.Helper()
+
+	tech, err := app.CreateCategory(&SaveCategoryRequest{Name: techName})
+	require.NoError(t, err)
+
+	// a record whose type is only derivable from the legacy json flag, exactly
+	// what a subscription stored before the parse type column looked like.
+	legacy := sampleRequest()
+	legacy.Title = titleLegacyJSON
+	legacy.URL = "https://a.example.com/data.json"
+	legacy.ParseType = ""
+	legacy.IsJSON = true
+	legacy.CategoryID = tech.ID
+
+	legacyRecord, err := app.CreateSource(legacy)
+	require.NoError(t, err)
+	assert.Empty(t, legacyRecord.ParseType)
+	//nolint:testifylint //a parse type name is not an encoded json payload.
+	assert.Equal(t, parseTypeJSON, legacyRecord.ResolvedParseType, "the card labels it json")
+
+	explicit := sampleRequest()
+	explicit.Title = titleExplicitFeed
+	explicit.URL = "https://b.example.com/atom.xml"
+	explicit.CategoryID = tech.ID
+
+	_, err = app.CreateSource(explicit)
+	require.NoError(t, err)
+
+	disabled := sampleRequest()
+	disabled.Title = titleDisabled
+	disabled.URL = "https://c.example.com/atom.xml"
+
+	disabledSource, err := app.CreateSource(disabled)
+	require.NoError(t, err)
+	require.NoError(t, app.SetSourceEnabled(disabledSource.ID, false))
+
+	return tech.ID
+}
+
+func TestSupportedParseTypesFeedsTheFilter(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+
+	types := app.SupportedParseTypes()
+	assert.Equal(t, []string{parseTypeFeed, "regex", parseTypeJSON}, types)
+
+	// the sidebar builds its options from this list alone, so every entry has to
+	// be a value the listing accepts.
+	for _, parseType := range types {
+		_, err := app.ListSources(&SourceQueryRequest{ParseType: parseType})
+		require.NoError(t, err, "parse type %q", parseType)
+	}
+
+	// it is static metadata, so it keeps answering when the service never started.
+	broken := newAppWithHome(filepath.Join(t.TempDir(), "missing", "nested"))
+	require.NotEmpty(t, broken.StartupError())
+	assert.Equal(t, types, broken.SupportedParseTypes())
+}
+
+func TestListSourcesFiltersByParseTypeAndFetchStatus(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	seedFilterSources(t, app)
+
+	// selecting json finds the record that carries no parse type at all.
+	jsonOnly, err := app.ListSources(&SourceQueryRequest{ParseType: parseTypeJSON})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titleLegacyJSON}, titlesOf(jsonOnly))
+
+	feedOnly, err := app.ListSources(&SourceQueryRequest{ParseType: parseTypeFeed})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titleExplicitFeed, titleDisabled}, titlesOf(feedOnly))
+
+	// no subscription has been fetched yet, so all three share one bucket.
+	unfetched, err := app.ListSources(&SourceQueryRequest{FetchStatus: fetchStatusUnfetched})
+	require.NoError(t, err)
+	assert.Len(t, unfetched, 3)
+
+	failed, err := app.ListSources(&SourceQueryRequest{FetchStatus: "error"})
+	require.NoError(t, err)
+	assert.Empty(t, failed)
+}
+
+func TestListSourcesFiltersByEnabledStateAndCombination(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	techID := seedFilterSources(t, app)
+
+	enabledOnly, err := app.ListSources(&SourceQueryRequest{EnabledState: EnabledStateOn})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titleLegacyJSON, titleExplicitFeed}, titlesOf(enabledOnly))
+
+	disabledOnly, err := app.ListSources(&SourceQueryRequest{EnabledState: EnabledStateOff})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titleDisabled}, titlesOf(disabledOnly))
+
+	// every dimension at once narrows to the single record satisfying all of them.
+	combined, err := app.ListSources(&SourceQueryRequest{
+		CategoryID:   techID,
+		ParseType:    parseTypeFeed,
+		FetchStatus:  fetchStatusUnfetched,
+		EnabledState: EnabledStateOn,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titleExplicitFeed}, titlesOf(combined))
+}
+
+func TestListSourcesRejectsUnknownFilterValues(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+
+	// an unknown enum is reported, so a stale frontend can never be shown an
+	// unfiltered list while its sidebar claims a filter is active.
+	_, err := app.ListSources(&SourceQueryRequest{ParseType: "agent"})
+	require.ErrorIs(t, err, service.ErrInvalidArgument)
+
+	_, err = app.ListSources(&SourceQueryRequest{FetchStatus: "broken"})
+	require.ErrorIs(t, err, service.ErrInvalidArgument)
+
+	_, err = app.ListSources(&SourceQueryRequest{EnabledState: "paused"})
+	require.ErrorIs(t, err, service.ErrInvalidArgument)
 }
 
 func TestDailyBindings(t *testing.T) {
