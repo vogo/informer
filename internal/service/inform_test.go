@@ -18,13 +18,20 @@
 package service_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/vogo/informer/internal/ding"
 	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/lark"
 	"github.com/vogo/informer/internal/service"
+	"github.com/vogo/informer/internal/soup"
 )
 
 // allArticles reads every stored article, ordered by id.
@@ -169,4 +176,119 @@ func TestTriggerInformWithoutConfigFile(t *testing.T) {
 
 	_, err = svc.TriggerInform("")
 	require.ErrorContains(t, err, "read config file")
+}
+
+// frozenServer never answers a request until the test ends, the shape of a
+// webhook that accepted the connection and then hung.
+func frozenServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	release := make(chan struct{})
+
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release
+	}))
+	// cleanups run LIFO: release the frozen handler first, so server.Close
+	// does not wait on a request that never answers.
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(release) })
+
+	return server
+}
+
+// freezeDailySoup points the daily sentence at a frozen endpoint behind a short
+// deadline, so the run under test never depends on the public endpoint and the
+// soup step degrades in milliseconds instead of minutes.
+func freezeDailySoup(t *testing.T, url string) {
+	t.Helper()
+
+	restoreURL := soup.SetURLForTest(url)
+	restoreClient := soup.SetClientForTest(&http.Client{Timeout: 100 * time.Millisecond})
+
+	t.Cleanup(restoreURL)
+	t.Cleanup(restoreClient)
+}
+
+// TestTriggerInformFailsWhenTheLarkWebhookFreezes covers the stuck lock root
+// cause end to end: a lark webhook that hangs must fail the whole run within
+// the client deadline, keep the daily file, and leave the articles unrecorded
+// so the scheduler retries the day on its next tick.
+func TestTriggerInformFailsWhenTheLarkWebhookFreezes(t *testing.T) {
+	server := newContentServer(t)
+	frozen := frozenServer(t)
+	svc := newService(t)
+
+	require.NoError(t, svc.CreateSource(feedSource(server)))
+	freezeDailySoup(t, frozen.URL)
+
+	restore := lark.SetClientForTest(&http.Client{Timeout: 100 * time.Millisecond})
+	defer restore()
+
+	start := time.Now()
+	result, err := svc.TriggerInform(frozen.URL + "/feishu.cn/hang")
+	elapsed := time.Since(start)
+
+	require.Error(t, err, "a frozen webhook must fail the run")
+	require.NotNil(t, result)
+	assert.False(t, result.Notified)
+	assert.Less(t, elapsed, 30*time.Second, "the client deadline must bound a frozen webhook")
+	assert.FileExists(t, result.ContentFilePath, "the daily file survives a failed delivery")
+
+	for _, article := range allArticles(t, svc) {
+		assert.Nil(t, article.InformedAt, "a failed delivery must not be recorded as informed")
+	}
+
+	// the failure is a terminal result, not a wedged state: with a healthy
+	// webhook, the very next run succeeds instead of staying blocked.
+	result, err = svc.TriggerInform(server.URL + "/feishu.cn/ok")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Notified)
+}
+
+// TestTriggerInformFailsWhenTheDingWebhookFreezes repeats the frozen webhook
+// proof for the dingtalk channel.
+func TestTriggerInformFailsWhenTheDingWebhookFreezes(t *testing.T) {
+	server := newContentServer(t)
+	frozen := frozenServer(t)
+	svc := newService(t)
+
+	require.NoError(t, svc.CreateSource(feedSource(server)))
+	freezeDailySoup(t, frozen.URL)
+
+	restore := ding.SetClientForTest(&http.Client{Timeout: 100 * time.Millisecond})
+	defer restore()
+
+	start := time.Now()
+	result, err := svc.TriggerInform(frozen.URL + "/dingtalk.com/hang")
+	elapsed := time.Since(start)
+
+	require.Error(t, err, "a frozen webhook must fail the run")
+	require.NotNil(t, result)
+	assert.False(t, result.Notified)
+	assert.Less(t, elapsed, 30*time.Second, "the client deadline must bound a frozen webhook")
+	assert.FileExists(t, result.ContentFilePath, "the daily file survives a failed delivery")
+
+	for _, article := range allArticles(t, svc) {
+		assert.Nil(t, article.InformedAt, "a failed delivery must not be recorded as informed")
+	}
+}
+
+// TestTriggerInformSucceedsWhenTheDailySoupFreezes proves the soup deadline is
+// a degradation only: the fetch, the daily file and the bot delivery all
+// survive a frozen daily sentence endpoint.
+func TestTriggerInformSucceedsWhenTheDailySoupFreezes(t *testing.T) {
+	server := newContentServer(t)
+	frozen := frozenServer(t)
+	svc := newService(t)
+
+	require.NoError(t, svc.CreateSource(feedSource(server)))
+	freezeDailySoup(t, frozen.URL)
+
+	result, err := svc.TriggerInform(server.URL + "/feishu.cn/ok")
+	require.NoError(t, err, "a frozen daily sentence must not fail the run")
+	require.NotNil(t, result)
+	assert.True(t, result.Notified)
+	assert.Len(t, result.Articles, 2)
+	assert.FileExists(t, result.ContentFilePath)
 }

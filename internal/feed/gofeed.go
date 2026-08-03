@@ -24,11 +24,17 @@ import (
 	"github.com/mmcdole/gofeed"
 	"github.com/vogo/logger"
 	"github.com/vogo/vogo/vnet/vurl"
+
+	"github.com/vogo/informer/internal/httpx"
 )
 
 // ParseGoFeed parse feed.
 func ParseGoFeed(source *Source) (*gofeed.Feed, error) {
 	fp := gofeed.NewParser()
+	// bound the fetch with the shared 60s client: the parser default has no
+	// timeout, so a source that accepts the connection but never answers would
+	// otherwise park the inform run, and its lock, forever.
+	fp.Client = httpx.HTTPClient
 
 	feed, err := fp.ParseURL(source.URL)
 	if err != nil {

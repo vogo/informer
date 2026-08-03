@@ -25,12 +25,30 @@ import (
 	"net/http"
 
 	"github.com/vogo/logger"
+
+	"github.com/vogo/informer/internal/httpx"
 )
 
 const Host = "feishu.cn"
 
 // ErrLarkResponse marks a lark bot answering with a non successful status.
 var ErrLarkResponse = errors.New("lark response error")
+
+// client delivers the webhook request. It is the shared httpx client whose 60s
+// timeout turns a hung connection into a delivery failure, so one frozen bot
+// can never occupy the inform run forever. It is a variable so tests can
+// shorten the deadline without touching the production default.
+var client = httpx.HTTPClient
+
+// SetClientForTest swaps the delivery client and returns a restore function.
+// It is the seam the timeout tests use to fail a frozen webhook in
+// milliseconds instead of waiting out the full production deadline.
+func SetClientForTest(c *http.Client) func() {
+	previous := client
+	client = c
+
+	return func() { client = previous }
+}
 
 type Content struct {
 	Text string `json:"text"`
@@ -60,7 +78,7 @@ func Lark(url, content string) error {
 	logger.Infof("lark url: %s", url)
 	logger.Infof("lark data: %s", data)
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
+	resp, err := client.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("post lark message: %w", err)
 	}
