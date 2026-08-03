@@ -242,6 +242,21 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      # the manifest is hashed and written outside artifacts/ and only then
+      # moved in, so it can never list itself no matter how the shell orders
+      # the redirect against the glob. An empty download fails the job here
+      # rather than shipping a hollow manifest.
+      - name: Generate SHA256 checksums
+        shell: bash
+        run: |
+          checksums="informer-ui-${{ github.ref_name }}-checksums-sha256.txt"
+          cd artifacts
+          mapfile -t assets < <(find . -maxdepth 1 -type f -printf '%P\n' | sort)
+          test "${#assets[@]}" -gt 0
+          sha256sum "${assets[@]}" > "${RUNNER_TEMP}/${checksums}"
+          cat "${RUNNER_TEMP}/${checksums}"
+          mv "${RUNNER_TEMP}/${checksums}" .
+
       - name: List release assets
         run: ls -la artifacts
 
