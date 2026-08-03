@@ -17,6 +17,8 @@
 
 package feed
 
+import "slices"
+
 type Config struct {
 	ID                int64 `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
 	MaxInformFeedSize int   `json:"max_inform_feed_size"`
@@ -75,14 +77,20 @@ type Source struct {
 	Enabled       bool   `json:"enabled" gorm:"index"`
 }
 
+// legalParseTypes is the ordered set of supported parse types. Every legality
+// check and every list of offered types reads from here, so adding a parser
+// never leaves a caller with a stale copy of the set.
+var legalParseTypes = []string{ParseTypeFeed, ParseTypeRegex, ParseTypeJSON}
+
+// LegalParseTypes returns the supported parse types in presentation order.
+// The result is a copy: a caller can neither shrink nor reorder the set.
+func LegalParseTypes() []string {
+	return slices.Clone(legalParseTypes)
+}
+
 // IsLegalParseType reports whether the value is one of the supported parse types.
 func IsLegalParseType(parseType string) bool {
-	switch parseType {
-	case ParseTypeFeed, ParseTypeRegex, ParseTypeJSON:
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(legalParseTypes, parseType)
 }
 
 // ResolveParseType returns the parser to use for the source.

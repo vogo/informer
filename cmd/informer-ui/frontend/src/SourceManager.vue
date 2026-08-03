@@ -34,6 +34,7 @@ import {
   ListSources,
   PreviewSource,
   SetSourceEnabled,
+  SupportedParseTypes,
   UpdateSource
 } from '../wailsjs/go/main/App'
 import type {main} from '../wailsjs/go/models'
@@ -70,6 +71,19 @@ const message = useMessage()
 
 const selectedCategoryId = ref(0)
 const categoryPanel = ref<InstanceType<typeof CategoryPanel> | null>(null)
+
+// the filter snapshot of this session: the sidebar picks the values, the list is
+// always the answer to the whole snapshot rather than to one dimension at a time.
+// Nothing is persisted, so reopening the page starts on "everything" again.
+const filters = reactive({parseType: '', fetchStatus: '', enabledState: ''})
+
+// the type options come from the backend, so a parse type added there needs no
+// change here to be offered and queried.
+const parseTypeFilterOptions = ref<string[]>([])
+
+// listSeq keeps the newest query the one on screen: a slower earlier request
+// that lands after a faster later one is dropped instead of overwriting it.
+let listSeq = 0
 
 const categories = ref<CategoryDTO[]>([])
 const sources = ref<SourceDTO[]>([])
@@ -117,6 +131,18 @@ const categoryOptions = computed(() => categories.value.map(c => ({label: c.name
 const selectedCategoryName = computed(
   () => categories.value.find(c => c.id === selectedCategoryId.value)?.name ?? '全部订阅'
 )
+const hasActiveFilter = computed(
+  () => filters.parseType !== '' || filters.fetchStatus !== '' || filters.enabledState !== ''
+)
+const emptyDescription = computed(() => {
+  if (hasActiveFilter.value) {
+    return '没有符合当前过滤条件的订阅'
+  }
+
+  return selectedCategoryId.value === 0
+    ? '还没有订阅，点击右上角「新增订阅」开始'
+    : '该分类下还没有订阅'
+})
 
 const parseTypeOptions = [
   {label: '自动推导（按旧规则）', value: ''},
@@ -126,8 +152,18 @@ const parseTypeOptions = [
 ]
 
 onMounted(async () => {
-  await Promise.all([loadCategories(), loadSources()])
+  await Promise.all([loadCategories(), loadParseTypeOptions(), loadSources()])
 })
+
+async function loadParseTypeOptions() {
+  try {
+    parseTypeFilterOptions.value = await SupportedParseTypes()
+  } catch (e) {
+    // the sidebar then offers the type dimension as "全部" only; every other
+    // filter keeps working, so this never blocks the page.
+    message.error(`来源类型加载失败：${errorText(e)}`)
+  }
+}
 
 async function loadCategories() {
   try {
@@ -139,20 +175,61 @@ async function loadCategories() {
 }
 
 async function loadSources() {
+  const seq = ++listSeq
+
   loading.value = true
   listError.value = ''
   try {
-    sources.value = await ListSources(selectedCategoryId.value)
+    const listed = await ListSources({
+      categoryId: selectedCategoryId.value,
+      parseType: filters.parseType,
+      fetchStatus: filters.fetchStatus,
+      enabledState: filters.enabledState
+    })
+
+    // a newer snapshot is already in flight; this answer describes a filter the
+    // sidebar no longer shows.
+    if (seq !== listSeq) {
+      return
+    }
+
+    sources.value = listed
   } catch (e) {
+    if (seq !== listSeq) {
+      return
+    }
+
+    // the previous result belongs to the previous filter, so it is dropped
+    // rather than left on screen next to the new selection.
+    sources.value = []
     listError.value = errorText(e)
   } finally {
-    loading.value = false
+    if (seq === listSeq) {
+      loading.value = false
+    }
   }
 }
 
 // onCategorySelected reloads the right hand list for the newly picked category.
 async function onCategorySelected(id: number) {
   selectedCategoryId.value = id
+  await loadSources()
+}
+
+// onFilterChanged reloads the list for one changed dimension; the other
+// dimensions and the category keep their current value.
+async function onFilterChanged(key: 'parseType' | 'fetchStatus' | 'enabledState', value: string) {
+  filters[key] = value
+  await loadSources()
+}
+
+// clearFilters returns the page to its default view: every category, every type,
+// every fetch state, enabled and disabled alike.
+async function clearFilters() {
+  selectedCategoryId.value = 0
+  filters.parseType = ''
+  filters.fetchStatus = ''
+  filters.enabledState = ''
   await loadSources()
 }
 
@@ -299,7 +376,15 @@ function openArticle(url: string) {
       <CategoryPanel
         ref="categoryPanel"
         :selected-id="selectedCategoryId"
+        :parse-type="filters.parseType"
+        :fetch-status="filters.fetchStatus"
+        :enabled-state="filters.enabledState"
+        :parse-type-options="parseTypeFilterOptions"
         @update:selected-id="onCategorySelected"
+        @update:parse-type="v => onFilterChanged('parseType', v)"
+        @update:fetch-status="v => onFilterChanged('fetchStatus', v)"
+        @update:enabled-state="v => onFilterChanged('enabledState', v)"
+        @clear-filters="clearFilters"
         @changed="onCategoryTreeChanged"
       />
     </div>
@@ -309,6 +394,9 @@ function openArticle(url: string) {
         <n-space align="center" :size="8">
           <n-text strong>{{ selectedCategoryName }}</n-text>
           <n-text depth="3" style="font-size: 12px">{{ sources.length }} 个订阅</n-text>
+          <!-- the count above is the filtered one; saying so keeps it from
+               reading as the total of the selected category. -->
+          <n-tag v-if="hasActiveFilter" size="small" type="info" :bordered="false">已过滤</n-tag>
         </n-space>
         <n-space>
           <n-button :loading="loading" size="small" tertiary @click="refreshAll">刷新</n-button>
@@ -380,9 +468,7 @@ function openArticle(url: string) {
 
           <n-empty
             v-else-if="!loading && !listError"
-            :description="selectedCategoryId === 0
-              ? '还没有订阅，点击右上角「新增订阅」开始'
-              : '该分类下还没有订阅'"
+            :description="emptyDescription"
             style="margin-top: 60px"
           />
           <div v-else style="height: 120px" />

@@ -61,7 +61,7 @@ func TestSourceCRUD(t *testing.T) {
 
 	app := newTestApp(t)
 
-	empty, err := app.ListSources(0)
+	empty, err := app.ListSources(nil)
 	require.NoError(t, err)
 	assert.Empty(t, empty)
 
@@ -72,7 +72,7 @@ func TestSourceCRUD(t *testing.T) {
 	assert.Equal(t, int64(1), created.CategoryID, "the service assigns the default category")
 	assert.Equal(t, "feed", created.ResolvedParseType)
 
-	listed, err := app.ListSources(0)
+	listed, err := app.ListSources(nil)
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
 	assert.Equal(t, created.ID, listed[0].ID)
@@ -89,14 +89,14 @@ func TestSourceCRUD(t *testing.T) {
 
 	require.NoError(t, app.SetSourceEnabled(created.ID, false))
 
-	listed, err = app.ListSources(0)
+	listed, err = app.ListSources(nil)
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
 	assert.False(t, listed[0].Enabled)
 
 	require.NoError(t, app.DeleteSource(created.ID))
 
-	empty, err = app.ListSources(0)
+	empty, err = app.ListSources(nil)
 	require.NoError(t, err)
 	assert.Empty(t, empty)
 
@@ -149,7 +149,7 @@ func TestPreviewParsesWithoutWriting(t *testing.T) {
 	assert.Equal(t, "Hello Preview", articles[0].Title)
 	assert.Equal(t, "https://example.com/one", articles[0].URL)
 
-	listed, err := app.ListSources(0)
+	listed, err := app.ListSources(nil)
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
 	assert.Equal(t, 0, listed[0].Status, "a preview leaves the source health untouched")
@@ -163,6 +163,6 @@ func TestStartupFailureSurfaces(t *testing.T) {
 
 	assert.NotEmpty(t, app.StartupError())
 
-	_, err := app.ListSources(0)
+	_, err := app.ListSources(nil)
 	assert.ErrorIs(t, err, ErrNotReady)
 }
