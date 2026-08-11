@@ -164,8 +164,9 @@ func titlesOf(sources []*SourceDTO) []string {
 
 // The filter vocabulary and the seeded titles the listing cases share.
 const (
-	parseTypeFeed = "feed"
-	parseTypeJSON = "json"
+	parseTypeFeed  = "feed"
+	parseTypeJSON  = "json"
+	parseTypeAgent = "agent"
 
 	fetchStatusUnfetched = "unfetched"
 
@@ -222,7 +223,7 @@ func TestSupportedParseTypesFeedsTheFilter(t *testing.T) {
 	app := newTestApp(t)
 
 	types := app.SupportedParseTypes()
-	assert.Equal(t, []string{parseTypeFeed, "regex", parseTypeJSON}, types)
+	assert.Equal(t, []string{parseTypeFeed, "regex", parseTypeJSON, parseTypeAgent}, types)
 
 	// the sidebar builds its options from this list alone, so every entry has to
 	// be a value the listing accepts.
@@ -294,7 +295,7 @@ func TestListSourcesRejectsUnknownFilterValues(t *testing.T) {
 
 	// an unknown enum is reported, so a stale frontend can never be shown an
 	// unfiltered list while its sidebar claims a filter is active.
-	_, err := app.ListSources(&SourceQueryRequest{ParseType: "agent"})
+	_, err := app.ListSources(&SourceQueryRequest{ParseType: "rss-v9"})
 	require.ErrorIs(t, err, service.ErrInvalidArgument)
 
 	_, err = app.ListSources(&SourceQueryRequest{FetchStatus: "broken"})

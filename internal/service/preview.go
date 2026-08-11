@@ -20,7 +20,11 @@ package service
 import (
 	"fmt"
 
+	"github.com/vogo/logger"
+
+	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/inform"
 )
 
 // Preview parses a stored source and returns its candidate articles.
@@ -41,18 +45,29 @@ func (s *Service) Preview(sourceID int64) ([]*feed.Article, error) {
 // PreviewSource parses an in memory source without persisting anything at all,
 // which lets a caller try out a source before it is stored.
 func (s *Service) PreviewSource(source *feed.Source) ([]*feed.Article, error) {
-	if source == nil {
-		return nil, fmt.Errorf("%w: source is nil", ErrInvalidArgument)
+	err := ValidateSource(source)
+	if err != nil {
+		return nil, err
 	}
 
-	if source.URL == "" && source.CURL == "" {
-		return nil, fmt.Errorf("%w: source has neither url nor curl", ErrInvalidArgument)
-	}
-
-	articles, err := feed.ParseArticles(source)
+	articles, err := feed.ParseArticles(source, s.agentConfig())
 	if err != nil {
 		return nil, fmt.Errorf("preview source %d: %w", source.ID, err)
 	}
 
 	return articles, nil
+}
+
+// agentConfig resolves the agent configuration a fetch outside of a full inform
+// run works with. A broken informer.json is not allowed to make a preview
+// impossible, so the defaults stand in for a section that cannot be read.
+func (s *Service) agentConfig() *agent.Config {
+	stored, err := s.ReadAgentConfig()
+	if err != nil {
+		logger.Warnf("read agent config failed, using defaults: %v", err)
+
+		stored = DefaultAgentConfig()
+	}
+
+	return s.EffectiveAgentConfig(&inform.Config{Agent: stored})
 }

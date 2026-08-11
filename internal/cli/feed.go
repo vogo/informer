@@ -51,6 +51,12 @@ func Feed(svc *service.Service, ops []string) error {
 		}
 
 		return addSource(svc, args[0], args[1])
+	case "agent":
+		if len(args) < 2 {
+			return fmt.Errorf("%w: feed agent <title> <prompt>", ErrUsage)
+		}
+
+		return addAgentSource(svc, args[0], args[1])
 	case "remove":
 		return withOneArg(op, args, func(id string) error { return removeSource(svc, id) })
 	case "update":
@@ -118,6 +124,24 @@ func addSource(svc *service.Service, title, link string) error {
 	return nil
 }
 
+// addAgentSource stores a source whose articles come from an agent run instead of
+// a fetch. Only the instruction is asked for: the json output contract is appended
+// by informer itself, and the endpoint, credential and model come from the shared
+// agent configuration.
+func addAgentSource(svc *service.Service, title, prompt string) error {
+	source := &feed.Source{Title: title, ParseType: feed.ParseTypeAgent, AgentPrompt: prompt}
+
+	err := svc.CreateSource(source)
+	if err != nil {
+		return err
+	}
+
+	//nolint:forbidigo //the command line reports its result on stdout by design.
+	fmt.Printf("%d,\t%s,\t%s\n", source.ID, source.Title, source.ResolveParseType())
+
+	return nil
+}
+
 func removeSource(svc *service.Service, idStr string) error {
 	id, err := parseID(idStr)
 	if err != nil {
@@ -162,6 +186,8 @@ func viewSource(svc *service.Service, idStr string) error {
 	fmt.Printf("json_title_path:\t%s\n", source.JsonTitlePath)
 	fmt.Printf("json_url_path:\t%s\n", source.JsonURLPath)
 	fmt.Printf("parse_type:\t%s\n", source.ResolveParseType())
+	fmt.Printf("agent_provider:\t%s\n", source.AgentProvider) //nolint:forbidigo //stdout is the output of this command.
+	fmt.Printf("agent_prompt:\t%s\n", source.AgentPrompt)     //nolint:forbidigo //stdout is the output of this command.
 	fmt.Printf("category_id:\t%d\n", source.CategoryID)
 	fmt.Printf("enabled:\t%t\n", source.Enabled)
 

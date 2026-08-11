@@ -2,7 +2,7 @@
 
 每天把「日期信息 + 每日鸡汤 + 订阅文章推荐」汇总成一条消息，写入本地 Markdown 日报，并推送到钉钉或飞书机器人。
 
-订阅源支持三种解析方式：标准 feed（RSS/Atom）、正则匹配网页、JSON 接口。
+订阅源支持四种解析方式：标准 feed（RSS/Atom）、正则匹配网页、JSON 接口，以及交给命令行 AI Agent 去找。
 
 ## 一、选择使用方式
 
@@ -126,7 +126,9 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
 
 前三项为 0 会让推荐算法选不出任何文章，因此被拒绝；超出合理范围的值同样会被拒绝，且被拒绝的保存不会改动文件。
 
-除 `feed` 节外还有一个顶层节 `schedule`，只被桌面版「定时任务」读取，命令行与系统 crontab 会忽略它（命令行的定时推送仍由 crontab 负责）：
+除 `feed` 节外还有一个顶层节 `agent`，供 `agent` 类型的订阅使用，详见[「agent 解析订阅」](#agent-解析订阅)。
+
+还有一个顶层节 `schedule`，只被桌面版「定时任务」读取，命令行与系统 crontab 会忽略它（命令行的定时推送仍由 crontab 负责）：
 
 | 配置项 | 含义 | 取值 |
 | --- | --- | --- |
@@ -137,7 +139,7 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
 
 无论是命令行手写还是桌面版「设置」页保存，写入都遵守下面几条约定：
 
-- **保留未知字段**：保存只替换 `feed` 与 `schedule` 两节，文件里其它顶层字段（包括这个版本还不认识的字段）连同顺序一起原样保留。
+- **保留未知字段**：保存只替换 `feed`、`agent` 与 `schedule` 三节，文件里其它顶层字段（包括这个版本还不认识的字段）连同顺序一起原样保留。
 - **原子替换**：先写同目录下的临时文件再 `rename` 覆盖，所以并发运行的 crontab 读到的要么是旧文件、要么是新文件，不会读到写了一半的内容。
 - **跨进程写锁**：写入前会创建 `informer.json.lock`，两个「读—改—写」不会互相覆盖造成丢失更新。锁有等待上限，
   等不到会直接报错而不是一直卡住；进程被杀留下的陈旧锁会在明显过期后被自动接管。
@@ -148,7 +150,8 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
 
 ```json
 {
-  "webhook": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"
+  "webhook": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx",
+  "agent_api_key": "sk-xxxxx"
 }
 ```
 
@@ -156,6 +159,7 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
   （Windows 不支持 Unix 权限位，这一步在 Windows 上无法校验）。
 - 桌面版「设置」页只显示「是否已配置」和一段打码后的前缀，完整地址不会回传到界面。
 - 命令行显式传入的地址**优先**；不传地址时才使用这个文件里保存的 webhook。
+- `agent_api_key` 是 `agent` 类型订阅调用 AI Agent 时使用的密钥，同样只存在这个文件里；桌面版只显示「是否已配置」，不回传原文。
 
 ## 五、订阅管理命令
 
@@ -163,6 +167,7 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
 ./informer feed list              # 列出所有订阅（id, 标题, 地址）
 ./informer feed view <id>         # 查看单个订阅的全部字段
 ./informer feed add <标题> <地址>   # 添加订阅
+./informer feed agent <标题> <提示词>  # 添加 agent 类型订阅（不需要地址）
 ./informer feed copy <id>         # 复制一个订阅（连同其设置）
 ./informer feed remove <id>       # 删除订阅
 ./informer feed update <id> <字段> <值>   # 修改订阅的某个字段
@@ -177,11 +182,12 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
 | `title` / `url` | 订阅标题与抓取地址 |
 | `weight` | 文章排序权重，越大越靠前 |
 | `max_fetch_num` | 该订阅单次抓取的文章数上限 |
-| `parse_type` | 解析方式，合法值 `feed` / `regex` / `json` |
+| `parse_type` | 解析方式，合法值 `feed` / `regex` / `json` / `agent` |
 | `category_id` | 所属分类，默认 `1`（内置「未分类」，不可删除） |
 | `enabled` | 是否参与定时抓取；停用后 `feed parse` 仍可测试 |
 | `regex` / `title_exp` / `url_exp` | 正则解析用的匹配式与标题、链接表达式 |
 | `json_title_path` / `json_url_path` | JSON 解析用的标题、链接路径 |
+| `agent_prompt` / `agent_provider` | agent 解析用的提示词与指定的 Agent |
 | `redirect` | 是否跟随解析出的链接跳转 |
 
 示例：
@@ -211,6 +217,59 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
 ```
 
 `title_exp` 和 `url_exp` 用 `$1`、`$2` 引用 `regex` 中的捕获分组，可与固定前缀拼接成完整链接。
+
+### agent 解析订阅
+
+`agent` 类型的订阅不抓取某个固定地址，而是把一段自然语言的任务交给本机安装的命令行 AI Agent 去找文章。
+**你只需要描述要找什么**，JSON 输出格式要求由 informer 自动追加到提示词末尾，返回内容再被解析成文章列表：
+
+```bash
+./informer feed agent "Go 语言周报" "搜索 Go 语言最近的技术文章与发布公告，挑出最值得阅读的几篇，给出标题和链接。"
+# 1,	Go 语言周报,	agent
+
+./informer feed update 1 max_fetch_num 3   # 最多要 3 条，这个数字也会写进提示词
+
+# 测试抓取（真的会调用一次 Agent，可能需要几十秒）
+./informer feed parse 1
+```
+
+几点约定：
+
+- 订阅本身**不需要 `url`**；`agent_prompt` 为空的 agent 订阅会被拒绝保存。
+- 返回条目里 `title` 为空、或 `url` 不是 `http://` / `https://` 开头的会被丢弃，重复链接只保留一条，
+  所以 Agent 给出相对路径或编造格式时不会污染文章库。
+- Agent 只被允许使用只读的联网工具（默认 `WebSearch,WebFetch`），并且整次运行有超时上限，
+  超时会被杀掉并把原因记到订阅的抓取状态里，不会拖住整轮抓取。
+
+Agent 的接口地址、密钥与模型是全局配置，写在 `informer.json` 的 `agent` 节（密钥除外）：
+
+```json
+{
+  "agent": {
+    "provider": "claude",
+    "base_url": "",
+    "model": "",
+    "allowed_tools": "WebSearch,WebFetch",
+    "timeout_seconds": 300,
+    "command": ""
+  }
+}
+```
+
+| 配置项 | 含义 | 取值 |
+| --- | --- | --- |
+| `provider` | 使用哪个命令行 Agent | 目前只实现了 `claude`（Claude Code）；`codex` 已预留但本版本运行时会报错 |
+| `base_url` | Agent 的接口地址 | 留空表示沿用本机上该 Agent 自己的配置 |
+| `model` | 使用的模型 | 留空表示沿用 Agent 的默认模型 |
+| `allowed_tools` | 允许 Agent 使用的工具，逗号分隔 | 留空使用默认 `WebSearch,WebFetch` |
+| `timeout_seconds` | 单次运行超时 | 填 0 表示使用默认 300 秒，合法范围 10 ~ 3600 |
+| `command` | Agent 可执行文件 | 留空表示用 `PATH` 里的 `claude` |
+
+API Key 不写进 `informer.json`，而是放在同目录的 `informer.secret.json` 的 `agent_api_key` 字段里。
+`base_url` 与 `agent_api_key` 都留空时，informer 直接运行 `claude`，用的就是本机 `claude` 自身已登录的凭据——
+也就是说，只要本机 `claude` 能跑，agent 订阅就能跑，不需要额外配置。
+
+前置条件：本机已安装 Claude Code 命令行（`claude --version` 能正常输出）。
 
 ## 六、桌面版 informer-ui
 

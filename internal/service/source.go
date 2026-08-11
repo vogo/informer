@@ -19,9 +19,11 @@ package service
 
 import (
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 
+	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/feed"
 )
 
@@ -65,6 +67,41 @@ type SourceQuery struct {
 	FetchStatus string `json:"fetch_status"`
 }
 
+// ValidateSource refuses a source its resolved parser could not act on.
+//
+// What "unusable" means depends on the parse type: a fetching source needs an
+// address, while an agent source needs an instruction and no address at all. Both
+// rules live here so that creating, updating and previewing a source agree on what
+// a usable source is.
+//
+// The stored parse type is resolved, not judged: a value written by a build this
+// one does not know about keeps falling back to the historical derivation, exactly
+// as a fetch does. Refusing an unknown name is the job of the two write paths.
+func ValidateSource(source *feed.Source) error {
+	if source == nil {
+		return fmt.Errorf("%w: source is nil", ErrInvalidArgument)
+	}
+
+	if source.ResolveParseType() != feed.ParseTypeAgent {
+		if source.URL == "" && source.CURL == "" {
+			return fmt.Errorf("%w: source has neither url nor curl", ErrInvalidArgument)
+		}
+
+		return nil
+	}
+
+	if strings.TrimSpace(source.AgentPrompt) == "" {
+		return fmt.Errorf("%w: agent source has no prompt", ErrInvalidArgument)
+	}
+
+	provider := strings.TrimSpace(source.AgentProvider)
+	if provider != "" && !agent.IsLegalProvider(provider) {
+		return fmt.Errorf("%w: unknown agent provider %q", ErrInvalidArgument, provider)
+	}
+
+	return nil
+}
+
 // CreateSource stores a new source. A source is enabled by default and belongs to
 // the default category unless the caller says otherwise.
 func (s *Service) CreateSource(source *feed.Source) error {
@@ -72,12 +109,19 @@ func (s *Service) CreateSource(source *feed.Source) error {
 		return fmt.Errorf("%w: source is nil", ErrInvalidArgument)
 	}
 
-	if source.URL == "" {
-		return fmt.Errorf("%w: source url is empty", ErrInvalidArgument)
-	}
-
 	if source.ParseType != "" && !feed.IsLegalParseType(source.ParseType) {
 		return fmt.Errorf("%w: unknown parse type %q", ErrInvalidArgument, source.ParseType)
+	}
+
+	err := ValidateSource(source)
+	if err != nil {
+		return err
+	}
+
+	// a fetching source is created from its url alone, the shape every existing
+	// caller uses; only an agent source is allowed to carry no address.
+	if source.URL == "" && source.ResolveParseType() != feed.ParseTypeAgent {
+		return fmt.Errorf("%w: source url is empty", ErrInvalidArgument)
 	}
 
 	if source.CategoryID == 0 {
@@ -117,6 +161,11 @@ func (s *Service) UpdateSource(source *feed.Source) error {
 
 	if source.ParseType != "" && !feed.IsLegalParseType(source.ParseType) {
 		return fmt.Errorf("%w: unknown parse type %q", ErrInvalidArgument, source.ParseType)
+	}
+
+	err := ValidateSource(source)
+	if err != nil {
+		return err
 	}
 
 	if source.CategoryID == 0 {

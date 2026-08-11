@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/service"
 )
@@ -53,6 +54,8 @@ type SourceDTO struct {
 	JSONTitlePath     string `json:"jsonTitlePath"`
 	JSONURLPath       string `json:"jsonURLPath"`
 	ParseType         string `json:"parseType"`
+	AgentProvider     string `json:"agentProvider"`
+	AgentPrompt       string `json:"agentPrompt"`
 	CategoryID        int64  `json:"categoryId"`
 	Enabled           bool   `json:"enabled"`
 	Status            int    `json:"status"`
@@ -78,6 +81,8 @@ type SaveSourceRequest struct {
 	JSONTitlePath string `json:"jsonTitlePath"`
 	JSONURLPath   string `json:"jsonURLPath"`
 	ParseType     string `json:"parseType"`
+	AgentProvider string `json:"agentProvider"`
+	AgentPrompt   string `json:"agentPrompt"`
 	CategoryID    int64  `json:"categoryId"`
 	Enabled       bool   `json:"enabled"`
 }
@@ -106,6 +111,8 @@ func toSourceDTO(source *feed.Source) *SourceDTO {
 		JSONTitlePath:     source.JsonTitlePath,
 		JSONURLPath:       source.JsonURLPath,
 		ParseType:         source.ParseType,
+		AgentProvider:     source.AgentProvider,
+		AgentPrompt:       source.AgentPrompt,
 		CategoryID:        source.CategoryID,
 		Enabled:           source.Enabled,
 		Status:            source.Status,
@@ -147,6 +154,14 @@ type SourceQueryRequest struct {
 // database and therefore stays available while the app reports a startup error.
 func (a *App) SupportedParseTypes() []string {
 	return feed.LegalParseTypes()
+}
+
+// SupportedAgentProviders returns the agent providers a subscription of the agent
+// parse type can be pinned to, in presentation order. Like SupportedParseTypes it
+// answers from the domain set itself and reads no database, so the subscription
+// form can offer exactly the values the service accepts.
+func (a *App) SupportedAgentProviders() []string {
+	return agent.LegalProviders()
 }
 
 // ListSources returns the subscriptions matching the filter snapshot, ordered by
@@ -320,6 +335,8 @@ func applyRequest(source *feed.Source, req *SaveSourceRequest) *feed.Source {
 	source.JsonTitlePath = req.JSONTitlePath
 	source.JsonURLPath = req.JSONURLPath
 	source.ParseType = req.ParseType
+	source.AgentProvider = req.AgentProvider
+	source.AgentPrompt = req.AgentPrompt
 	source.CategoryID = req.CategoryID
 	source.Enabled = req.Enabled
 

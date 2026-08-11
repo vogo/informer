@@ -38,6 +38,11 @@ const (
 	ParseTypeFeed  = "feed"
 	ParseTypeRegex = "regex"
 	ParseTypeJSON  = "json"
+
+	// ParseTypeAgent asks a coding agent for the articles instead of fetching a
+	// document. It is the one parse type the legacy IsJSON and Regex columns
+	// cannot express, so it is never derived - only an explicit value selects it.
+	ParseTypeAgent = "agent"
 )
 
 const (
@@ -75,12 +80,21 @@ type Source struct {
 	ParseType     string `json:"parse_type"`
 	CategoryID    int64  `json:"category_id" gorm:"index"`
 	Enabled       bool   `json:"enabled" gorm:"index"`
+
+	// AgentProvider selects the agent command line of a ParseTypeAgent source.
+	// An empty value uses the configured default provider.
+	AgentProvider string `json:"agent_provider"`
+
+	// AgentPrompt is the plain language instruction of a ParseTypeAgent source.
+	// It is what the user writes; the json output contract is appended by
+	// informer itself, so this field never has to describe a result shape.
+	AgentPrompt string `json:"agent_prompt"`
 }
 
 // legalParseTypes is the ordered set of supported parse types. Every legality
 // check and every list of offered types reads from here, so adding a parser
 // never leaves a caller with a stale copy of the set.
-var legalParseTypes = []string{ParseTypeFeed, ParseTypeRegex, ParseTypeJSON}
+var legalParseTypes = []string{ParseTypeFeed, ParseTypeRegex, ParseTypeJSON, ParseTypeAgent}
 
 // LegalParseTypes returns the supported parse types in presentation order.
 // The result is a copy: a caller can neither shrink nor reorder the set.

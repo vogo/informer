@@ -20,6 +20,7 @@ package service
 import (
 	"fmt"
 
+	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/configstore"
 	"github.com/vogo/informer/internal/feed"
 )
@@ -66,6 +67,9 @@ type FileConfigView struct {
 
 	// Schedule is the editable schedule section, nil when the file defines none.
 	Schedule *Schedule `json:"schedule"`
+
+	// Agent is the editable agent section, nil when the file defines none.
+	Agent *agent.Config `json:"agent"`
 
 	// PreservedKeys lists the top level keys this build does not edit but keeps on
 	// save, so the page can state plainly that nothing else is dropped.
@@ -122,13 +126,42 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 		view.Schedule = &schedule
 	}
 
+	view.Agent, err = readAgentSection(doc)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, key := range doc.Keys() {
-		if key != feedSectionKey && key != scheduleSectionKey {
+		if key != feedSectionKey && key != scheduleSectionKey && key != agentSectionKey {
 			view.PreservedKeys = append(view.PreservedKeys, key)
 		}
 	}
 
 	return view, nil
+}
+
+// readAgentSection reads the agent section of one loaded document, nil when the
+// file defines none.
+func readAgentSection(doc *configstore.Doc) (*agent.Config, error) {
+	var section agentSection
+
+	found, err := doc.Unmarshal(agentSectionKey, &section)
+	if err != nil {
+		return nil, err
+	}
+
+	if !found {
+		return nil, nil //nolint:nilnil //"no section" is not an error, and the caller renders it as the defaults.
+	}
+
+	return &agent.Config{
+		Provider:       section.Provider,
+		BaseURL:        section.BaseURL,
+		Model:          section.Model,
+		AllowedTools:   section.AllowedTools,
+		TimeoutSeconds: section.TimeoutSeconds,
+		Command:        section.Command,
+	}, nil
 }
 
 // SaveFeedConfig validates and stores the feed section of informer.json.

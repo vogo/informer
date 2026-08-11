@@ -20,6 +20,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/service"
 )
@@ -30,6 +31,18 @@ type FeedConfigDTO struct {
 	FeedExpireDays    int `json:"feedExpireDays"`
 	SameSiteMaxCount  int `json:"sameSiteMaxCount"`
 	MaxFetchNum       int `json:"maxFetchNum"`
+}
+
+// AgentConfigDTO is the editable agent section of informer.json. It carries no
+// api key: the credential lives in the separate 0600 file and is saved through
+// SaveAgentAPIKey, so the settings page never has to hold it to save the rest.
+type AgentConfigDTO struct {
+	Provider       string `json:"provider"`
+	BaseURL        string `json:"baseURL"`
+	Model          string `json:"model"`
+	AllowedTools   string `json:"allowedTools"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
+	Command        string `json:"command"`
 }
 
 // ScheduleDTO is the editable schedule section of informer.json.
@@ -59,6 +72,15 @@ type ConfigViewDTO struct {
 	// ScheduleDefaults are the documented starting values of the schedule section.
 	ScheduleDefaults *ScheduleDTO `json:"scheduleDefaults"`
 
+	// Agent is the stored section, or the defaults when the file has none.
+	Agent *AgentConfigDTO `json:"agent"`
+
+	// AgentDefaults are the starting values of the agent section.
+	AgentDefaults *AgentConfigDTO `json:"agentDefaults"`
+
+	// AgentProviders are the providers the agent section accepts, in order.
+	AgentProviders []string `json:"agentProviders"`
+
 	// PreservedKeys are the top level fields this build does not edit and keeps
 	// on every save, listed so the page can state that nothing is dropped.
 	PreservedKeys []string `json:"preservedKeys"`
@@ -71,6 +93,11 @@ type SecretsViewDTO struct {
 	Exists            bool   `json:"exists"`
 	WebhookConfigured bool   `json:"webhookConfigured"`
 	Webhook           string `json:"webhook"`
+
+	// AgentAPIKeyConfigured reports whether an agent api key is stored. The key
+	// itself is never sent to the page: unlike the webhook it is a real
+	// credential, and the page only needs to know that one exists.
+	AgentAPIKeyConfigured bool `json:"agentApiKeyConfigured"`
 }
 
 // HistoryIndexDTO reports what one history index rebuild did.
@@ -106,6 +133,7 @@ func (a *App) ReadConfig() (*ConfigViewDTO, error) {
 
 	defaults := toFeedConfigDTO(service.DefaultFeedConfig())
 	scheduleDefaults := toScheduleDTO(service.DefaultScheduleConfig())
+	agentDefaults := toAgentConfigDTO(service.DefaultAgentConfig())
 
 	dto := &ConfigViewDTO{
 		Path:             view.Path,
@@ -114,6 +142,9 @@ func (a *App) ReadConfig() (*ConfigViewDTO, error) {
 		Schedule:         scheduleDefaults,
 		Defaults:         defaults,
 		ScheduleDefaults: scheduleDefaults,
+		Agent:            agentDefaults,
+		AgentDefaults:    agentDefaults,
+		AgentProviders:   agent.LegalProviders(),
 		PreservedKeys:    view.PreservedKeys,
 	}
 
@@ -123,6 +154,10 @@ func (a *App) ReadConfig() (*ConfigViewDTO, error) {
 
 	if view.Schedule != nil {
 		dto.Schedule = toScheduleDTO(view.Schedule)
+	}
+
+	if view.Agent != nil {
+		dto.Agent = toAgentConfigDTO(view.Agent)
 	}
 
 	if dto.PreservedKeys == nil {
@@ -167,10 +202,11 @@ func (a *App) ReadSecrets() (*SecretsViewDTO, error) {
 	}
 
 	return &SecretsViewDTO{
-		Path:              view.Path,
-		Exists:            view.Exists,
-		WebhookConfigured: view.WebhookConfigured,
-		Webhook:           view.Webhook,
+		Path:                  view.Path,
+		Exists:                view.Exists,
+		WebhookConfigured:     view.WebhookConfigured,
+		Webhook:               view.Webhook,
+		AgentAPIKeyConfigured: view.AgentAPIKeyConfigured,
 	}, nil
 }
 
@@ -234,6 +270,52 @@ func (a *App) SaveSchedule(req *ScheduleDTO) error {
 		Enabled: req.Enabled,
 		Time:    req.Time,
 	})
+}
+
+// SaveAgentConfig validates and stores the agent section of informer.json.
+// Like every other section save it re-reads the whole document under a write lock,
+// so a field this build does not edit survives.
+func (a *App) SaveAgentConfig(req *AgentConfigDTO) error {
+	if req == nil {
+		return fmt.Errorf("%w: request is nil", service.ErrInvalidArgument)
+	}
+
+	err := a.ready()
+	if err != nil {
+		return err
+	}
+
+	return a.svc.SaveAgentConfig(&agent.Config{
+		Provider:       req.Provider,
+		BaseURL:        req.BaseURL,
+		Model:          req.Model,
+		AllowedTools:   req.AllowedTools,
+		TimeoutSeconds: req.TimeoutSeconds,
+		Command:        req.Command,
+	})
+}
+
+// SaveAgentAPIKey stores the agent api key in the separate 0600 credential file.
+// An empty value clears it, which puts the agent back on whatever credentials its
+// own command line is logged in with.
+func (a *App) SaveAgentAPIKey(apiKey string) error {
+	err := a.ready()
+	if err != nil {
+		return err
+	}
+
+	return a.svc.SaveAgentAPIKey(apiKey)
+}
+
+func toAgentConfigDTO(config *agent.Config) *AgentConfigDTO {
+	return &AgentConfigDTO{
+		Provider:       config.Provider,
+		BaseURL:        config.BaseURL,
+		Model:          config.Model,
+		AllowedTools:   config.AllowedTools,
+		TimeoutSeconds: config.TimeoutSeconds,
+		Command:        config.Command,
+	}
 }
 
 func toFeedConfigDTO(config *feed.Config) *FeedConfigDTO {
