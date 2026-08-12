@@ -13,6 +13,7 @@ import {
   NInputNumber,
   NPopconfirm,
   NSpace,
+  NSelect,
   NSpin,
   NSwitch,
   NTag,
@@ -20,7 +21,17 @@ import {
   NTimePicker,
   useMessage
 } from 'naive-ui'
-import {ReadConfig, ReadSecrets, RebuildHistoryIndex, SaveConfig, SaveSchedule, SaveWebhook, TriggerNow} from '../wailsjs/go/main/App'
+import {
+  ReadConfig,
+  ReadSecrets,
+  RebuildHistoryIndex,
+  SaveAgentAPIKey,
+  SaveAgentConfig,
+  SaveConfig,
+  SaveSchedule,
+  SaveWebhook,
+  TriggerNow
+} from '../wailsjs/go/main/App'
 import type {main} from '../wailsjs/go/models'
 import {errorText} from './errors'
 
@@ -43,6 +54,23 @@ const form = reactive({
   sameSiteMaxCount: 3,
   maxFetchNum: 1
 })
+
+// the agent section drives every「agent」订阅: the endpoint, the model and the
+// tool set. The api key is not part of it - it is saved on its own below, so this
+// form never has to hold a credential it was never shown.
+const agent = reactive({
+  provider: '',
+  baseURL: '',
+  model: '',
+  allowedTools: '',
+  timeoutSeconds: 0,
+  command: ''
+})
+const agentProviderOptions = ref<{label: string; value: string}[]>([])
+const agentSaving = ref(false)
+const agentAPIKeyConfigured = ref(false)
+const agentAPIKeyInput = ref('')
+const agentAPIKeySaving = ref(false)
 
 const secretsPath = ref('')
 const webhookConfigured = ref(false)
@@ -77,10 +105,13 @@ async function load() {
     preservedKeys.value = config.preservedKeys
     Object.assign(form, config.feed)
     Object.assign(schedule, config.schedule)
+    Object.assign(agent, config.agent)
+    agentProviderOptions.value = config.agentProviders.map(value => ({label: value, value}))
 
     secretsPath.value = secrets.path
     webhookConfigured.value = secrets.webhookConfigured
     webhook.value = secrets.webhook
+    agentAPIKeyConfigured.value = secrets.agentApiKeyConfigured
   } catch (e) {
     loadError.value = errorText(e)
   } finally {
@@ -132,6 +163,40 @@ async function triggerNow() {
     triggerError.value = errorText(e)
   } finally {
     triggering.value = false
+  }
+}
+
+async function saveAgent() {
+  agentSaving.value = true
+  try {
+    await SaveAgentConfig({
+      provider: agent.provider,
+      baseURL: agent.baseURL,
+      model: agent.model,
+      allowedTools: agent.allowedTools,
+      timeoutSeconds: agent.timeoutSeconds,
+      command: agent.command
+    })
+    message.success('Agent 配置已保存，下一次抓取即生效')
+    await load()
+  } catch (e) {
+    message.error(`保存失败：${errorText(e)}`)
+  } finally {
+    agentSaving.value = false
+  }
+}
+
+async function saveAgentAPIKey() {
+  agentAPIKeySaving.value = true
+  try {
+    await SaveAgentAPIKey(agentAPIKeyInput.value)
+    message.success(agentAPIKeyInput.value.trim() === '' ? '已清除 API Key' : 'API Key 已保存')
+    agentAPIKeyInput.value = ''
+    await load()
+  } catch (e) {
+    message.error(`保存失败：${errorText(e)}`)
+  } finally {
+    agentAPIKeySaving.value = false
   }
 }
 
@@ -207,6 +272,63 @@ async function rebuild() {
           <n-space justify="end">
             <n-button :disabled="loading" @click="load">重新读取</n-button>
             <n-button :loading="saving" type="primary" @click="save">保存配置</n-button>
+          </n-space>
+        </template>
+      </n-card>
+
+      <n-card size="small" title="Agent 配置" style="margin-bottom: 16px">
+        <n-text depth="3" style="font-size: 12px">
+          「agent」类型的订阅会调用命令行 Agent 抓取；这里留空的项使用本机上该 Agent 自身的登录与默认设置。
+        </n-text>
+
+        <n-form label-placement="left" label-width="auto" style="margin-top: 12px">
+          <n-form-item label="Agent 类型">
+            <n-select v-model:value="agent.provider" :options="agentProviderOptions" />
+          </n-form-item>
+          <n-form-item label="接口地址">
+            <n-input v-model:value="agent.baseURL" placeholder="留空使用默认；例如 https://api.anthropic.com" />
+          </n-form-item>
+          <n-form-item label="模型">
+            <n-input v-model:value="agent.model" placeholder="留空使用 Agent 默认模型；例如 claude-sonnet-5" />
+          </n-form-item>
+          <n-form-item label="可用工具">
+            <n-input v-model:value="agent.allowedTools" placeholder="逗号分隔，例如 WebSearch,WebFetch" />
+          </n-form-item>
+          <n-form-item label="超时（秒）">
+            <n-input-number v-model:value="agent.timeoutSeconds" :min="0" :max="3600" style="width: 100%" />
+          </n-form-item>
+          <n-form-item label="可执行文件">
+            <n-input v-model:value="agent.command" placeholder="留空使用 PATH 中的 claude" />
+          </n-form-item>
+        </n-form>
+        <n-text depth="3" style="font-size: 12px">「超时」填 0 表示使用默认窗口（300 秒）。</n-text>
+
+        <n-descriptions :column="1" size="small" style="margin: 12px 0">
+          <n-descriptions-item label="API Key">
+            <n-space :size="8" align="center">
+              <n-tag v-if="agentAPIKeyConfigured" size="small" type="success">已配置</n-tag>
+              <n-tag v-else size="small" :bordered="false">未配置（使用本机登录）</n-tag>
+            </n-space>
+          </n-descriptions-item>
+        </n-descriptions>
+
+        <n-space :size="8">
+          <n-input
+            v-model:value="agentAPIKeyInput"
+            type="password"
+            show-password-on="click"
+            placeholder="粘贴 API Key；留空保存表示清除"
+            style="flex: 1"
+          />
+          <n-button :loading="agentAPIKeySaving" @click="saveAgentAPIKey">保存 Key</n-button>
+        </n-space>
+        <n-text depth="3" style="display: block; margin-top: 8px; font-size: 12px">
+          API Key 与机器人地址存放在同一个 0600 文件中，不会写入 informer.json。
+        </n-text>
+
+        <template #footer>
+          <n-space justify="end">
+            <n-button :loading="agentSaving" type="primary" @click="saveAgent">保存 Agent 配置</n-button>
           </n-space>
         </template>
       </n-card>

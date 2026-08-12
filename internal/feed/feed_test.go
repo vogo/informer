@@ -49,7 +49,7 @@ func TestUpdateAndFilterFeeds(t *testing.T) {
 		Enabled:    true,
 	}).Error)
 
-	articles := feed.UpdateAndFilterFeeds(feedConfig)
+	articles := feed.UpdateAndFilterFeeds(feedConfig, nil)
 	if len(articles) == 0 {
 		t.Error("parse feed article failed")
 	} else {

@@ -32,6 +32,11 @@ const (
 
 	// webhookKey is the top level key holding the bot webhook.
 	webhookKey = "webhook"
+
+	// agentAPIKeyKey is the top level key holding the agent api key. It shares
+	// the credential file with the webhook because both are things a data
+	// directory must not hand out when informer.json is shared.
+	agentAPIKeyKey = "agent_api_key" //nolint:gosec //document key name, not a credential.
 )
 
 // SecretsView is what the settings page learns about the credential file.
@@ -48,6 +53,11 @@ type SecretsView struct {
 	// Webhook is the stored bot address. It is a plain endpoint rather than a
 	// secret, so the settings page shows it in full.
 	Webhook string `json:"webhook"`
+
+	// AgentAPIKeyConfigured reports whether a non empty agent api key is stored.
+	// The key itself is never returned: unlike the webhook it is a real
+	// credential, and the page only needs to know that one is set.
+	AgentAPIKeyConfigured bool `json:"agent_api_key_configured"`
 }
 
 // SecretsFilePath is the credential file of the active data directory.
@@ -59,28 +69,42 @@ func (s *Service) SecretsFilePath() string {
 func (s *Service) ReadSecretsView() (*SecretsView, error) {
 	path := s.SecretsFilePath()
 
-	stored, err := s.readWebhook()
+	stored, err := s.readSecrets()
 	if err != nil {
 		return nil, err
 	}
 
 	return &SecretsView{
-		Path:              path,
-		Exists:            stored.exists,
-		WebhookConfigured: stored.webhook != "",
-		Webhook:           stored.webhook,
+		Path:                  path,
+		Exists:                stored.exists,
+		WebhookConfigured:     stored.webhook != "",
+		Webhook:               stored.webhook,
+		AgentAPIKeyConfigured: stored.agentAPIKey != "",
 	}, nil
 }
 
 // SaveWebhook stores the bot webhook in the credential file.
-//
-// An empty value clears the stored webhook rather than writing a blank one. The file
-// is written atomically and its permission is verified afterwards: if it cannot be
-// brought to 0600, the save fails and the previous file is left untouched, so a
-// credential is never left readable by other users of the machine.
+// An empty value clears the stored webhook rather than writing a blank one.
 func (s *Service) SaveWebhook(webhook string) error {
+	return s.saveSecret(webhookKey, webhook)
+}
+
+// SaveAgentAPIKey stores the agent api key in the credential file.
+// An empty value clears it, which is how an installation goes back to running the
+// agent with the credentials its own command line is already logged in with.
+func (s *Service) SaveAgentAPIKey(apiKey string) error {
+	return s.saveSecret(agentAPIKeyKey, apiKey)
+}
+
+// saveSecret replaces one key of the credential file.
+//
+// The whole document is re-read inside the write lock so a second credential saved
+// at the same time is not lost, and the result is written atomically at 0600: if the
+// permission cannot be enforced the save fails and the previous file stays in place,
+// so a credential is never left readable by other users of the machine.
+func (s *Service) saveSecret(key, value string) error {
 	path := s.SecretsFilePath()
-	value := strings.TrimSpace(webhook)
+	trimmed := strings.TrimSpace(value)
 
 	return configstore.WithLock(path, configstore.DefaultLockTimeout, func() error {
 		doc, err := configstore.Load(path)
@@ -88,7 +112,7 @@ func (s *Service) SaveWebhook(webhook string) error {
 			return err
 		}
 
-		err = doc.Set(webhookKey, value)
+		err = doc.Set(key, trimmed)
 		if err != nil {
 			return err
 		}
@@ -112,7 +136,7 @@ func (s *Service) ResolveWebhook(argAddr string) string {
 		return trimmed
 	}
 
-	stored, err := s.readWebhook()
+	stored, err := s.readSecrets()
 	if err != nil {
 		// a broken credential file must not abort the daily run: the report is still
 		// generated and stored, it is only not delivered.
@@ -122,25 +146,48 @@ func (s *Service) ResolveWebhook(argAddr string) string {
 	return stored.webhook
 }
 
-// storedSecrets is the credential file state one read resolved.
-type storedSecrets struct {
-	webhook string
-	exists  bool
+// readAgentAPIKey returns the stored agent api key, empty when none is configured.
+func (s *Service) readAgentAPIKey() (string, error) {
+	stored, err := s.readSecrets()
+	if err != nil {
+		return "", err
+	}
+
+	return stored.agentAPIKey, nil
 }
 
-// readWebhook reads the stored webhook and whether the credential file exists.
-func (s *Service) readWebhook() (storedSecrets, error) {
+// storedSecrets is the credential file state one read resolved.
+type storedSecrets struct {
+	webhook     string
+	agentAPIKey string
+	exists      bool
+}
+
+// readSecrets reads every stored credential and whether the file exists.
+func (s *Service) readSecrets() (storedSecrets, error) {
 	doc, err := configstore.Load(s.SecretsFilePath())
 	if err != nil {
 		return storedSecrets{}, err
 	}
 
+	stored := storedSecrets{exists: doc.Exists()}
+
 	var webhook string
 
 	_, err = doc.Unmarshal(webhookKey, &webhook)
 	if err != nil {
-		return storedSecrets{exists: doc.Exists()}, err
+		return stored, err
 	}
 
-	return storedSecrets{webhook: strings.TrimSpace(webhook), exists: doc.Exists()}, nil
+	var apiKey string
+
+	_, err = doc.Unmarshal(agentAPIKeyKey, &apiKey)
+	if err != nil {
+		return stored, err
+	}
+
+	stored.webhook = strings.TrimSpace(webhook)
+	stored.agentAPIKey = strings.TrimSpace(apiKey)
+
+	return stored, nil
 }

@@ -34,6 +34,7 @@ import {
   ListSources,
   PreviewSource,
   SetSourceEnabled,
+  SupportedAgentProviders,
   SupportedParseTypes,
   UpdateSource
 } from '../wailsjs/go/main/App'
@@ -63,6 +64,8 @@ interface SourceForm {
   jsonTitlePath: string
   jsonURLPath: string
   parseType: string
+  agentProvider: string
+  agentPrompt: string
   categoryId: number
   enabled: boolean
 }
@@ -119,12 +122,15 @@ function emptyForm(): SourceForm {
     jsonTitlePath: '',
     jsonURLPath: '',
     parseType: '',
+    agentProvider: '',
+    agentPrompt: '',
     categoryId: 0,
     enabled: true
   }
 }
 
 const modalTitle = computed(() => (form.id === 0 ? '新增订阅' : `编辑订阅 #${form.id}`))
+const isAgentType = computed(() => form.parseType === 'agent')
 const showRegexFields = computed(() => form.parseType === 'regex' || form.parseType === '')
 const showJsonFields = computed(() => form.parseType === 'json' || form.parseType === '')
 const categoryOptions = computed(() => categories.value.map(c => ({label: c.name, value: c.id})))
@@ -148,12 +154,33 @@ const parseTypeOptions = [
   {label: '自动推导（按旧规则）', value: ''},
   {label: 'feed（RSS / Atom）', value: 'feed'},
   {label: 'regex（正则匹配）', value: 'regex'},
-  {label: 'json（路径提取）', value: 'json'}
+  {label: 'json（路径提取）', value: 'json'},
+  {label: 'agent（AI 代理抓取）', value: 'agent'}
 ]
 
+// the provider list comes from the backend, so an agent added there needs no
+// change here to be offered.
+const agentProviderOptions = ref<{label: string; value: string}[]>([
+  {label: '使用全局配置', value: ''}
+])
+
 onMounted(async () => {
-  await Promise.all([loadCategories(), loadParseTypeOptions(), loadSources()])
+  await Promise.all([loadCategories(), loadParseTypeOptions(), loadAgentProviders(), loadSources()])
 })
+
+async function loadAgentProviders() {
+  try {
+    const providers = await SupportedAgentProviders()
+    agentProviderOptions.value = [
+      {label: '使用全局配置', value: ''},
+      ...providers.map(value => ({label: value, value}))
+    ]
+  } catch (e) {
+    // the form then only offers「使用全局配置」, which is the working default;
+    // everything else on the page keeps functioning.
+    message.error(`Agent 类型加载失败：${errorText(e)}`)
+  }
+}
 
 async function loadParseTypeOptions() {
   try {
@@ -264,6 +291,8 @@ function openEdit(row: SourceDTO) {
     jsonTitlePath: row.jsonTitlePath,
     jsonURLPath: row.jsonURLPath,
     parseType: row.parseType,
+    agentProvider: row.agentProvider,
+    agentPrompt: row.agentPrompt,
     categoryId: row.categoryId,
     enabled: row.enabled
   })
@@ -271,7 +300,14 @@ function openEdit(row: SourceDTO) {
 }
 
 async function save() {
-  if (!form.url.trim()) {
+  // an agent source is driven by its prompt and has no address at all, so the
+  // two types cannot share one required field.
+  if (isAgentType.value) {
+    if (!form.agentPrompt.trim()) {
+      message.warning('请填写 Agent 提示词')
+      return
+    }
+  } else if (!form.url.trim()) {
     message.warning('请填写订阅 URL')
     return
   }
@@ -296,6 +332,8 @@ async function save() {
       jsonTitlePath: form.jsonTitlePath,
       jsonURLPath: form.jsonURLPath,
       parseType: form.parseType,
+      agentProvider: form.agentProvider,
+      agentPrompt: form.agentPrompt,
       categoryId: form.categoryId,
       enabled: form.enabled
     }
@@ -487,7 +525,7 @@ function openArticle(url: string) {
         <n-form-item label="标题">
           <n-input v-model:value="form.title" placeholder="订阅名称，例如：阮一峰 blog" />
         </n-form-item>
-        <n-form-item label="URL" required>
+        <n-form-item v-if="!isAgentType" label="URL" required>
           <n-input v-model:value="form.url" placeholder="https://example.com/atom.xml" />
         </n-form-item>
         <n-form-item label="分类">
@@ -498,7 +536,7 @@ function openArticle(url: string) {
             clearable
           />
         </n-form-item>
-        <n-form-item label="自定义请求">
+        <n-form-item v-if="!isAgentType" label="自定义请求">
           <n-input
             v-model:value="form.curl"
             type="textarea"
@@ -510,7 +548,25 @@ function openArticle(url: string) {
           <n-select v-model:value="form.parseType" :options="parseTypeOptions" />
         </n-form-item>
 
-        <template v-if="showRegexFields">
+        <template v-if="isAgentType">
+          <n-divider title-placement="left" style="margin: 8px 0">Agent 解析参数</n-divider>
+          <n-form-item label="Agent">
+            <n-select v-model:value="form.agentProvider" :options="agentProviderOptions" />
+          </n-form-item>
+          <n-form-item label="提示词" required>
+            <n-input
+              v-model:value="form.agentPrompt"
+              type="textarea"
+              placeholder="用自然语言描述要找什么，例如：搜索今天 Go 语言相关的技术文章，给出标题和链接"
+              :autosize="{minRows: 4, maxRows: 10}"
+            />
+          </n-form-item>
+          <n-text depth="3" style="display: block; margin: -4px 0 12px 0; font-size: 12px">
+            只需要描述任务本身，JSON 输出格式要求由 informer 自动追加；接口地址、密钥与模型在「设置」中配置。
+          </n-text>
+        </template>
+
+        <template v-if="!isAgentType && showRegexFields">
           <n-divider title-placement="left" style="margin: 8px 0">正则解析参数</n-divider>
           <n-form-item label="正则表达式">
             <n-input v-model:value="form.regex" placeholder='例如：,"url":"([^"]+)","title":"([^"]+)",' />
@@ -523,7 +579,7 @@ function openArticle(url: string) {
           </n-form-item>
         </template>
 
-        <template v-if="showJsonFields">
+        <template v-if="!isAgentType && showJsonFields">
           <n-divider title-placement="left" style="margin: 8px 0">JSON 解析参数</n-divider>
           <n-form-item label="标题路径">
             <n-input v-model:value="form.jsonTitlePath" placeholder="例如：data/items[]/title" />

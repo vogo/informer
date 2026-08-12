@@ -42,9 +42,10 @@ func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 	}
 
 	result, err := inform.Run(&inform.Options{
-		HomeDir:    s.homeDir,
-		URLAddr:    s.ResolveWebhook(urlAddr),
-		FeedConfig: s.EffectiveFeedConfig(fileConfig),
+		HomeDir:     s.homeDir,
+		URLAddr:     s.ResolveWebhook(urlAddr),
+		FeedConfig:  s.EffectiveFeedConfig(fileConfig),
+		AgentConfig: s.EffectiveAgentConfig(fileConfig),
 	})
 	if err != nil {
 		return result, err

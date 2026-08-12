@@ -27,6 +27,7 @@ import (
 
 	"github.com/vogo/logger"
 
+	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/date"
 	"github.com/vogo/informer/internal/ding"
 	"github.com/vogo/informer/internal/feed"
@@ -66,6 +67,10 @@ func DailyFilePath(homeDir string, day time.Time) string {
 // Config is the layout of informer.json.
 type Config struct {
 	Feed *feed.Config `json:"feed"`
+
+	// Agent is the shared configuration of every agent source. A nil value runs
+	// the agent with its defaults and the machine's own credentials.
+	Agent *agent.Config `json:"agent"`
 }
 
 // Options describes one inform run. The feed database is expected to be
@@ -79,6 +84,10 @@ type Options struct {
 
 	// FeedConfig is the effective feed configuration; a nil value skips feeds.
 	FeedConfig *feed.Config
+
+	// AgentConfig backs the agent sources of this run; a nil value runs them
+	// with the agent defaults and the machine's own credentials.
+	AgentConfig *agent.Config
 }
 
 // Result is the outcome of one inform run.
@@ -123,7 +132,7 @@ func Run(opts *Options) (*Result, error) {
 
 	var articles []*feed.Article
 	if opts.FeedConfig != nil {
-		articles = feed.AddFeeds(buf, opts.FeedConfig)
+		articles = feed.AddFeeds(buf, opts.FeedConfig, opts.AgentConfig)
 	}
 
 	content := buf.String()

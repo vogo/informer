@@ -203,7 +203,7 @@ func TestSourceQueryRejectsUnknownFilterValues(t *testing.T) {
 
 	// an unknown enum is a mistake worth reporting, never an alias of "all".
 	const (
-		absentParseType   = "agent"
+		absentParseType   = "rss-v9"
 		absentFetchStatus = "half-broken"
 	)
 
@@ -292,7 +292,8 @@ func TestLegalParseTypesIsTheFilterVocabulary(t *testing.T) {
 	svc := newService(t)
 
 	types := feed.LegalParseTypes()
-	assert.Equal(t, []string{feed.ParseTypeFeed, feed.ParseTypeRegex, feed.ParseTypeJSON}, types)
+	assert.Equal(t,
+		[]string{feed.ParseTypeFeed, feed.ParseTypeRegex, feed.ParseTypeJSON, feed.ParseTypeAgent}, types)
 
 	// every offered type is a value the query accepts, so the sidebar can build
 	// its options from this set alone.

@@ -17,18 +17,25 @@
 
 package feed
 
+import "github.com/vogo/informer/internal/agent"
+
 // ParseArticles parses a source with the parser its ParseType selects, falling back
 // to the historical derivation when no legal parse type is set.
 //
-// It performs network reads only: no source, article, status, timestamp or config
-// record is created or modified, so it can be called repeatedly without changing
-// any persisted state.
-func ParseArticles(source *Source) ([]*Article, error) {
+// agentConfig backs a ParseTypeAgent source and is ignored by every other parser;
+// a nil value runs the agent with its defaults.
+//
+// It performs network reads and agent runs only: no source, article, status,
+// timestamp or config record is created or modified, so it can be called repeatedly
+// without changing any persisted state.
+func ParseArticles(source *Source, agentConfig *agent.Config) ([]*Article, error) {
 	switch source.ResolveParseType() {
 	case ParseTypeJSON:
 		return JsonParse(source)
 	case ParseTypeRegex:
 		return RegexParse(source)
+	case ParseTypeAgent:
+		return AgentParse(source, agentConfig)
 	default:
 		return GoFeedArticles(source)
 	}

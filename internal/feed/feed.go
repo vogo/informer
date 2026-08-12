@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/vogo/logger"
+
+	"github.com/vogo/informer/internal/agent"
 )
 
 const (
@@ -31,8 +33,8 @@ const (
 
 // AddFeeds writes the recommended articles into buf and returns them so that the
 // caller can record the delivery once a notification actually succeeded.
-func AddFeeds(buf io.StringWriter, config *Config) []*Article {
-	articles := UpdateAndFilterFeeds(config)
+func AddFeeds(buf io.StringWriter, config *Config, agentConfig *agent.Config) []*Article {
+	articles := UpdateAndFilterFeeds(config, agentConfig)
 	if len(articles) > 0 {
 		_, _ = buf.WriteString("文章推荐:\n")
 
@@ -44,7 +46,7 @@ func AddFeeds(buf io.StringWriter, config *Config) []*Article {
 	return articles
 }
 
-func UpdateAndFilterFeeds(config *Config) []*Article {
+func UpdateAndFilterFeeds(config *Config, agentConfig *agent.Config) []*Article {
 	now := time.Now()
 	nowTime := now.Unix()
 	expireTime := now.Add(time.Hour * 24 * time.Duration(-config.FeedExpireDays)).Unix()
@@ -63,6 +65,8 @@ func UpdateAndFilterFeeds(config *Config) []*Article {
 			jsonParseFeed(config, source, expireTime)
 		case ParseTypeRegex:
 			regexParseFeed(config, source, expireTime)
+		case ParseTypeAgent:
+			agentParseFeed(config, source, agentConfig, expireTime)
 		default:
 			addGoFeed(config, source, expireTime)
 		}
