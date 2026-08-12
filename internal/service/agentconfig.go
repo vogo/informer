@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/vogo/logger"
+
 	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/configstore"
 	"github.com/vogo/informer/internal/inform"
@@ -128,6 +130,10 @@ func ValidateAgentConfig(config *agent.Config) error {
 // The file section decides the endpoint and model, the credential file supplies the
 // api key, and the data directory becomes the working directory of the agent process
 // so it never inherits whatever directory the caller happened to start in.
+//
+// When the file leaves command empty, the provider default is located on this machine
+// and the absolute path is remembered in informer.json, so a desktop app that started
+// without the user's shell PATH only has to discover the binary once.
 func (s *Service) EffectiveAgentConfig(fileConfig *inform.Config) *agent.Config {
 	config := DefaultAgentConfig()
 
@@ -143,5 +149,74 @@ func (s *Service) EffectiveAgentConfig(fileConfig *inform.Config) *agent.Config 
 		resolved.APIKey = key
 	}
 
+	s.ensureAgentCommand(resolved)
+
 	return resolved
+}
+
+// DetectAgentCommand locates the default executable of a provider on this machine.
+// It does not write the path: the settings page fills the field and the user saves,
+// or the next agent run remembers it through EffectiveAgentConfig.
+func (s *Service) DetectAgentCommand(provider string) (string, error) {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		provider = agent.DefaultProvider
+	}
+
+	if !agent.IsLegalProvider(provider) {
+		return "", fmt.Errorf("%w: unknown agent provider %q", ErrInvalidArgument, provider)
+	}
+
+	return agent.LocateCommand(provider)
+}
+
+// ensureAgentCommand fills cfg.Command with an absolute executable path when possible.
+// A previously empty command is persisted so the next run skips the search.
+func (s *Service) ensureAgentCommand(cfg *agent.Config) {
+	if cfg == nil {
+		return
+	}
+
+	configured := strings.TrimSpace(cfg.Command)
+
+	path, err := agent.ResolveCommand(cfg.Provider, configured)
+	if err != nil {
+		return
+	}
+
+	cfg.Command = path
+
+	if configured != "" {
+		return
+	}
+
+	s.rememberAgentCommand(path)
+}
+
+// rememberAgentCommand stores a discovered executable path when the file still has
+// none. Failures are logged rather than returned: discovering the path for this run
+// already succeeded, and a later run can try again.
+func (s *Service) rememberAgentCommand(command string) {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return
+	}
+
+	stored, err := s.ReadAgentConfig()
+	if err != nil {
+		logger.Warnf("remember agent command: read config: %v", err)
+
+		return
+	}
+
+	if strings.TrimSpace(stored.Command) != "" {
+		return
+	}
+
+	stored.Command = command
+
+	err = s.SaveAgentConfig(stored)
+	if err != nil {
+		logger.Warnf("remember agent command: save config: %v", err)
+	}
 }

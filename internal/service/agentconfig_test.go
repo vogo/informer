@@ -182,3 +182,77 @@ func TestEffectiveAgentConfigWithoutASection(t *testing.T) {
 	assert.Empty(t, resolved.APIKey, "an installation without a stored key runs on the machine's own login")
 	assert.Equal(t, filepath.Clean(svc.HomeDir()), filepath.Clean(resolved.WorkDir))
 }
+
+func TestEffectiveAgentConfigRemembersADiscoveredCommand(t *testing.T) {
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("the fixture is a posix shell script")
+	}
+
+	svc := newService(t)
+
+	path, err := agent.LocateCommand(agent.ProviderClaude)
+	if err != nil {
+		dir := t.TempDir()
+		path = filepath.Join(dir, agent.ClaudeCommand)
+		require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\n"), 0o700)) //nolint:gosec //test helper binary.
+		t.Setenv("PATH", dir)
+
+		path, err = agent.LocateCommand(agent.ProviderClaude)
+		require.NoError(t, err)
+	}
+
+	resolved := svc.EffectiveAgentConfig(nil)
+	assert.Equal(t, path, resolved.Command)
+
+	stored, err := svc.ReadAgentConfig()
+	require.NoError(t, err)
+	assert.Equal(t, path, stored.Command, "the discovered path is written back for the next run")
+}
+
+func TestEffectiveAgentConfigKeepsAnExplicitCommand(t *testing.T) {
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("the fixture is a posix shell script")
+	}
+
+	svc := newService(t)
+
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "custom-claude")
+	require.NoError(t, os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o700)) //nolint:gosec //test helper binary.
+	require.NoError(t, svc.SaveAgentConfig(&agent.Config{Command: binary}))
+
+	other := filepath.Join(dir, agent.ClaudeCommand)
+	require.NoError(t, os.WriteFile(other, []byte("#!/bin/sh\n"), 0o700)) //nolint:gosec //test helper binary.
+	t.Setenv("PATH", dir)
+
+	resolved := svc.EffectiveAgentConfig(&inform.Config{Agent: &agent.Config{Command: binary}})
+	assert.Equal(t, binary, resolved.Command)
+
+	stored, err := svc.ReadAgentConfig()
+	require.NoError(t, err)
+	assert.Equal(t, binary, stored.Command, "an explicit command is never replaced by auto-detect")
+}
+
+func TestDetectAgentCommand(t *testing.T) {
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("the fixture is a posix shell script")
+	}
+
+	svc := newService(t)
+
+	dir := t.TempDir()
+	binary := filepath.Join(dir, agent.ClaudeCommand)
+	require.NoError(t, os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o700)) //nolint:gosec //test helper binary.
+	t.Setenv("PATH", dir)
+
+	path, err := svc.DetectAgentCommand(agent.ProviderClaude)
+	require.NoError(t, err)
+	assert.Equal(t, binary, path)
+
+	stored, err := svc.ReadAgentConfig()
+	require.NoError(t, err)
+	assert.Empty(t, stored.Command, "detect only reports the path; saving is left to the caller")
+
+	_, err = svc.DetectAgentCommand(unknownAgentName)
+	require.ErrorIs(t, err, service.ErrInvalidArgument)
+}
