@@ -51,7 +51,7 @@ jobs:
           node-version: 22
 
       - name: Install wails3
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
+        run: CGO_ENABLED=0 go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
 
       - name: Package universal .app
         run: |
@@ -125,7 +125,7 @@ jobs:
 
       - name: Install wails3
         shell: bash
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
+        run: CGO_ENABLED=0 go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
 
       - name: Wails build
         shell: bash
@@ -194,7 +194,7 @@ jobs:
 
       - name: Install wails3 and nfpm
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
+          CGO_ENABLED=0 go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1
 
       - name: Wails build

@@ -159,7 +159,7 @@ jobs:
           sudo apt-get install -y build-essential pkg-config ${{ matrix.webkit_packages }}
 
       - name: Install wails3
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
+        run: CGO_ENABLED=0 go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
 
       - name: Wails build
         shell: bash
