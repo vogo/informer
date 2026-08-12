@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import {onMounted, ref} from 'vue'
+import {onMounted, onUnmounted, ref} from 'vue'
 import {
+  NButton,
   NConfigProvider,
   NDialogProvider,
   NEllipsis,
@@ -15,7 +16,8 @@ import {
   dateZhCN,
   zhCN
 } from 'naive-ui'
-import {HomeDir, StartupError, Version} from '../wailsjs/go/main/App'
+import {Events, Updater} from '@wailsio/runtime'
+import {HomeDir, RestartToUpdate, StartupError, Version} from './bindings'
 import ArticleLibrary from './ArticleLibrary.vue'
 import DailyReport from './DailyReport.vue'
 import SettingsPanel from './SettingsPanel.vue'
@@ -26,12 +28,64 @@ const homeDir = ref('')
 const startupError = ref('')
 const ready = ref(false)
 
+// updateBadge drives the header CTA: downloading → ready → click Restart.
+type UpdateBadge = '' | 'downloading' | 'ready' | 'error'
+const updateBadge = ref<UpdateBadge>('')
+const updateDetail = ref('')
+const restarting = ref(false)
+
+const unsubs: Array<() => void> = []
+
 onMounted(async () => {
   version.value = await Version().catch(() => '')
   homeDir.value = await HomeDir().catch(() => '')
   startupError.value = await StartupError().catch(e => String(e))
   ready.value = true
+
+  unsubs.push(Events.On(Updater.Events.DownloadStarted, () => {
+    updateBadge.value = 'downloading'
+    updateDetail.value = ''
+  }))
+  unsubs.push(Events.On(Updater.Events.DownloadProgress, (e: {data?: {written?: number; total?: number}}) => {
+    updateBadge.value = 'downloading'
+    const p = e?.data
+    if (p && p.total && p.total > 0 && typeof p.written === 'number') {
+      const pct = Math.min(100, Math.round((p.written / p.total) * 100))
+      updateDetail.value = `${pct}%`
+    }
+  }))
+  unsubs.push(Events.On(Updater.Events.UpdateReady, () => {
+    updateBadge.value = 'ready'
+    updateDetail.value = ''
+  }))
+  unsubs.push(Events.On(Updater.Events.Error, (e: {data?: {message?: string; stage?: string}}) => {
+    updateBadge.value = 'error'
+    updateDetail.value = e?.data?.message || '更新失败'
+  }))
+  unsubs.push(Events.On(Updater.Events.NoUpdate, () => {
+    if (updateBadge.value !== 'ready') {
+      updateBadge.value = ''
+      updateDetail.value = ''
+    }
+  }))
 })
+
+onUnmounted(() => {
+  for (const off of unsubs) {
+    off()
+  }
+})
+
+async function onRestartUpdate() {
+  restarting.value = true
+  try {
+    await RestartToUpdate()
+  } catch (e) {
+    updateBadge.value = 'error'
+    updateDetail.value = e instanceof Error ? e.message : String(e)
+    restarting.value = false
+  }
+}
 </script>
 
 <template>
@@ -50,6 +104,27 @@ onMounted(async () => {
                   </n-text>
                 </template>
                 数据目录：{{ homeDir }}
+              </n-tooltip>
+            </n-space>
+
+            <n-space align="center" :size="8" class="header-right">
+              <n-text v-if="updateBadge === 'downloading'" depth="3" style="font-size: 12px">
+                正在下载更新{{ updateDetail ? ` ${updateDetail}` : '…' }}
+              </n-text>
+              <n-button
+                v-else-if="updateBadge === 'ready'"
+                type="warning"
+                size="small"
+                :loading="restarting"
+                @click="onRestartUpdate"
+              >
+                重启生效新版本
+              </n-button>
+              <n-tooltip v-else-if="updateBadge === 'error'">
+                <template #trigger>
+                  <n-tag :bordered="false" size="small" type="error">更新失败</n-tag>
+                </template>
+                {{ updateDetail || '请稍后重试' }}
               </n-tooltip>
             </n-space>
           </header>
@@ -123,6 +198,10 @@ onMounted(async () => {
   height: 48px;
   flex: none;
   border-bottom: 1px solid #efeff5;
+}
+
+.header-right {
+  flex: none;
 }
 
 .tabs {

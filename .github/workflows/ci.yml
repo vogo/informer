@@ -109,23 +109,23 @@ jobs:
             os: ubuntu-22.04
             webkit_packages: libgtk-3-dev libwebkit2gtk-4.0-dev
             webkit_abi: '0'
-            build_tags: ''
+            extra_tags: ''
           # WebKitGTK 4.1 path, required on ubuntu 24.04 and newer.
           - platform: linux-ubuntu24
             os: ubuntu-24.04
             webkit_packages: libgtk-3-dev libwebkit2gtk-4.1-dev
             webkit_abi: '1'
-            build_tags: '-tags webkit2_41'
+            extra_tags: 'webkit2_41'
           - platform: macos
             os: macos-14
             webkit_packages: ''
             webkit_abi: ''
-            build_tags: ''
+            extra_tags: ''
           - platform: windows
             os: windows-2022
             webkit_packages: ''
             webkit_abi: ''
-            build_tags: ''
+            extra_tags: ''
     steps:
 
       - name: Check out code
@@ -150,45 +150,46 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config ${{ matrix.webkit_packages }}
 
-      - name: Install wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+      - name: Install wails3
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
 
-      # -webview2 embed bakes the WebView2 bootstrapper into the NSIS installer,
-      # exercised on every CI run so a broken bootstrap strategy fails early.
       - name: Wails build
         shell: bash
         run: |
           cd cmd/informer-ui
-          wails build ${{ matrix.build_tags }} -webview2 embed \
-            -ldflags "-X main.version=ci-${{ github.sha }}"
+          extra=()
+          if [ -n "${{ matrix.extra_tags }}" ]; then
+            extra+=(EXTRA_TAGS="${{ matrix.extra_tags }}")
+          fi
+          # Windows desktop builds need CGO for the WebView2 host.
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            extra+=(CGO_ENABLED=1)
+          fi
+          wails3 build INFORMER_UI_VERSION="ci-${{ github.sha }}" "${extra[@]}"
 
       # pins the Linux binary to the WebKitGTK ABI the runner actually ships.
       - name: Linux dynamic dependency check
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          ldd cmd/informer-ui/build/bin/informer-ui | tee /tmp/ldd.txt
+          ldd cmd/informer-ui/bin/informer-ui | tee /tmp/ldd.txt
           grep -q "libwebkit2gtk-4.${{ matrix.webkit_abi }}.so" /tmp/ldd.txt
 
-      # the executable lands in a different place per platform: a bare binary on
-      # linux, an .exe on windows and inside the .app bundle on macOS, which is
-      # the layout release.yml already reads.
       - name: Smoke version sub command
         shell: bash
         run: |
           bin=""
           for candidate in \
-            cmd/informer-ui/build/bin/informer-ui \
-            cmd/informer-ui/build/bin/informer-ui.exe \
-            cmd/informer-ui/build/bin/informer-ui.app/Contents/MacOS/informer-ui; do
+            cmd/informer-ui/bin/informer-ui \
+            cmd/informer-ui/bin/informer-ui.exe; do
             if [ -f "$candidate" ]; then bin="$candidate"; break; fi
           done
-          test -n "$bin" || { echo "no informer-ui executable in build/bin"; ls -R cmd/informer-ui/build/bin; exit 1; }
+          test -n "$bin" || { echo "no informer-ui executable in bin"; ls -R cmd/informer-ui/bin; exit 1; }
           "$bin" version | grep -q "ci-${{ github.sha }}"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: informer-ui-ci-${{ matrix.platform }}
-          path: cmd/informer-ui/build/bin/
+          path: cmd/informer-ui/bin/
           if-no-files-found: error

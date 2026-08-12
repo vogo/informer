@@ -30,13 +30,12 @@ import {
   SaveConfig,
   SaveSchedule,
   SaveWebhook,
-  TriggerNow
-} from '../wailsjs/go/main/App'
-import type {main} from '../wailsjs/go/models'
+  TriggerNow,
+  type HistoryIndexDTO,
+  type InformResultDTO,
+} from './bindings'
 import {errorText} from './errors'
-
-type HistoryIndexDTO = main.HistoryIndexDTO
-type InformResultDTO = main.InformResultDTO
+import {requireValue} from './nulls'
 
 const message = useMessage()
 
@@ -98,15 +97,17 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [config, secrets] = await Promise.all([ReadConfig(), ReadSecrets()])
+    const [configRaw, secretsRaw] = await Promise.all([ReadConfig(), ReadSecrets()])
+    const config = requireValue(configRaw, 'ConfigView')
+    const secrets = requireValue(secretsRaw, 'SecretsView')
 
     configPath.value = config.path
     configExists.value = config.exists
-    preservedKeys.value = config.preservedKeys
+    preservedKeys.value = config.preservedKeys ?? []
     Object.assign(form, config.feed)
     Object.assign(schedule, config.schedule)
     Object.assign(agent, config.agent)
-    agentProviderOptions.value = config.agentProviders.map(value => ({label: value, value}))
+    agentProviderOptions.value = (config.agentProviders ?? []).map(value => ({label: value, value}))
 
     secretsPath.value = secrets.path
     webhookConfigured.value = secrets.webhookConfigured
@@ -450,8 +451,8 @@ async function rebuild() {
           库中无此链接 {{ rebuildResult.skippedUnmatched }}、
           匹配到多条 {{ rebuildResult.skippedAmbiguous }}），
           失败 {{ rebuildResult.failed }} 条。
-          <ul v-if="rebuildResult.errors.length > 0" style="margin: 8px 0 0; padding-left: 18px">
-            <li v-for="(err, i) in rebuildResult.errors" :key="i">{{ err }}</li>
+          <ul v-if="(rebuildResult.errors ?? []).length > 0" style="margin: 8px 0 0; padding-left: 18px">
+            <li v-for="(err, i) in (rebuildResult.errors ?? [])" :key="i">{{ err }}</li>
           </ul>
         </n-alert>
 

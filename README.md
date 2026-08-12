@@ -273,7 +273,7 @@ API Key 不写进 `informer.json`，而是放在同目录的 `informer.secret.js
 
 ## 六、桌面版 informer-ui
 
-`cmd/informer-ui` 是 Wails v2 + Vue 3 + Naive UI 的桌面入口。窗口顶部分为四个 Tab：
+`cmd/informer-ui` 是 Wails v3 + Vue 3 + Naive UI 的桌面入口。窗口顶部分为四个 Tab：
 
 | Tab | 能做什么 |
 | --- | --- |
@@ -282,26 +282,29 @@ API Key 不写进 `informer.json`，而是放在同目录的 `informer.secret.js
 | **文章库** | 已入库文章的游标翻页列表，可按分类、订阅、关键字筛选，显示通知时间；标题点击后在系统浏览器中打开。 |
 | **设置** | 读写 `informer.json` 的抓取与推荐参数、配置定时推送（仅桌面端，应用打开时生效）、手动触发一次推送、配置机器人地址（写入独立的敏感文件）、执行「重建历史索引」。 |
 
+正式发布构建会在启动时及之后每 24 小时检查一次 GitHub Releases；若有新版本则后台下载并校验，右上角出现「重启生效新版本」，点击后替换二进制并重启。开发版（`version=dev`）不会发起检查。
+
 ### 安装
 
 在仓库的 [Releases](https://github.com/vogo/informer/releases) 页面下载最新版本对应平台的安装包：
 
-| 平台 | 安装包 |
-| --- | --- |
-| macOS | `informer-ui-<版本>-darwin-universal.dmg`（universal，未签名） |
-| Windows | `informer-ui-<版本>-windows-amd64-setup.exe`（NSIS，内置 WebView2 引导） |
-| Linux | `informer-ui-<版本>-linux-amd64.tar.gz` 或 `.deb` |
+| 平台 | 手动安装 | 应用内更新使用 |
+| --- | --- | --- |
+| macOS | `informer-ui-<版本>-darwin-universal.dmg`（universal，未签名） | `informer-ui-<版本>-darwin-universal.app.zip` |
+| Windows | `informer-ui-<版本>-windows-amd64-setup.exe`（NSIS，内置 WebView2 引导） | `informer-ui-<版本>-windows-amd64.zip` |
+| Linux | `informer-ui-<版本>-linux-amd64.tar.gz` 或 `.deb` | `informer-ui-<版本>-linux-amd64.tar.gz` |
 
-macOS 安装包未做代码签名与公证，首次打开需在「系统设置 → 隐私与安全性」中放行。
+macOS 安装包未做代码签名与公证，首次打开（以及自更新替换后）可能需在「系统设置 → 隐私与安全性」中放行。
 
 ### 从源码运行
 
-需要安装 [Wails v2 CLI](https://wails.io/docs/gettingstarted/installation)、Node.js 与 C 编译器（桌面版依赖 CGO：原生 WebView 与 mattn/go-sqlite3）：
+需要安装 [Wails v3 CLI](https://v3.wails.io/)（`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8`）、Node.js 与 C 编译器（桌面版依赖 CGO：原生 WebView 与 mattn/go-sqlite3）：
 
 ```bash
 cd cmd/informer-ui
-wails dev      # 本地运行
-wails build    # 出包，产物在 build/bin/
+wails3 dev      # 本地运行
+wails3 build    # 出包，产物在 bin/
+wails3 package  # 按当前平台打包（macOS .app / Windows NSIS / Linux 等）
 ```
 
 ### 重建历史索引
@@ -333,7 +336,7 @@ make check     # 许可证头检查 + golangci-lint
 ```
 
 打 `v*` 标签后由 `.github/workflows/release.yml` 在 macOS / Windows / Linux 三个原生 runner 上构建桌面版，
-并聚合发布到 GitHub Release（macOS 为未签名 universal dmg，Windows 为内置 WebView2 引导的 NSIS 安装包，
-Linux 为 x86_64 tar.gz 与 deb）。当前阶段不做代码签名 / 公证。
+并聚合发布到 GitHub Release（含手动安装包与应用内更新用的 zip/tar.gz，以及固定名 `SHA256SUMS`）。
+当前阶段不做代码签名 / 公证。
 
 许可证：[Apache License 2.0](LICENSE)。

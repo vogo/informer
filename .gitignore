@@ -9,13 +9,16 @@ informer.json
 /data
 *.db
 
-# Wails 桌面入口的生成物不提交：wailsjs 绑定与 frontend/dist 由 CI/发布流水线现场构建，
+# Wails 桌面入口的生成物不提交：bindings / frontend/dist 由 CI/发布流水线现场构建，
 # frontend/dist/gitkeep 是唯一例外，它保证全新检出也能编译 go:embed。
 dist/*
 cmd/informer-ui/frontend/node_modules/
 cmd/informer-ui/frontend/wailsjs/
+cmd/informer-ui/frontend/bindings/
 cmd/informer-ui/frontend/package.json.md5
 cmd/informer-ui/frontend/dist/*
 !cmd/informer-ui/frontend/dist/gitkeep
 cmd/informer-ui/build/bin/
+cmd/informer-ui/bin/
+cmd/informer-ui/.task/
 cmd/informer-ui/informer-ui

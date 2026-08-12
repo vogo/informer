@@ -26,7 +26,7 @@ import {
   NTooltip,
   useMessage
 } from 'naive-ui'
-import {BrowserOpenURL} from '../wailsjs/runtime/runtime'
+import {Browser} from '@wailsio/runtime'
 import {
   CreateSource,
   DeleteSource,
@@ -36,15 +36,14 @@ import {
   SetSourceEnabled,
   SupportedAgentProviders,
   SupportedParseTypes,
-  UpdateSource
-} from '../wailsjs/go/main/App'
-import type {main} from '../wailsjs/go/models'
+  UpdateSource,
+  type ArticleDTO,
+  type CategoryDTO,
+  type SourceDTO,
+} from './bindings'
 import CategoryPanel from './CategoryPanel.vue'
 import {errorText} from './errors'
-
-type SourceDTO = main.SourceDTO
-type CategoryDTO = main.CategoryDTO
-type ArticleDTO = main.ArticleDTO
+import {compact} from './nulls'
 
 // SourceForm mirrors the Go request object one to one, so nothing the service
 // returns round trips through an implicit shape.
@@ -194,7 +193,7 @@ async function loadParseTypeOptions() {
 
 async function loadCategories() {
   try {
-    categories.value = await ListCategories()
+    categories.value = compact(await ListCategories())
   } catch (e) {
     // the tree panel reports its own failure; the form just loses its options.
     message.error(`分类加载失败：${errorText(e)}`)
@@ -220,7 +219,7 @@ async function loadSources() {
       return
     }
 
-    sources.value = listed
+    sources.value = compact(listed)
   } catch (e) {
     if (seq !== listSeq) {
       return
@@ -395,7 +394,7 @@ async function openPreview(row: SourceDTO) {
   previewLoading.value = true
   showPreview.value = true
   try {
-    previewArticles.value = await PreviewSource(row.id)
+    previewArticles.value = compact(await PreviewSource(row.id))
   } catch (e) {
     previewError.value = errorText(e)
   } finally {
@@ -404,7 +403,7 @@ async function openPreview(row: SourceDTO) {
 }
 
 function openArticle(url: string) {
-  BrowserOpenURL(url)
+  void Browser.OpenURL(url)
 }
 </script>
 
