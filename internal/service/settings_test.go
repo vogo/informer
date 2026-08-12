@@ -222,7 +222,7 @@ func TestSaveWebhookClearsTheStoredValue(t *testing.T) {
 func TestResolveWebhookIgnoresABrokenConfigFile(t *testing.T) {
 	svc := newService(t)
 
-	require.NoError(t, os.WriteFile(svc.ConfigFilePath(), []byte("not json"), 0o644))
+	require.NoError(t, os.WriteFile(svc.ConfigFilePath(), []byte("not json"), 0o644)) //nolint:gosec //broken fixture on purpose.
 
 	// the daily report must still be generated; only the delivery is skipped.
 	assert.Empty(t, svc.ResolveWebhook(""))

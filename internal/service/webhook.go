@@ -19,6 +19,7 @@ package service
 
 import (
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/vogo/informer/internal/configstore"
@@ -70,7 +71,7 @@ func (s *Service) SaveWebhook(webhook string) error {
 // An address passed on the command line always wins, so every existing crontab entry
 // keeps working exactly as before; informer.json is the fallback used by a run
 // started without an argument. A webhook still sitting in the legacy credential
-// file is honoured until the next save migrates it out.
+// file is honored until the next save migrates it out.
 func (s *Service) ResolveWebhook(argAddr string) string {
 	if trimmed := strings.TrimSpace(argAddr); trimmed != "" {
 		return trimmed
@@ -106,26 +107,26 @@ func (s *Service) readWebhook() (string, error) {
 		return webhook, nil
 	}
 
-	return s.readLegacyWebhook()
+	return s.readLegacyWebhook(), nil
 }
 
 // readLegacyWebhook returns a webhook still stored in informer.secret.json.
-// Failures are treated as "no legacy address": a broken credential file must not
+// A missing or broken credential file means "no legacy address": it must not
 // block reading the shareable configuration.
-func (s *Service) readLegacyWebhook() (string, error) {
+func (s *Service) readLegacyWebhook() string {
 	doc, err := configstore.Load(s.SecretsFilePath())
 	if err != nil {
-		return "", nil
+		return ""
 	}
 
 	var webhook string
 
 	_, err = doc.Unmarshal(webhookKey, &webhook)
 	if err != nil {
-		return "", nil
+		return ""
 	}
 
-	return strings.TrimSpace(webhook), nil
+	return strings.TrimSpace(webhook)
 }
 
 // clearLegacyWebhook drops the webhook key from the credential file when one is
@@ -134,51 +135,44 @@ func (s *Service) readLegacyWebhook() (string, error) {
 func (s *Service) clearLegacyWebhook() error {
 	path := s.SecretsFilePath()
 
-	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
-			return nil
+	_, err := os.Stat(path)
+	if err != nil {
+		return nil //nolint:nilerr //missing or unreadable secret file means nothing to migrate.
+	}
+
+	return configstore.WithLock(path, configstore.DefaultLockTimeout, func() error {
+		return removeLegacyWebhookKey(path)
+	})
+}
+
+// removeLegacyWebhookKey deletes the webhook key from path when present.
+func removeLegacyWebhookKey(path string) error {
+	doc, err := configstore.Load(path)
+	if err != nil {
+		return nil //nolint:nilerr //legacy cleanup is best effort after the config write.
+	}
+
+	if !slices.Contains(doc.Keys(), webhookKey) {
+		return nil
+	}
+
+	doc.Delete(webhookKey)
+
+	// an empty credential file is removed rather than rewritten as {}, so an
+	// installation that only ever stored a webhook does not keep a useless file.
+	if len(doc.Keys()) == 0 {
+		removeErr := os.Remove(path)
+		if removeErr != nil && !os.IsNotExist(removeErr) {
+			return removeErr
 		}
 
 		return nil
 	}
 
-	return configstore.WithLock(path, configstore.DefaultLockTimeout, func() error {
-		doc, err := configstore.Load(path)
-		if err != nil {
-			return nil
-		}
+	data, err := doc.Bytes()
+	if err != nil {
+		return err
+	}
 
-		had := false
-		for _, key := range doc.Keys() {
-			if key == webhookKey {
-				had = true
-
-				break
-			}
-		}
-
-		if !had {
-			return nil
-		}
-
-		doc.Delete(webhookKey)
-
-		// an empty credential file is removed rather than rewritten as {}, so an
-		// installation that only ever stored a webhook does not keep a useless file.
-		if len(doc.Keys()) == 0 {
-			removeErr := os.Remove(path)
-			if removeErr != nil && !os.IsNotExist(removeErr) {
-				return removeErr
-			}
-
-			return nil
-		}
-
-		data, err := doc.Bytes()
-		if err != nil {
-			return err
-		}
-
-		return configstore.WriteAtomic(path, data, configstore.PermSecret)
-	})
+	return configstore.WriteAtomic(path, data, configstore.PermSecret)
 }
