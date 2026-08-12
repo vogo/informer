@@ -542,7 +542,7 @@ func TestWebhookBindingReturnsTheStoredAddress(t *testing.T) {
 	secrets, err := app.ReadSecrets()
 	require.NoError(t, err)
 	_, err = os.Stat(secrets.Path)
-	assert.ErrorIs(t, err, os.ErrNotExist)
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	require.NoError(t, app.SaveWebhook(""))
 

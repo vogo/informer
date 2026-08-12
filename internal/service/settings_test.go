@@ -182,7 +182,7 @@ func TestSaveWebhookWritesToInformerJSON(t *testing.T) {
 
 	// the credential file is not created for a plain bot address.
 	_, err = os.Stat(svc.SecretsFilePath())
-	assert.ErrorIs(t, err, os.ErrNotExist)
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestSaveWebhookMigratesALegacySecretEntry(t *testing.T) {
