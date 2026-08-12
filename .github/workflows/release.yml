@@ -200,7 +200,7 @@ jobs:
       - name: Wails build
         run: |
           cd cmd/informer-ui
-          wails3 build INFORMER_UI_VERSION="${{ github.ref_name }}" EXTRA_TAGS=webkit2_41
+          wails3 build INFORMER_UI_VERSION="${{ github.ref_name }}" EXTRA_TAGS=gtk3
 
       - name: Verify dynamic WebKitGTK ABI
         run: |
