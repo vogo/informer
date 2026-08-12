@@ -19,17 +19,23 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
+
 	"github.com/vogo/informer/internal/home"
 	"github.com/vogo/informer/internal/inform"
 	"github.com/vogo/informer/internal/scheduler"
 	"github.com/vogo/informer/internal/service"
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// ErrApplicationNotRunning marks a RestartToUpdate call issued before the
+// Wails application handle exists.
+var ErrApplicationNotRunning = errors.New("application is not running")
 
 // App is the desktop binding layer. It is the only bridge between the Vue
 // frontend and the shared service layer: both entries resolve the same data
@@ -85,41 +91,41 @@ func newAppWithHome(homeDir string) *App {
 // ServiceStartup starts the desktop scheduler once the Wails runtime is up.
 // A broken data directory still shows in the window: the scheduler never runs
 // on a service that was not built, and this method never aborts startup.
+//
+//nolint:unparam //Wails ServiceStartup requires an error result.
 func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error {
-	if a.initErr != nil {
-		return nil
+	if a.initErr == nil {
+		a.sched = scheduler.New(
+			func() (bool, string, error) {
+				schedule, err := a.svc.ReadScheduleConfig()
+				if err != nil {
+					return false, "", err
+				}
+
+				return schedule.Enabled, schedule.Time, nil
+			},
+			a.svc.ReadScheduleLastRunDate,
+			a.svc.MarkScheduleLastRunDate,
+			func() error {
+				_, err := a.runInform()
+
+				return err
+			},
+		)
+		a.sched.Start()
 	}
-
-	a.sched = scheduler.New(
-		func() (bool, string, error) {
-			schedule, err := a.svc.ReadScheduleConfig()
-			if err != nil {
-				return false, "", err
-			}
-
-			return schedule.Enabled, schedule.Time, nil
-		},
-		a.svc.ReadScheduleLastRunDate,
-		a.svc.MarkScheduleLastRunDate,
-		func() error {
-			_, err := a.runInform()
-
-			return err
-		},
-	)
-	a.sched.Start()
 
 	return nil
 }
 
 // ServiceShutdown stops the desktop scheduler when the application quits.
 // An in-flight run is left to finish or die with the process; Stop never waits.
+//
+//nolint:unparam //Wails ServiceShutdown requires an error result.
 func (a *App) ServiceShutdown() error {
-	if a.sched == nil {
-		return nil
+	if a.sched != nil {
+		a.sched.Stop()
 	}
-
-	a.sched.Stop()
 
 	return nil
 }
@@ -151,7 +157,7 @@ func (a *App) StartupError() string {
 func (a *App) RestartToUpdate() error {
 	app := application.Get()
 	if app == nil {
-		return fmt.Errorf("application is not running")
+		return ErrApplicationNotRunning
 	}
 
 	return app.Updater.Restart(context.Background())

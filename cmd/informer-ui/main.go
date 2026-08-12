@@ -41,6 +41,17 @@ const appTitle = "informer"
 // githubRepo is the Releases source the in-app updater polls.
 const githubRepo = "vogo/informer"
 
+// checksumAsset is the fixed checksums filename published with each release.
+const checksumAsset = "SHA256SUMS"
+
+const (
+	platformDarwin  = "darwin"
+	platformWindows = "windows"
+	platformLinux   = "linux"
+	archAMD64       = "amd64"
+	archARM64       = "arm64"
+)
+
 // version is injected at release time with
 // -ldflags "-X main.version=${{ github.ref_name }}" so the UI and every
 // packaged artifact carry the exact tag text. Development builds keep this
@@ -77,7 +88,8 @@ func main() {
 		},
 	})
 
-	if err := initUpdater(app); err != nil {
+	err := initUpdater(app)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "informer-ui: updater:", err)
 	}
 
@@ -90,7 +102,8 @@ func main() {
 		URL:       "/",
 	})
 
-	if err := app.Run(); err != nil {
+	err = app.Run()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "informer-ui:", err)
 		os.Exit(1)
 	}
@@ -105,7 +118,7 @@ func initUpdater(app *application.App) error {
 
 	gh, err := github.New(github.Config{
 		Repository:    githubRepo,
-		ChecksumAsset: "SHA256SUMS",
+		ChecksumAsset: checksumAsset,
 		AssetMatcher:  informerAssetMatcher,
 	})
 	if err != nil {
@@ -113,20 +126,23 @@ func initUpdater(app *application.App) error {
 	}
 
 	current := strings.TrimPrefix(version, "v")
-	if err = app.Updater.Init(updater.Config{
+
+	err = app.Updater.Init(updater.Config{
 		CurrentVersion: current,
 		Providers:      []updater.Provider{gh},
 		Window:         updater.WindowNone,
 		CheckInterval:  24 * time.Hour,
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 
 	// CheckInterval waits for the first tick; kick one check on startup so a
 	// freshly opened window still learns about a release published today.
 	go func() {
-		if err := app.Updater.CheckAndInstall(context.Background()); err != nil {
-			app.Logger.Error("update check", "error", err)
+		checkErr := app.Updater.CheckAndInstall(context.Background())
+		if checkErr != nil {
+			app.Logger.Error("update check", "error", checkErr)
 		}
 	}()
 
@@ -142,42 +158,60 @@ func informerAssetMatcher(req updater.CheckRequest, assets []github.ReleaseAsset
 
 	for i, a := range assets {
 		name := strings.ToLower(a.Name)
-
-		switch plat {
-		case "darwin":
-			if strings.Contains(name, "darwin-universal") &&
-				(strings.HasSuffix(name, ".app.zip") ||
-					(strings.HasSuffix(name, ".zip") && !strings.Contains(name, "dmg"))) {
-				return i
-			}
-		case "windows":
-			if strings.Contains(name, "windows") &&
-				assetHasArch(name, arch) &&
-				strings.HasSuffix(name, ".zip") &&
-				!strings.Contains(name, "setup") &&
-				!strings.Contains(name, "installer") {
-				return i
-			}
-		case "linux":
-			if strings.Contains(name, "linux") &&
-				assetHasArch(name, arch) &&
-				(strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tgz")) {
-				return i
-			}
+		if matchUpdateAsset(plat, arch, name) {
+			return i
 		}
 	}
 
 	return -1
 }
 
+func matchUpdateAsset(plat, arch, name string) bool {
+	switch plat {
+	case platformDarwin:
+		return matchDarwinAsset(name)
+	case platformWindows:
+		return matchWindowsAsset(name, arch)
+	case platformLinux:
+		return matchLinuxAsset(name, arch)
+	default:
+		return false
+	}
+}
+
+func matchDarwinAsset(name string) bool {
+	if !strings.Contains(name, "darwin-universal") {
+		return false
+	}
+
+	return strings.HasSuffix(name, ".app.zip") ||
+		(strings.HasSuffix(name, ".zip") && !strings.Contains(name, "dmg"))
+}
+
+func matchWindowsAsset(name, arch string) bool {
+	return strings.Contains(name, platformWindows) &&
+		assetHasArch(name, arch) &&
+		strings.HasSuffix(name, ".zip") &&
+		!strings.Contains(name, "setup") &&
+		!strings.Contains(name, "installer")
+}
+
+func matchLinuxAsset(name, arch string) bool {
+	return strings.Contains(name, platformLinux) &&
+		assetHasArch(name, arch) &&
+		(strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tgz"))
+}
+
 func assetHasArch(name, arch string) bool {
 	if arch == "" || strings.Contains(name, arch) {
 		return true
 	}
-	if arch == "amd64" {
+
+	if arch == archAMD64 {
 		return strings.Contains(name, "x86_64") || strings.Contains(name, "x64")
 	}
-	if arch == "arm64" {
+
+	if arch == archARM64 {
 		return strings.Contains(name, "aarch64")
 	}
 

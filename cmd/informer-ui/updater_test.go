@@ -25,17 +25,23 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
+const (
+	testAssetDarwinZip  = "informer-ui-v9.9.9-darwin-universal.app.zip"
+	testAssetWindowsZip = "informer-ui-v9.9.9-windows-amd64.zip"
+	testAssetLinuxTar   = "informer-ui-v9.9.9-linux-amd64.tar.gz"
+)
+
 func TestInformerAssetMatcher(t *testing.T) {
 	t.Parallel()
 
 	assets := []github.ReleaseAsset{
 		{Name: "informer-ui-v9.9.9-darwin-universal.dmg"},
-		{Name: "informer-ui-v9.9.9-darwin-universal.app.zip"},
+		{Name: testAssetDarwinZip},
 		{Name: "informer-ui-v9.9.9-windows-amd64-setup.exe"},
-		{Name: "informer-ui-v9.9.9-windows-amd64.zip"},
-		{Name: "informer-ui-v9.9.9-linux-amd64.tar.gz"},
+		{Name: testAssetWindowsZip},
+		{Name: testAssetLinuxTar},
 		{Name: "informer-ui-v9.9.9-linux-amd64.deb"},
-		{Name: "SHA256SUMS"},
+		{Name: checksumAsset},
 	}
 
 	tests := []struct {
@@ -45,18 +51,18 @@ func TestInformerAssetMatcher(t *testing.T) {
 	}{
 		{
 			name: "darwin universal zip",
-			req:  updater.CheckRequest{Platform: "darwin", Arch: "arm64"},
-			want: "informer-ui-v9.9.9-darwin-universal.app.zip",
+			req:  updater.CheckRequest{Platform: platformDarwin, Arch: archARM64},
+			want: testAssetDarwinZip,
 		},
 		{
 			name: "windows zip not setup",
-			req:  updater.CheckRequest{Platform: "windows", Arch: "amd64"},
-			want: "informer-ui-v9.9.9-windows-amd64.zip",
+			req:  updater.CheckRequest{Platform: platformWindows, Arch: archAMD64},
+			want: testAssetWindowsZip,
 		},
 		{
 			name: "linux tar.gz not deb",
-			req:  updater.CheckRequest{Platform: "linux", Arch: "amd64"},
-			want: "informer-ui-v9.9.9-linux-amd64.tar.gz",
+			req:  updater.CheckRequest{Platform: platformLinux, Arch: archAMD64},
+			want: testAssetLinuxTar,
 		},
 	}
 
