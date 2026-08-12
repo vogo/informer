@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build:dev": "vue-tsc --noEmit && vite build --minify false --mode development",
+    "build": "vue-tsc --noEmit && vite build --mode production",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@wailsio/runtime": "3.0.0-beta.8",
     "dompurify": "^3.4.13",
     "markdown-it": "^15.0.0",
     "naive-ui": "^2.40.0",

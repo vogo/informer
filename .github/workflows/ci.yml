@@ -47,6 +47,13 @@ jobs:
       - name: Install tools
         run: go install github.com/vogo/license-header-checker/cmd/license-header-checker@latest
 
+      # Desktop module typechecks Wails bindings, which need the GTK/WebKit
+      # headers even when only linting (CGO pkg-config).
+      - name: Install Linux desktop deps for lint/test
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+
       # applies the header and fails when any file changed, so a missing
       # Apache header is a hard CI failure instead of a local afterthought.
       - name: Apache header check
@@ -65,19 +72,21 @@ jobs:
           only-new-issues: true
           args: --timeout=10m
 
+      # Wails v3 defaults to GTK4; build tag gtk3 keeps us on WebKitGTK 4.1
+      # which matches the release .deb runtime deps.
       - name: golangci-lint (desktop module)
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.12.2
           working-directory: cmd/informer-ui
           only-new-issues: true
-          args: --timeout=10m
+          args: --timeout=10m --build-tags=gtk3
 
       - name: Go test (root module)
         run: go test ./... -coverprofile=coverage.txt -covermode=atomic
 
       - name: Go test (desktop module)
-        run: cd cmd/informer-ui && go test ./... -coverprofile=coverage.txt -covermode=atomic
+        run: cd cmd/informer-ui && go test -tags gtk3 ./... -coverprofile=coverage.txt -covermode=atomic
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -104,28 +113,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # WebKitGTK 4.0 path, the historical Linux ABI.
+          # Wails v3 gtk3 tag links webkit2gtk-4.1.
           - platform: linux-ubuntu22
             os: ubuntu-22.04
-            webkit_packages: libgtk-3-dev libwebkit2gtk-4.0-dev
-            webkit_abi: '0'
-            build_tags: ''
-          # WebKitGTK 4.1 path, required on ubuntu 24.04 and newer.
+            webkit_packages: libgtk-3-dev libwebkit2gtk-4.1-dev
+            webkit_abi: '1'
+            extra_tags: 'gtk3'
           - platform: linux-ubuntu24
             os: ubuntu-24.04
             webkit_packages: libgtk-3-dev libwebkit2gtk-4.1-dev
             webkit_abi: '1'
-            build_tags: '-tags webkit2_41'
+            extra_tags: 'gtk3'
           - platform: macos
             os: macos-14
             webkit_packages: ''
             webkit_abi: ''
-            build_tags: ''
+            extra_tags: ''
           - platform: windows
             os: windows-2022
             webkit_packages: ''
             webkit_abi: ''
-            build_tags: ''
+            extra_tags: ''
     steps:
 
       - name: Check out code
@@ -150,45 +158,48 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config ${{ matrix.webkit_packages }}
 
-      - name: Install wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+      - name: Install wails3
+        # bash so CGO_ENABLED=0 works on Windows runners (PowerShell rejects the prefix).
+        shell: bash
+        run: CGO_ENABLED=0 go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
 
-      # -webview2 embed bakes the WebView2 bootstrapper into the NSIS installer,
-      # exercised on every CI run so a broken bootstrap strategy fails early.
       - name: Wails build
         shell: bash
         run: |
           cd cmd/informer-ui
-          wails build ${{ matrix.build_tags }} -webview2 embed \
-            -ldflags "-X main.version=ci-${{ github.sha }}"
+          extra=()
+          if [ -n "${{ matrix.extra_tags }}" ]; then
+            extra+=(EXTRA_TAGS="${{ matrix.extra_tags }}")
+          fi
+          # Windows desktop builds need CGO for the WebView2 host.
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            extra+=(CGO_ENABLED=1)
+          fi
+          wails3 build INFORMER_UI_VERSION="ci-${{ github.sha }}" "${extra[@]}"
 
       # pins the Linux binary to the WebKitGTK ABI the runner actually ships.
       - name: Linux dynamic dependency check
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          ldd cmd/informer-ui/build/bin/informer-ui | tee /tmp/ldd.txt
+          ldd cmd/informer-ui/bin/informer-ui | tee /tmp/ldd.txt
           grep -q "libwebkit2gtk-4.${{ matrix.webkit_abi }}.so" /tmp/ldd.txt
 
-      # the executable lands in a different place per platform: a bare binary on
-      # linux, an .exe on windows and inside the .app bundle on macOS, which is
-      # the layout release.yml already reads.
       - name: Smoke version sub command
         shell: bash
         run: |
           bin=""
           for candidate in \
-            cmd/informer-ui/build/bin/informer-ui \
-            cmd/informer-ui/build/bin/informer-ui.exe \
-            cmd/informer-ui/build/bin/informer-ui.app/Contents/MacOS/informer-ui; do
+            cmd/informer-ui/bin/informer-ui \
+            cmd/informer-ui/bin/informer-ui.exe; do
             if [ -f "$candidate" ]; then bin="$candidate"; break; fi
           done
-          test -n "$bin" || { echo "no informer-ui executable in build/bin"; ls -R cmd/informer-ui/build/bin; exit 1; }
+          test -n "$bin" || { echo "no informer-ui executable in bin"; ls -R cmd/informer-ui/bin; exit 1; }
           "$bin" version | grep -q "ci-${{ github.sha }}"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: informer-ui-ci-${{ matrix.platform }}
-          path: cmd/informer-ui/build/bin/
+          path: cmd/informer-ui/bin/
           if-no-files-found: error

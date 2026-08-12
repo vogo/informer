@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import {computed, onMounted, ref} from 'vue'
 import {NAlert, NButton, NCollapse, NCollapseItem, NEmpty, NSpin, NTag, NText} from 'naive-ui'
-import {BrowserOpenURL} from '../wailsjs/runtime/runtime'
-import {DailyContent, DailyIndex} from '../wailsjs/go/main/App'
-import type {main} from '../wailsjs/go/models'
+import {Browser} from '@wailsio/runtime'
+import {DailyContent, DailyIndex} from './bindings'
 import {errorText} from './errors'
 import {renderMarkdown} from './markdown'
+import {compact} from './nulls'
 
-type DailyYearDTO = main.DailyYearDTO
+type DailyDay = {date: string; size: number}
+type DailyMonth = {month: string; days: DailyDay[]}
+type DailyYear = {year: string; months: DailyMonth[]}
 
-const years = ref<DailyYearDTO[]>([])
+const years = ref<DailyYear[]>([])
 const indexLoading = ref(false)
 const indexError = ref('')
 
@@ -28,7 +30,13 @@ async function loadIndex() {
   indexLoading.value = true
   indexError.value = ''
   try {
-    years.value = await DailyIndex()
+    years.value = compact(await DailyIndex()).map((year): DailyYear => ({
+      year: year.year,
+      months: compact(year.months).map((month): DailyMonth => ({
+        month: month.month,
+        days: compact(month.days).map(day => ({date: day.date, size: day.size})),
+      })),
+    }))
 
     const first = years.value[0]?.months[0]?.days[0]?.date
     if (first) {
@@ -70,7 +78,7 @@ function onContentClick(event: MouseEvent) {
 
   const href = anchor.getAttribute('href')
   if (href) {
-    BrowserOpenURL(href)
+    void Browser.OpenURL(href)
   }
 }
 </script>
@@ -94,7 +102,7 @@ function onContentClick(event: MouseEvent) {
         <n-spin v-else :show="indexLoading">
           <n-collapse v-if="years.length > 0" :default-expanded-names="expandedYears" arrow-placement="right">
             <n-collapse-item v-for="year in years" :key="year.year" :title="`${year.year} 年`" :name="year.year">
-              <n-collapse :default-expanded-names="[year.months[0]?.month]" arrow-placement="right">
+              <n-collapse :default-expanded-names="year.months[0] ? [year.months[0].month] : []" arrow-placement="right">
                 <n-collapse-item
                   v-for="month in year.months"
                   :key="month.month"

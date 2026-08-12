@@ -1,9 +1,17 @@
 # wails build outputs and generated bindings are never committed;
 # CI and the release pipeline build the frontend from source on the fly.
+.task
+bin
 build/bin
 /informer-ui
 frontend/node_modules
 frontend/wailsjs
+frontend/bindings
 frontend/package.json.md5
 frontend/dist/*
 !frontend/dist/gitkeep
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+build/darwin/icons.icns
+build/darwin/Assets.car
+build/windows/icon.ico

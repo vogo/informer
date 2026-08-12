@@ -17,11 +17,15 @@ import {
   NText,
   useMessage
 } from 'naive-ui'
-import {CreateCategory, DeleteCategory, ListCategories, UpdateCategory} from '../wailsjs/go/main/App'
-import type {main} from '../wailsjs/go/models'
+import {
+  CreateCategory,
+  DeleteCategory,
+  ListCategories,
+  UpdateCategory,
+  type CategoryDTO,
+} from './bindings'
 import {errorText} from './errors'
-
-type CategoryDTO = main.CategoryDTO
+import {compact, requireValue} from './nulls'
 
 const props = defineProps<{
   selectedId: number
@@ -118,7 +122,7 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    categories.value = await ListCategories()
+    categories.value = compact(await ListCategories())
 
     // a category selected before it was deleted elsewhere falls back to "全部".
     if (props.selectedId !== 0 && !categories.value.some(c => c.id === props.selectedId)) {
@@ -197,7 +201,7 @@ async function save() {
 
 async function remove(category: CategoryDTO) {
   try {
-    const result = await DeleteCategory(category.id, 0)
+    const result = requireValue(await DeleteCategory(category.id, 0), 'DeleteCategoryResult')
     if (result.deleted) {
       message.success('分类已删除')
       if (props.selectedId === category.id) {
@@ -227,7 +231,7 @@ async function confirmReassignDelete() {
 
   deleteBusy.value = true
   try {
-    const result = await DeleteCategory(category.id, target)
+    const result = requireValue(await DeleteCategory(category.id, target), 'DeleteCategoryResult')
     message.success(`分类已删除，${result.moved} 个订阅已移动`)
     if (props.selectedId === category.id) {
       emit('update:selectedId', 0)

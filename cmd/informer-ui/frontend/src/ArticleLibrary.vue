@@ -13,12 +13,15 @@ import {
   NText,
   type DataTableColumns
 } from 'naive-ui'
-import {BrowserOpenURL} from '../wailsjs/runtime/runtime'
-import {ListArticles, ListCategories, ListSources} from '../wailsjs/go/main/App'
-import type {main} from '../wailsjs/go/models'
+import {Browser} from '@wailsio/runtime'
+import {
+  ListArticles,
+  ListCategories,
+  ListSources,
+  type ArticleItemDTO,
+} from './bindings'
 import {errorText} from './errors'
-
-type ArticleItemDTO = main.ArticleItemDTO
+import {compact, requireValue} from './nulls'
 
 const pageSize = 30
 
@@ -58,11 +61,11 @@ async function loadFilters() {
 
     categoryOptions.value = [
       {label: '全部分类', value: 0},
-      ...categories.map(c => ({label: c.name, value: c.id}))
+      ...compact(categories).map(c => ({label: c.name, value: c.id}))
     ]
     sourceOptions.value = [
       {label: '全部订阅', value: 0},
-      ...sources.map(s => ({label: s.title || s.url, value: s.id}))
+      ...compact(sources).map(s => ({label: s.title || s.url, value: s.id}))
     ]
   } catch (e) {
     listError.value = errorText(e)
@@ -73,14 +76,14 @@ async function load() {
   loading.value = true
   listError.value = ''
   try {
-    const page = await ListArticles({
+    const page = requireValue(await ListArticles({
       sourceId: sourceId.value,
       categoryId: categoryId.value,
       keyword: keyword.value.trim(),
       before: cursorStack.value[cursorStack.value.length - 1],
       limit: pageSize
-    })
-    items.value = page.items
+    }), 'ArticlePage')
+    items.value = compact(page.items)
     nextCursor.value = page.nextCursor
     hasMore.value = page.hasMore
   } catch (e) {
@@ -136,7 +139,7 @@ const columns: DataTableColumns<ArticleItemDTO> = [
     render: row =>
       h(
         NButton,
-        {text: true, type: 'primary', onClick: () => BrowserOpenURL(row.url)},
+        {text: true, type: 'primary', onClick: () => { void Browser.OpenURL(row.url) }},
         {default: () => h(NEllipsis, null, {default: () => row.title || row.url})}
       )
   },

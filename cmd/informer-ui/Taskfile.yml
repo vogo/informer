@@ -1,0 +1,55 @@
+version: '3'
+
+vars:
+  APP_NAME: "informer-ui"
+  BIN_DIR: "bin"
+  PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  # Target OS for build/package/run. Defaults to the host OS, and is overridden
+  # by `wails3 build GOOS=...` (or the GOOS env var) for cross-compilation.
+  GOOS: '{{.GOOS | default OS}}'
+  # Injected into -ldflags as main.version when set (CI / release tags).
+  INFORMER_UI_VERSION: '{{.INFORMER_UI_VERSION | default ""}}'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+
+tasks:
+  build:
+    summary: Builds the application
+    cmds:
+      - task: "{{.GOOS}}:build"
+        vars:
+          INFORMER_UI_VERSION:
+            ref: .INFORMER_UI_VERSION
+          EXTRA_TAGS:
+            ref: .EXTRA_TAGS
+          DEV:
+            ref: .DEV
+          ARCH:
+            ref: .ARCH
+
+  package:
+    summary: Packages a production build of the application
+    cmds:
+      - task: "{{.GOOS}}:package"
+        vars:
+          INFORMER_UI_VERSION:
+            ref: .INFORMER_UI_VERSION
+          EXTRA_TAGS:
+            ref: .EXTRA_TAGS
+          ARCH:
+            ref: .ARCH
+
+  run:
+    summary: Runs the application
+    cmds:
+      - task: "{{.GOOS}}:run"
+
+  dev:
+    summary: Runs the application in development mode
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}

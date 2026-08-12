@@ -19,10 +19,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/vogo/informer/internal/home"
 	"github.com/vogo/informer/internal/inform"
@@ -30,16 +33,16 @@ import (
 	"github.com/vogo/informer/internal/service"
 )
 
+// ErrApplicationNotRunning marks a RestartToUpdate call issued before the
+// Wails application handle exists.
+var ErrApplicationNotRunning = errors.New("application is not running")
+
 // App is the desktop binding layer. It is the only bridge between the Vue
 // frontend and the shared service layer: both entries resolve the same data
 // directory through internal/home and reach the business through
 // service.Service. The frontend only ever sees the flat DTOs defined next to
 // the bound methods, never a persistence model.
 type App struct {
-	// ctx is the wails runtime context, stored per the wails binding pattern
-	// so bound methods can reach runtime calls when they later need them.
-	ctx context.Context //nolint:containedctx //wails stores its context this way.
-
 	svc     *service.Service
 	homeDir string
 
@@ -85,6 +88,48 @@ func newAppWithHome(homeDir string) *App {
 	return &App{svc: svc, homeDir: homeDir}
 }
 
+// ServiceStartup starts the desktop scheduler once the Wails runtime is up.
+// A broken data directory still shows in the window: the scheduler never runs
+// on a service that was not built, and this method never aborts startup.
+//
+//nolint:unparam //Wails ServiceStartup requires an error result.
+func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error {
+	if a.initErr == nil {
+		a.sched = scheduler.New(
+			func() (bool, string, error) {
+				schedule, err := a.svc.ReadScheduleConfig()
+				if err != nil {
+					return false, "", err
+				}
+
+				return schedule.Enabled, schedule.Time, nil
+			},
+			a.svc.ReadScheduleLastRunDate,
+			a.svc.MarkScheduleLastRunDate,
+			func() error {
+				_, err := a.runInform()
+
+				return err
+			},
+		)
+		a.sched.Start()
+	}
+
+	return nil
+}
+
+// ServiceShutdown stops the desktop scheduler when the application quits.
+// An in-flight run is left to finish or die with the process; Stop never waits.
+//
+//nolint:unparam //Wails ServiceShutdown requires an error result.
+func (a *App) ServiceShutdown() error {
+	if a.sched != nil {
+		a.sched.Stop()
+	}
+
+	return nil
+}
+
 // Version returns the build version the UI shows and the smoke tests assert.
 func (a *App) Version() string {
 	return version
@@ -106,44 +151,28 @@ func (a *App) StartupError() string {
 	return a.initErr.Error()
 }
 
-// startup records the wails context once the window exists and starts the
-// desktop scheduler. A broken startup shows in the window instead: the
-// scheduler never runs on a service that was not built.
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
-
-	if a.initErr != nil {
-		return
+// RestartToUpdate applies a staged update: spawn the helper, quit this
+// process, swap the binary, and relaunch. It is a no-op error when no update
+// has been downloaded yet.
+func (a *App) RestartToUpdate() error {
+	app := application.Get()
+	if app == nil {
+		return ErrApplicationNotRunning
 	}
 
-	a.sched = scheduler.New(
-		func() (bool, string, error) {
-			schedule, err := a.svc.ReadScheduleConfig()
-			if err != nil {
-				return false, "", err
-			}
-
-			return schedule.Enabled, schedule.Time, nil
-		},
-		a.svc.ReadScheduleLastRunDate,
-		a.svc.MarkScheduleLastRunDate,
-		func() error {
-			_, err := a.runInform()
-
-			return err
-		},
-	)
-	a.sched.Start()
+	return app.Updater.Restart(context.Background())
 }
 
-// shutdown stops the desktop scheduler when the window closes. An in-flight
-// run is left to finish or die with the process; Stop never waits for it.
-func (a *App) shutdown(context.Context) {
-	if a.sched == nil {
-		return
+// UpdateState returns the updater lifecycle phase for the header badge
+// ("idle", "downloading", "ready", …). Empty when the updater is disabled
+// (dev builds).
+func (a *App) UpdateState() string {
+	app := application.Get()
+	if app == nil {
+		return ""
 	}
 
-	a.sched.Stop()
+	return string(app.Updater.State())
 }
 
 // runInform runs one full inform cycle under the process wide guard, so the
