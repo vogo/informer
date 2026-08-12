@@ -9,6 +9,7 @@ export {
   DailyIndex,
   DeleteCategory,
   DeleteSource,
+  DetectAgentCommand,
   HomeDir,
   ListArticles,
   ListCategories,

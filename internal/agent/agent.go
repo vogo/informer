@@ -111,8 +111,9 @@ type Config struct {
 	// TimeoutSeconds bounds one run; the run is killed when it is exceeded.
 	TimeoutSeconds int `json:"timeout_seconds"`
 
-	// Command overrides the executable name, for a machine where the agent is
-	// installed under a different path. An empty value uses the provider default.
+	// Command overrides the executable path. An empty value is resolved to the
+	// provider default by searching PATH, common install directories and the
+	// user's login shell, then remembered in informer.json on the first hit.
 	Command string `json:"command"`
 
 	// WorkDir is the directory the agent process runs in. It is set by the

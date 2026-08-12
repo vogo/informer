@@ -263,13 +263,15 @@ Agent 的接口地址、密钥与模型是全局配置，写在 `informer.json` 
 | `model` | 使用的模型 | 留空表示沿用 Agent 的默认模型 |
 | `allowed_tools` | 允许 Agent 使用的工具，逗号分隔 | 留空使用默认 `WebSearch,WebFetch` |
 | `timeout_seconds` | 单次运行超时 | 填 0 表示使用默认 300 秒，合法范围 10 ~ 3600 |
-| `command` | Agent 可执行文件 | 留空表示用 `PATH` 里的 `claude` |
+| `command` | Agent 可执行文件 | 留空时会在 PATH、常见安装目录与登录 Shell 中自动查找 `claude`/`codex`，找到后写入配置；也可在设置页手动填写或点「自动查找」 |
 
 API Key 不写进 `informer.json`，而是放在同目录的 `informer.secret.json` 的 `agent_api_key` 字段里。
-`base_url` 与 `agent_api_key` 都留空时，informer 直接运行 `claude`，用的就是本机 `claude` 自身已登录的凭据——
-也就是说，只要本机 `claude` 能跑，agent 订阅就能跑，不需要额外配置。
+`base_url` 与 `agent_api_key` 都留空时，informer 直接运行本机 Agent，用的就是该 Agent 自身已登录的凭据——
+也就是说，只要本机 `claude`（或对应 Agent）能跑，agent 订阅就能跑，不需要额外配置。
 
-前置条件：本机已安装 Claude Code 命令行（`claude --version` 能正常输出）。
+桌面版从 Dock / Finder 启动时往往没有终端里的 PATH。`command` 留空时，informer 会在 PATH、Homebrew / npm / nvm 等常见目录以及登录 Shell 里查找可执行文件，并把绝对路径写回 `informer.json`；设置页也可以手动填写或点「自动查找」。
+
+前置条件：本机已安装对应命令行 Agent（例如 `claude --version` 能正常输出）。
 
 ## 六、桌面版 informer-ui
 

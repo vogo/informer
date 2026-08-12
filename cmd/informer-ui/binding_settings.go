@@ -307,6 +307,18 @@ func (a *App) SaveAgentAPIKey(apiKey string) error {
 	return a.svc.SaveAgentAPIKey(apiKey)
 }
 
+// DetectAgentCommand locates the default executable of the given agent provider on
+// this machine. The path is returned for the settings page to fill in; it is not
+// written until the user saves, or until an agent run remembers an empty command.
+func (a *App) DetectAgentCommand(provider string) (string, error) {
+	err := a.ready()
+	if err != nil {
+		return "", err
+	}
+
+	return a.svc.DetectAgentCommand(provider)
+}
+
 func toAgentConfigDTO(config *agent.Config) *AgentConfigDTO {
 	return &AgentConfigDTO{
 		Provider:       config.Provider,

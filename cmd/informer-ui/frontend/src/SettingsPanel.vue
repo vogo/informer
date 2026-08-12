@@ -22,6 +22,7 @@ import {
   useMessage
 } from 'naive-ui'
 import {
+  DetectAgentCommand,
   ReadConfig,
   ReadSecrets,
   RebuildHistoryIndex,
@@ -67,6 +68,7 @@ const agent = reactive({
 })
 const agentProviderOptions = ref<{label: string; value: string}[]>([])
 const agentSaving = ref(false)
+const agentDetecting = ref(false)
 const agentAPIKeyConfigured = ref(false)
 const agentAPIKeyInput = ref('')
 const agentAPIKeySaving = ref(false)
@@ -187,6 +189,23 @@ async function saveAgent() {
   }
 }
 
+async function detectAgentCommand() {
+  agentDetecting.value = true
+  try {
+    const path = await DetectAgentCommand(agent.provider)
+    if (!path) {
+      message.warning('未找到可执行文件')
+      return
+    }
+    agent.command = path
+    message.success('已找到可执行文件，请保存 Agent 配置')
+  } catch (e) {
+    message.error(`查找失败：${errorText(e)}`)
+  } finally {
+    agentDetecting.value = false
+  }
+}
+
 async function saveAgentAPIKey() {
   agentAPIKeySaving.value = true
   try {
@@ -299,10 +318,20 @@ async function rebuild() {
             <n-input-number v-model:value="agent.timeoutSeconds" :min="0" :max="3600" style="width: 100%" />
           </n-form-item>
           <n-form-item label="可执行文件">
-            <n-input v-model:value="agent.command" placeholder="留空使用 PATH 中的 claude" />
+            <n-space :size="8" style="width: 100%">
+              <n-input
+                v-model:value="agent.command"
+                placeholder="留空则运行时自动查找并记住；例如 /opt/homebrew/bin/claude"
+                style="flex: 1; min-width: 0"
+              />
+              <n-button :loading="agentDetecting" @click="detectAgentCommand">自动查找</n-button>
+            </n-space>
           </n-form-item>
         </n-form>
-        <n-text depth="3" style="font-size: 12px">「超时」填 0 表示使用默认窗口（300 秒）。</n-text>
+        <n-text depth="3" style="font-size: 12px">
+          「超时」填 0 表示使用默认窗口（300 秒）。可执行文件留空时，抓取会在 PATH、常见安装目录和登录 Shell 中查找
+          claude / codex，找到后写入配置。
+        </n-text>
 
         <n-descriptions :column="1" size="small" style="margin: 12px 0">
           <n-descriptions-item label="API Key">

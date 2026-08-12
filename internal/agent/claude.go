@@ -52,9 +52,9 @@ type claudeEnvelope struct {
 
 // runClaude executes one non interactive Claude Code run and returns its answer text.
 func runClaude(ctx context.Context, cfg *Config, prompt string) (string, error) {
-	command := cfg.Command
-	if command == "" {
-		command = ClaudeCommand
+	command, err := ResolveCommand(cfg.Provider, cfg.Command)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrAgentFailed, err)
 	}
 
 	cmd := exec.CommandContext(ctx, command, claudeArgs(cfg, prompt)...)
@@ -67,7 +67,7 @@ func runClaude(ctx context.Context, cfg *Config, prompt string) (string, error) 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		// the timeout is the common failure of a browsing agent, and the raw
 		// exec message does not say so; name it where the source error is stored.
