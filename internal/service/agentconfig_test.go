@@ -131,7 +131,7 @@ func TestAgentAPIKeyIsStoredInTheCredentialFile(t *testing.T) {
 	assert.False(t, view.AgentAPIKeyConfigured)
 }
 
-func TestAgentAPIKeyAndWebhookShareTheFileWithoutOverwriting(t *testing.T) {
+func TestAgentAPIKeySurvivesWebhookSaves(t *testing.T) {
 	svc := newService(t)
 
 	require.NoError(t, svc.SaveWebhook("https://open.feishu.cn/hook/x"))
@@ -139,15 +139,21 @@ func TestAgentAPIKeyAndWebhookShareTheFileWithoutOverwriting(t *testing.T) {
 
 	view, err := svc.ReadSecretsView()
 	require.NoError(t, err)
-	assert.Equal(t, "https://open.feishu.cn/hook/x", view.Webhook)
 	assert.True(t, view.AgentAPIKeyConfigured)
+
+	configView, err := svc.ReadFileConfigView()
+	require.NoError(t, err)
+	assert.Equal(t, "https://open.feishu.cn/hook/x", configView.Webhook)
 
 	require.NoError(t, svc.SaveWebhook(""))
 
 	view, err = svc.ReadSecretsView()
 	require.NoError(t, err)
-	assert.False(t, view.WebhookConfigured)
-	assert.True(t, view.AgentAPIKeyConfigured, "clearing one credential leaves the other in place")
+	assert.True(t, view.AgentAPIKeyConfigured, "clearing the webhook leaves the api key in place")
+
+	configView, err = svc.ReadFileConfigView()
+	require.NoError(t, err)
+	assert.Empty(t, configView.Webhook)
 }
 
 func TestEffectiveAgentConfigCombinesFileSectionKeyAndHomeDir(t *testing.T) {

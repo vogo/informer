@@ -20,7 +20,6 @@ package service_test
 import (
 	"encoding/json"
 	"os"
-	"runtime"
 	"sync"
 	"testing"
 
@@ -30,9 +29,6 @@ import (
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/service"
 )
-
-// windowsGOOS is the platform that does not model unix permission bits.
-const windowsGOOS = "windows"
 
 // validFeedConfig is a feed section every validation rule accepts.
 func validFeedConfig() *feed.Config {
@@ -157,28 +153,25 @@ func TestSaveFeedConfigSurvivesConcurrentWriters(t *testing.T) {
 	assert.Equal(t, 150, view.Feed.FeedExpireDays)
 }
 
-func TestSaveWebhookWritesASensitiveFile(t *testing.T) {
+func TestSaveWebhookWritesToInformerJSON(t *testing.T) {
 	svc := newService(t)
 
-	view, err := svc.ReadSecretsView()
+	view, err := svc.ReadFileConfigView()
 	require.NoError(t, err)
-	assert.False(t, view.Exists)
-	assert.False(t, view.WebhookConfigured)
 	assert.Empty(t, view.Webhook)
 
-	const webhook = "https://oapi.dingtalk.com/robot/send?access_token=super-secret-token"
+	const webhook = "https://oapi.dingtalk.com/robot/send?access_token=plain-bot-token"
 
 	require.NoError(t, svc.SaveWebhook(webhook))
 
-	view, err = svc.ReadSecretsView()
+	view, err = svc.ReadFileConfigView()
 	require.NoError(t, err)
 	assert.True(t, view.Exists)
-	assert.True(t, view.WebhookConfigured)
-
-	// the bot address is a plain endpoint, so the settings page sees it in full.
 	assert.Equal(t, webhook, view.Webhook)
 
-	assertSecretPermission(t, svc.SecretsFilePath())
+	raw := readConfigFile(t, svc)
+	assert.Equal(t, webhook, raw["webhook"])
+	assert.NotContains(t, raw, "id")
 
 	// the stored webhook is what an argument free inform run delivers to.
 	assert.Equal(t, webhook, svc.ResolveWebhook(""))
@@ -186,21 +179,31 @@ func TestSaveWebhookWritesASensitiveFile(t *testing.T) {
 
 	// an explicit command line address still wins, so crontab keeps its behavior.
 	assert.Equal(t, "https://example.com/hook", svc.ResolveWebhook("https://example.com/hook"))
+
+	// the credential file is not created for a plain bot address.
+	_, err = os.Stat(svc.SecretsFilePath())
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
-func TestSaveWebhookRewritesAnInsecureFileSecurely(t *testing.T) {
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("windows does not model unix permission bits")
-	}
-
+func TestSaveWebhookMigratesALegacySecretEntry(t *testing.T) {
 	svc := newService(t)
 
-	// deliberately world readable, to prove the save locks the file down again.
-	require.NoError(t, os.WriteFile(svc.SecretsFilePath(), []byte(`{"webhook":"old"}`), 0o644)) //nolint:gosec //see above.
+	require.NoError(t, os.WriteFile(svc.SecretsFilePath(), []byte(`{"webhook":"https://legacy.example/hook","agent_api_key":"sk-keep"}`), 0o600))
+
+	assert.Equal(t, "https://legacy.example/hook", svc.ResolveWebhook(""))
+
 	require.NoError(t, svc.SaveWebhook("https://example.com/new"))
 
-	assertSecretPermission(t, svc.SecretsFilePath())
 	assert.Equal(t, "https://example.com/new", svc.ResolveWebhook(""))
+	assert.Equal(t, "https://example.com/new", readConfigFile(t, svc)["webhook"])
+
+	raw, err := os.ReadFile(svc.SecretsFilePath())
+	require.NoError(t, err)
+
+	var secrets map[string]any
+	require.NoError(t, json.Unmarshal(raw, &secrets))
+	assert.NotContains(t, secrets, "webhook")
+	assert.Equal(t, "sk-keep", secrets["agent_api_key"])
 }
 
 func TestSaveWebhookClearsTheStoredValue(t *testing.T) {
@@ -209,37 +212,23 @@ func TestSaveWebhookClearsTheStoredValue(t *testing.T) {
 	require.NoError(t, svc.SaveWebhook("https://example.com/hook"))
 	require.NoError(t, svc.SaveWebhook(""))
 
-	view, err := svc.ReadSecretsView()
+	view, err := svc.ReadFileConfigView()
 	require.NoError(t, err)
-	assert.True(t, view.Exists)
-	assert.False(t, view.WebhookConfigured)
+	assert.Empty(t, view.Webhook)
 	assert.Empty(t, svc.ResolveWebhook(""))
-
-	assertSecretPermission(t, svc.SecretsFilePath())
+	assert.NotContains(t, readConfigFile(t, svc), "webhook")
 }
 
-func TestResolveWebhookIgnoresABrokenSecretFile(t *testing.T) {
+func TestResolveWebhookIgnoresABrokenConfigFile(t *testing.T) {
 	svc := newService(t)
 
-	require.NoError(t, os.WriteFile(svc.SecretsFilePath(), []byte("not json"), 0o600))
+	require.NoError(t, os.WriteFile(svc.ConfigFilePath(), []byte("not json"), 0o644)) //nolint:gosec //broken fixture on purpose.
 
 	// the daily report must still be generated; only the delivery is skipped.
 	assert.Empty(t, svc.ResolveWebhook(""))
 
-	_, err := svc.ReadSecretsView()
+	_, err := svc.ReadFileConfigView()
 	require.Error(t, err)
-}
-
-func assertSecretPermission(t *testing.T, path string) {
-	t.Helper()
-
-	if runtime.GOOS == windowsGOOS {
-		return
-	}
-
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
 func readConfigFile(t *testing.T, svc *service.Service) map[string]any {

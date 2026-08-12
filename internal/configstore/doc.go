@@ -101,6 +101,24 @@ func (d *Doc) Set(key string, value any) error {
 	return nil
 }
 
+// Delete removes one top level key. A missing key is a no-op so a save that
+// clears a field never has to ask whether the file still carried it.
+func (d *Doc) Delete(key string) {
+	if _, ok := d.fields[key]; !ok {
+		return
+	}
+
+	delete(d.fields, key)
+
+	for i, existing := range d.order {
+		if existing == key {
+			d.order = append(d.order[:i], d.order[i+1:]...)
+
+			return
+		}
+	}
+}
+
 // Bytes renders the document as indented json, in the original field order and with
 // a trailing newline, so the result stays a file a human can read and diff.
 func (d *Doc) Bytes() ([]byte, error) {

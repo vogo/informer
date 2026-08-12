@@ -71,6 +71,10 @@ type FileConfigView struct {
 	// Agent is the editable agent section, nil when the file defines none.
 	Agent *agent.Config `json:"agent"`
 
+	// Webhook is the bot delivery address stored in informer.json. It is a plain
+	// endpoint rather than a secret, so the settings page shows it in full.
+	Webhook string `json:"webhook"`
+
 	// PreservedKeys lists the top level keys this build does not edit but keeps on
 	// save, so the page can state plainly that nothing else is dropped.
 	PreservedKeys []string `json:"preserved_keys"`
@@ -131,8 +135,13 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 		return nil, err
 	}
 
+	view.Webhook, err = s.readWebhook()
+	if err != nil {
+		return nil, err
+	}
+
 	for _, key := range doc.Keys() {
-		if key != feedSectionKey && key != scheduleSectionKey && key != agentSectionKey {
+		if key != feedSectionKey && key != scheduleSectionKey && key != agentSectionKey && key != webhookKey {
 			view.PreservedKeys = append(view.PreservedKeys, key)
 		}
 	}

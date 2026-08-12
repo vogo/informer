@@ -92,6 +92,32 @@ func TestDocKeepsUnknownFieldsAndOrder(t *testing.T) {
 	assert.Equal(t, []int{1, 2}, future.Nested)
 }
 
+func TestDocDeleteRemovesAKey(t *testing.T) {
+	t.Parallel()
+
+	path := writeFile(t, `{
+  "note": "kept",
+  "webhook": "https://example.com/hook",
+  "feed": {"max_fetch_num": 1}
+}`)
+
+	doc, err := configstore.Load(path)
+	require.NoError(t, err)
+
+	doc.Delete("webhook")
+	doc.Delete("missing")
+
+	assert.Equal(t, []string{noteKey, feedKey}, doc.Keys())
+
+	data, err := doc.Bytes()
+	require.NoError(t, err)
+	require.NoError(t, configstore.WriteAtomic(path, data, configstore.PermConfig))
+
+	reloaded, err := configstore.Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, []string{noteKey, feedKey}, reloaded.Keys())
+}
+
 func TestDocUnmarshalReportsMissingAndBrokenFields(t *testing.T) {
 	t.Parallel()
 

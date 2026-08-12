@@ -30,7 +30,7 @@ import (
 // same site limit, build the message, store the daily file and deliver it to the bot
 // at urlAddr. It is the single entry point of the scheduled CLI notification.
 //
-// An empty urlAddr falls back to the webhook stored in the credential file, so a run
+// An empty urlAddr falls back to the webhook stored in informer.json, so a run
 // started without an argument still delivers what the desktop app configured.
 //
 // The inform timestamp of the selected articles is written only after the

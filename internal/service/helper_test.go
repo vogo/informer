@@ -31,6 +31,9 @@ import (
 	"github.com/vogo/informer/internal/service"
 )
 
+// windowsGOOS is the platform that does not model unix permission bits.
+const windowsGOOS = "windows"
+
 // atomFeed is a minimal but valid atom document served by the test feed endpoint.
 const atomFeed = `<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">

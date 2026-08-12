@@ -66,7 +66,7 @@ EOF
 - 钉钉：`https://oapi.dingtalk.com/robot/send?access_token=xxxxx`
 - 飞书：`https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxx`
 
-地址可以在命令行显式传入，也可以保存到[敏感配置文件](#敏感配置文件-informersecretjson)后不带参数运行。
+地址可以在命令行显式传入，也可以保存到 `informer.json` 的顶层 `webhook` 字段后不带参数运行。
 
 ### 5. 执行一次推送
 
@@ -74,7 +74,7 @@ EOF
 ./informer "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"
 ```
 
-命令行传入的地址优先；不传时使用 `informer.secret.json` 里保存的 webhook。两处都没有地址时，
+命令行传入的地址优先；不传时使用 `informer.json` 里保存的 webhook。两处都没有地址时，
 只生成内容并写入日报文件，不推送。
 
 ### 6. 配置定时任务
@@ -85,7 +85,7 @@ crontab 不会加载 shell 的 profile，需要在命令里显式写环境变量
 00 10 * * * INFORMER_HOME=/root/.informer /root/informer/informer "https://oapi.dingtalk.com/robot/send?access_token=xxxxx" >> /root/informer/cron.log 2>&1
 ```
 
-飞书同理，把地址换成飞书的 webhook 即可。地址已保存在 `informer.secret.json` 时可以省略参数：
+飞书同理，把地址换成飞书的 webhook 即可。地址已保存在 `informer.json` 时可以省略参数：
 
 ```
 00 10 * * * INFORMER_HOME=/root/.informer /root/informer/informer >> /root/informer/cron.log 2>&1
@@ -128,6 +128,12 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
 
 除 `feed` 节外还有一个顶层节 `agent`，供 `agent` 类型的订阅使用，详见[「agent 解析订阅」](#agent-解析订阅)。
 
+还有一个顶层字段 `webhook`，存放钉钉 / 飞书机器人地址（不是敏感凭证）：
+
+| 配置项 | 含义 | 取值 |
+| --- | --- | --- |
+| `webhook` | 推送用的机器人 webhook | URL 字符串；留空或不写表示不推送 |
+
 还有一个顶层节 `schedule`，只被桌面版「定时任务」读取，命令行与系统 crontab 会忽略它（命令行的定时推送仍由 crontab 负责）：
 
 | 配置项 | 含义 | 取值 |
@@ -139,27 +145,25 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
 
 无论是命令行手写还是桌面版「设置」页保存，写入都遵守下面几条约定：
 
-- **保留未知字段**：保存只替换 `feed`、`agent` 与 `schedule` 三节，文件里其它顶层字段（包括这个版本还不认识的字段）连同顺序一起原样保留。
+- **保留未知字段**：保存只替换 `feed`、`agent`、`schedule` 与 `webhook`，文件里其它顶层字段（包括这个版本还不认识的字段）连同顺序一起原样保留。
 - **原子替换**：先写同目录下的临时文件再 `rename` 覆盖，所以并发运行的 crontab 读到的要么是旧文件、要么是新文件，不会读到写了一半的内容。
 - **跨进程写锁**：写入前会创建 `informer.json.lock`，两个「读—改—写」不会互相覆盖造成丢失更新。锁有等待上限，
   等不到会直接报错而不是一直卡住；进程被杀留下的陈旧锁会在明显过期后被自动接管。
 
 ### 敏感配置文件 informer.secret.json
 
-机器人地址（webhook）不写进 `informer.json`，而是单独存放在数据主目录下的 `informer.secret.json`：
+Agent API Key 不写进 `informer.json`，而是单独存放在数据主目录下的 `informer.secret.json`：
 
 ```json
 {
-  "webhook": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx",
   "agent_api_key": "sk-xxxxx"
 }
 ```
 
 - 该文件无论新建还是改写，权限都会被设置并校验为 **0600**；权限无法落实时保存直接失败，不会以不安全的状态写下去
   （Windows 不支持 Unix 权限位，这一步在 Windows 上无法校验）。
-- 桌面版「设置」页只显示「是否已配置」和一段打码后的前缀，完整地址不会回传到界面。
-- 命令行显式传入的地址**优先**；不传地址时才使用这个文件里保存的 webhook。
-- `agent_api_key` 是 `agent` 类型订阅调用 AI Agent 时使用的密钥，同样只存在这个文件里；桌面版只显示「是否已配置」，不回传原文。
+- 桌面版「设置」页只显示「是否已配置」，不回传原文。
+- 机器人 webhook 写在 `informer.json` 里，不进入这个文件；若旧版本曾把 webhook 写在这里，运行时仍会读取，并在下次保存地址时迁出。
 
 ## 五、订阅管理命令
 
@@ -282,7 +286,7 @@ API Key 不写进 `informer.json`，而是放在同目录的 `informer.secret.js
 | **订阅** | 左侧分类树：新增 / 编辑 / 删除分类，用整数「排序值」决定顺序（越小越靠前，相同排序值按分类 ID 排）。右侧按分类筛选的订阅卡片：展示解析类型、抓取状态、所属分类、错误信息，卡片右上角的开关直接启停订阅，底部可「测试抓取」（真实抓取，但不写库、不改订阅状态）、编辑、删除。 |
 | **日报** | 左侧按「年 → 月 → 日」折叠的日期列表，点击某天在右侧全宽渲染当天的 Markdown。单日内容一次性加载，不分页。 |
 | **文章库** | 已入库文章的游标翻页列表，可按分类、订阅、关键字筛选，显示通知时间；标题点击后在系统浏览器中打开。 |
-| **设置** | 读写 `informer.json` 的抓取与推荐参数、配置定时推送（仅桌面端，应用打开时生效）、手动触发一次推送、配置机器人地址（写入独立的敏感文件）、执行「重建历史索引」。 |
+| **设置** | 读写 `informer.json` 的抓取与推荐参数、配置定时推送（仅桌面端，应用打开时生效）、手动触发一次推送、配置机器人地址（写入 `informer.json`）、执行「重建历史索引」。 |
 
 正式发布构建会在启动时及之后每 24 小时检查一次 GitHub Releases；若有新版本则后台下载并校验，右上角出现「重启生效新版本」，点击后替换二进制并重启。开发版（`version=dev`）不会发起检查。
 

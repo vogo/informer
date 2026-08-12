@@ -27,15 +27,10 @@ import (
 const (
 	// SecretsFileName is the credential file of one data directory. It is kept out of
 	// informer.json on purpose: informer.json is meant to be readable, diffable and
-	// shareable, while the bot webhook stays in its own locked-down file.
+	// shareable, while the agent api key stays in its own locked-down file.
 	SecretsFileName = "informer.secret.json"
 
-	// webhookKey is the top level key holding the bot webhook.
-	webhookKey = "webhook"
-
-	// agentAPIKeyKey is the top level key holding the agent api key. It shares
-	// the credential file with the webhook because both are things a data
-	// directory must not hand out when informer.json is shared.
+	// agentAPIKeyKey is the top level key holding the agent api key.
 	agentAPIKeyKey = "agent_api_key" //nolint:gosec //document key name, not a credential.
 )
 
@@ -47,16 +42,9 @@ type SecretsView struct {
 	// Exists reports whether the file is already on disk.
 	Exists bool `json:"exists"`
 
-	// WebhookConfigured reports whether a non empty webhook is stored.
-	WebhookConfigured bool `json:"webhook_configured"`
-
-	// Webhook is the stored bot address. It is a plain endpoint rather than a
-	// secret, so the settings page shows it in full.
-	Webhook string `json:"webhook"`
-
 	// AgentAPIKeyConfigured reports whether a non empty agent api key is stored.
-	// The key itself is never returned: unlike the webhook it is a real
-	// credential, and the page only needs to know that one is set.
+	// The key itself is never returned: it is a real credential, and the page only
+	// needs to know that one is set.
 	AgentAPIKeyConfigured bool `json:"agent_api_key_configured"`
 }
 
@@ -77,16 +65,8 @@ func (s *Service) ReadSecretsView() (*SecretsView, error) {
 	return &SecretsView{
 		Path:                  path,
 		Exists:                stored.exists,
-		WebhookConfigured:     stored.webhook != "",
-		Webhook:               stored.webhook,
 		AgentAPIKeyConfigured: stored.agentAPIKey != "",
 	}, nil
-}
-
-// SaveWebhook stores the bot webhook in the credential file.
-// An empty value clears the stored webhook rather than writing a blank one.
-func (s *Service) SaveWebhook(webhook string) error {
-	return s.saveSecret(webhookKey, webhook)
 }
 
 // SaveAgentAPIKey stores the agent api key in the credential file.
@@ -126,26 +106,6 @@ func (s *Service) saveSecret(key, value string) error {
 	})
 }
 
-// ResolveWebhook decides which bot webhook one inform run delivers to.
-//
-// An address passed on the command line always wins, so every existing crontab entry
-// keeps working exactly as before; the credential file is the fallback used by a run
-// started without an argument, which is how the desktop app configures delivery.
-func (s *Service) ResolveWebhook(argAddr string) string {
-	if trimmed := strings.TrimSpace(argAddr); trimmed != "" {
-		return trimmed
-	}
-
-	stored, err := s.readSecrets()
-	if err != nil {
-		// a broken credential file must not abort the daily run: the report is still
-		// generated and stored, it is only not delivered.
-		return ""
-	}
-
-	return stored.webhook
-}
-
 // readAgentAPIKey returns the stored agent api key, empty when none is configured.
 func (s *Service) readAgentAPIKey() (string, error) {
 	stored, err := s.readSecrets()
@@ -158,7 +118,6 @@ func (s *Service) readAgentAPIKey() (string, error) {
 
 // storedSecrets is the credential file state one read resolved.
 type storedSecrets struct {
-	webhook     string
 	agentAPIKey string
 	exists      bool
 }
@@ -172,13 +131,6 @@ func (s *Service) readSecrets() (storedSecrets, error) {
 
 	stored := storedSecrets{exists: doc.Exists()}
 
-	var webhook string
-
-	_, err = doc.Unmarshal(webhookKey, &webhook)
-	if err != nil {
-		return stored, err
-	}
-
 	var apiKey string
 
 	_, err = doc.Unmarshal(agentAPIKeyKey, &apiKey)
@@ -186,7 +138,6 @@ func (s *Service) readSecrets() (storedSecrets, error) {
 		return stored, err
 	}
 
-	stored.webhook = strings.TrimSpace(webhook)
 	stored.agentAPIKey = strings.TrimSpace(apiKey)
 
 	return stored, nil
