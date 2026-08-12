@@ -28,6 +28,7 @@ import {
 } from 'naive-ui'
 import {Browser} from '@wailsio/runtime'
 import {
+  CreateCategory,
   CreateSource,
   DeleteSource,
   ListCategories,
@@ -43,7 +44,7 @@ import {
 } from './bindings'
 import CategoryPanel from './CategoryPanel.vue'
 import {errorText} from './errors'
-import {compact} from './nulls'
+import {compact, requireValue} from './nulls'
 
 // SourceForm mirrors the Go request object one to one, so nothing the service
 // returns round trips through an implicit shape.
@@ -65,7 +66,9 @@ interface SourceForm {
   parseType: string
   agentProvider: string
   agentPrompt: string
-  categoryId: number
+  // number = existing category id; string = typed new name to create on save;
+  // null / 0 = leave empty and let the backend fall back to「未分类」.
+  categoryId: number | string | null
   enabled: boolean
 }
 
@@ -133,6 +136,59 @@ const isAgentType = computed(() => form.parseType === 'agent')
 const showRegexFields = computed(() => form.parseType === 'regex' || form.parseType === '')
 const showJsonFields = computed(() => form.parseType === 'json' || form.parseType === '')
 const categoryOptions = computed(() => categories.value.map(c => ({label: c.name, value: c.id})))
+
+// onCreateCategoryOption turns a typed label into a select option. Matching an
+// existing name reuses that id so the unique-name index is never hit by accident.
+function onCreateCategoryOption(label: string) {
+  const name = label.trim()
+  if (!name) {
+    return {label: label, value: label}
+  }
+
+  const existing = categories.value.find(c => c.name === name)
+  if (existing) {
+    return {label: existing.name, value: existing.id}
+  }
+
+  return {label: name, value: name}
+}
+
+// resolveCategoryId turns the form value into a real category id before save:
+// pick existing, create a new one from a typed name, or leave 0 for「未分类」.
+async function resolveCategoryId(): Promise<number> {
+  const raw = form.categoryId
+  if (raw == null || raw === '' || raw === 0) {
+    return 0
+  }
+
+  if (typeof raw === 'number') {
+    return raw
+  }
+
+  const name = String(raw).trim()
+  if (!name) {
+    return 0
+  }
+
+  const existing = categories.value.find(c => c.name === name)
+  if (existing) {
+    return existing.id
+  }
+
+  const created = requireValue(await CreateCategory({id: 0, name, sort: 0}), 'CategoryDTO')
+  categories.value = [
+    ...categories.value,
+    {
+      id: created.id,
+      name: created.name,
+      sort: created.sort,
+      sourceCount: 0,
+      isDefault: false
+    }
+  ]
+  return created.id
+}
+
 const selectedCategoryName = computed(
   () => categories.value.find(c => c.id === selectedCategoryId.value)?.name ?? '全部订阅'
 )
@@ -313,6 +369,9 @@ async function save() {
 
   saving.value = true
   try {
+    const categoryId = await resolveCategoryId()
+    form.categoryId = categoryId
+
     const req = {
       id: form.id,
       title: form.title,
@@ -333,7 +392,7 @@ async function save() {
       parseType: form.parseType,
       agentProvider: form.agentProvider,
       agentPrompt: form.agentPrompt,
-      categoryId: form.categoryId,
+      categoryId,
       enabled: form.enabled
     }
 
@@ -531,8 +590,11 @@ function openArticle(url: string) {
           <n-select
             v-model:value="form.categoryId"
             :options="categoryOptions"
-            placeholder="留空则归入「未分类」"
+            :on-create="onCreateCategoryOption"
+            filterable
+            tag
             clearable
+            placeholder="选择已有分类，或输入新分类名后回车；留空则归入「未分类」"
           />
         </n-form-item>
         <n-form-item v-if="!isAgentType" label="自定义请求">
