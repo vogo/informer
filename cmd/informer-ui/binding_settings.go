@@ -81,22 +81,23 @@ type ConfigViewDTO struct {
 	// AgentProviders are the providers the agent section accepts, in order.
 	AgentProviders []string `json:"agentProviders"`
 
+	// Webhook is the bot delivery address stored in informer.json. It is a plain
+	// endpoint rather than a secret, so the settings page shows it in full.
+	Webhook string `json:"webhook"`
+
 	// PreservedKeys are the top level fields this build does not edit and keeps
 	// on every save, listed so the page can state that nothing is dropped.
 	PreservedKeys []string `json:"preservedKeys"`
 }
 
-// SecretsViewDTO is the credential state of the settings page. The webhook is a
-// plain bot address rather than a secret, so the page shows it in full.
+// SecretsViewDTO is the credential state of the settings page.
 type SecretsViewDTO struct {
-	Path              string `json:"path"`
-	Exists            bool   `json:"exists"`
-	WebhookConfigured bool   `json:"webhookConfigured"`
-	Webhook           string `json:"webhook"`
+	Path   string `json:"path"`
+	Exists bool   `json:"exists"`
 
 	// AgentAPIKeyConfigured reports whether an agent api key is stored. The key
-	// itself is never sent to the page: unlike the webhook it is a real
-	// credential, and the page only needs to know that one exists.
+	// itself is never sent to the page: it is a real credential, and the page
+	// only needs to know that one exists.
 	AgentAPIKeyConfigured bool `json:"agentApiKeyConfigured"`
 }
 
@@ -145,6 +146,7 @@ func (a *App) ReadConfig() (*ConfigViewDTO, error) {
 		Agent:            agentDefaults,
 		AgentDefaults:    agentDefaults,
 		AgentProviders:   agent.LegalProviders(),
+		Webhook:          view.Webhook,
 		PreservedKeys:    view.PreservedKeys,
 	}
 
@@ -189,7 +191,7 @@ func (a *App) SaveConfig(req *FeedConfigDTO) error {
 	})
 }
 
-// ReadSecrets reports whether a bot webhook is configured, and where it is stored.
+// ReadSecrets reports whether an agent api key is configured, and where it is stored.
 func (a *App) ReadSecrets() (*SecretsViewDTO, error) {
 	err := a.ready()
 	if err != nil {
@@ -204,15 +206,13 @@ func (a *App) ReadSecrets() (*SecretsViewDTO, error) {
 	return &SecretsViewDTO{
 		Path:                  view.Path,
 		Exists:                view.Exists,
-		WebhookConfigured:     view.WebhookConfigured,
-		Webhook:               view.Webhook,
 		AgentAPIKeyConfigured: view.AgentAPIKeyConfigured,
 	}, nil
 }
 
-// SaveWebhook stores the bot webhook in the separate 0600 credential file.
-// An empty value clears it. The save fails rather than leaving the file readable by
-// other users when the permission cannot be enforced.
+// SaveWebhook stores the bot webhook in informer.json.
+// An empty value clears it. A webhook left in the legacy credential file is removed
+// on save so the address is not kept in two places.
 func (a *App) SaveWebhook(webhook string) error {
 	err := a.ready()
 	if err != nil {

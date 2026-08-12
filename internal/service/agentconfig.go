@@ -40,8 +40,8 @@ func DefaultAgentConfig() *agent.Config {
 }
 
 // agentSection is the agent part of informer.json exactly as the file spells it.
-// The api key is deliberately absent: it lives in the 0600 credential file next to
-// the bot webhook, so informer.json stays a document that can be shared and diffed.
+// The api key is deliberately absent: it lives in the 0600 credential file, so
+// informer.json stays a document that can be shared and diffed.
 type agentSection struct {
 	Provider       string `json:"provider"`
 	BaseURL        string `json:"base_url"`

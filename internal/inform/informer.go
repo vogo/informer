@@ -71,6 +71,10 @@ type Config struct {
 	// Agent is the shared configuration of every agent source. A nil value runs
 	// the agent with its defaults and the machine's own credentials.
 	Agent *agent.Config `json:"agent"`
+
+	// Webhook is the bot delivery address. It is a plain endpoint rather than a
+	// credential, so it lives in the shareable configuration file.
+	Webhook string `json:"webhook,omitempty"`
 }
 
 // Options describes one inform run. The feed database is expected to be

@@ -110,10 +110,10 @@ async function load() {
     Object.assign(schedule, config.schedule)
     Object.assign(agent, config.agent)
     agentProviderOptions.value = (config.agentProviders ?? []).map(value => ({label: value, value}))
+    webhook.value = config.webhook ?? ''
+    webhookConfigured.value = webhook.value.trim() !== ''
 
     secretsPath.value = secrets.path
-    webhookConfigured.value = secrets.webhookConfigured
-    webhook.value = secrets.webhook
     agentAPIKeyConfigured.value = secrets.agentApiKeyConfigured
   } catch (e) {
     loadError.value = errorText(e)
@@ -353,7 +353,7 @@ async function rebuild() {
           <n-button :loading="agentAPIKeySaving" @click="saveAgentAPIKey">保存 Key</n-button>
         </n-space>
         <n-text depth="3" style="display: block; margin-top: 8px; font-size: 12px">
-          API Key 与机器人地址存放在同一个 0600 文件中，不会写入 informer.json。
+          API Key 存放在独立的 0600 文件 <n-code :code="secretsPath" inline /> 中，不会写入 informer.json。
         </n-text>
 
         <template #footer>
@@ -365,7 +365,7 @@ async function rebuild() {
 
       <n-card size="small" title="机器人地址" style="margin-bottom: 16px">
         <n-text depth="3" style="font-size: 12px">
-          存放于独立文件 <n-code :code="secretsPath" inline />，权限固定为 0600，不写入 informer.json，也不入库。
+          写入 <n-code :code="configPath" inline /> 的顶层 <n-code code="webhook" inline /> 字段，不是敏感凭证，也不入库。
         </n-text>
 
         <n-descriptions :column="1" size="small" style="margin: 12px 0">

@@ -20,7 +20,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -528,30 +527,28 @@ func TestWebhookBindingReturnsTheStoredAddress(t *testing.T) {
 
 	app := newTestApp(t)
 
-	view, err := app.ReadSecrets()
+	view, err := app.ReadConfig()
 	require.NoError(t, err)
-	assert.False(t, view.WebhookConfigured)
+	assert.Empty(t, view.Webhook)
 
-	const webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/0000-secret-token"
+	const webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/0000-plain-token"
 
 	require.NoError(t, app.SaveWebhook(webhook))
 
-	view, err = app.ReadSecrets()
+	view, err = app.ReadConfig()
 	require.NoError(t, err)
-	assert.True(t, view.WebhookConfigured)
 	assert.Equal(t, webhook, view.Webhook)
 
-	if runtime.GOOS != "windows" {
-		info, statErr := os.Stat(view.Path)
-		require.NoError(t, statErr)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-	}
+	secrets, err := app.ReadSecrets()
+	require.NoError(t, err)
+	_, err = os.Stat(secrets.Path)
+	assert.ErrorIs(t, err, os.ErrNotExist)
 
 	require.NoError(t, app.SaveWebhook(""))
 
-	view, err = app.ReadSecrets()
+	view, err = app.ReadConfig()
 	require.NoError(t, err)
-	assert.False(t, view.WebhookConfigured)
+	assert.Empty(t, view.Webhook)
 }
 
 func TestNewBindingsReportAStartupFailure(t *testing.T) {
