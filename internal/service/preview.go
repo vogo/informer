@@ -50,6 +50,8 @@ func (s *Service) PreviewSource(source *feed.Source) ([]*feed.Article, error) {
 		return nil, err
 	}
 
+	s.ApplyHTTPProxy()
+
 	articles, err := feed.ParseArticles(source, s.agentConfig())
 	if err != nil {
 		return nil, fmt.Errorf("preview source %d: %w", source.ID, err)

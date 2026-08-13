@@ -75,6 +75,9 @@ type Config struct {
 	// Webhook is the bot delivery address. It is a plain endpoint rather than a
 	// credential, so it lives in the shareable configuration file.
 	Webhook string `json:"webhook,omitempty"`
+
+	// HTTPProxy is the optional HTTP(S) proxy for URL fetches and agent runs.
+	HTTPProxy string `json:"http_proxy,omitempty"`
 }
 
 // Options describes one inform run. The feed database is expected to be

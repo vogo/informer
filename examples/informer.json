@@ -17,5 +17,6 @@
     "enabled": false,
     "time": "10:00"
   },
-  "webhook": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"
+  "webhook": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx",
+  "http_proxy": ""
 }

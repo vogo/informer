@@ -149,6 +149,11 @@ func (s *Service) EffectiveAgentConfig(fileConfig *inform.Config) *agent.Config 
 		resolved.APIKey = key
 	}
 
+	proxy, err := s.readHTTPProxy()
+	if err == nil && proxy != "" {
+		resolved.HTTPProxy = proxy
+	}
+
 	s.ensureAgentCommand(resolved)
 
 	return resolved

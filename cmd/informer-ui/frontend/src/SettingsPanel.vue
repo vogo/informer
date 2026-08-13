@@ -29,6 +29,7 @@ import {
   SaveAgentAPIKey,
   SaveAgentConfig,
   SaveConfig,
+  SaveHTTPProxy,
   SaveSchedule,
   SaveWebhook,
   TriggerNow,
@@ -79,6 +80,11 @@ const webhook = ref('')
 const webhookInput = ref('')
 const webhookSaving = ref(false)
 
+const httpProxyConfigured = ref(false)
+const httpProxy = ref('')
+const httpProxyInput = ref('')
+const httpProxySaving = ref(false)
+
 const schedule = reactive({
   enabled: false,
   time: '10:00'
@@ -112,6 +118,8 @@ async function load() {
     agentProviderOptions.value = (config.agentProviders ?? []).map(value => ({label: value, value}))
     webhook.value = config.webhook ?? ''
     webhookConfigured.value = webhook.value.trim() !== ''
+    httpProxy.value = config.httpProxy ?? ''
+    httpProxyConfigured.value = httpProxy.value.trim() !== ''
 
     secretsPath.value = secrets.path
     agentAPIKeyConfigured.value = secrets.agentApiKeyConfigured
@@ -231,6 +239,20 @@ async function saveWebhook() {
     message.error(`保存失败：${errorText(e)}`)
   } finally {
     webhookSaving.value = false
+  }
+}
+
+async function saveHTTPProxy() {
+  httpProxySaving.value = true
+  try {
+    await SaveHTTPProxy(httpProxyInput.value)
+    message.success(httpProxyInput.value.trim() === '' ? '已清除代理' : '代理已保存并立即生效')
+    httpProxyInput.value = ''
+    await load()
+  } catch (e) {
+    message.error(`保存失败：${errorText(e)}`)
+  } finally {
+    httpProxySaving.value = false
   }
 }
 
@@ -389,6 +411,37 @@ async function rebuild() {
               命令行显式传入的地址仍然优先，不传时使用这里保存的地址。
             </n-text>
             <n-button :loading="webhookSaving" type="primary" @click="saveWebhook">保存地址</n-button>
+          </n-space>
+        </template>
+      </n-card>
+
+      <n-card size="small" title="HTTP 代理" style="margin-bottom: 16px">
+        <n-text depth="3" style="font-size: 12px">
+          写入 <n-code :code="configPath" inline /> 的顶层 <n-code code="http_proxy" inline /> 字段。
+          有配置时，订阅抓取、机器人推送与 Agent 子进程都会走该代理。
+        </n-text>
+
+        <n-descriptions :column="1" size="small" style="margin: 12px 0">
+          <n-descriptions-item label="当前状态">
+            <n-space :size="8" align="center">
+              <n-tag v-if="httpProxyConfigured" size="small" type="success">已配置</n-tag>
+              <n-tag v-else size="small" :bordered="false">未配置</n-tag>
+              <n-text v-if="httpProxy" depth="3" style="font-size: 12px">{{ httpProxy }}</n-text>
+            </n-space>
+          </n-descriptions-item>
+        </n-descriptions>
+
+        <n-input
+          v-model:value="httpProxyInput"
+          placeholder="例如 http://127.0.0.1:7890；留空保存表示清除"
+        />
+
+        <template #footer>
+          <n-space justify="space-between" align="center">
+            <n-text depth="3" style="font-size: 12px">
+              与 Agent 的 base_url（API 网关）无关；保存后立即对后续请求生效。
+            </n-text>
+            <n-button :loading="httpProxySaving" type="primary" @click="saveHTTPProxy">保存代理</n-button>
           </n-space>
         </template>
       </n-card>

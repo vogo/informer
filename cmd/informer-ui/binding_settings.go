@@ -85,6 +85,9 @@ type ConfigViewDTO struct {
 	// endpoint rather than a secret, so the settings page shows it in full.
 	Webhook string `json:"webhook"`
 
+	// HTTPProxy is the optional HTTP(S) proxy stored in informer.json.
+	HTTPProxy string `json:"httpProxy"`
+
 	// PreservedKeys are the top level fields this build does not edit and keeps
 	// on every save, listed so the page can state that nothing is dropped.
 	PreservedKeys []string `json:"preservedKeys"`
@@ -147,6 +150,7 @@ func (a *App) ReadConfig() (*ConfigViewDTO, error) {
 		AgentDefaults:    agentDefaults,
 		AgentProviders:   agent.LegalProviders(),
 		Webhook:          view.Webhook,
+		HTTPProxy:        view.HTTPProxy,
 		PreservedKeys:    view.PreservedKeys,
 	}
 
@@ -220,6 +224,17 @@ func (a *App) SaveWebhook(webhook string) error {
 	}
 
 	return a.svc.SaveWebhook(webhook)
+}
+
+// SaveHTTPProxy stores the HTTP(S) proxy in informer.json and applies it to URL
+// fetches and agent runs. An empty value clears it.
+func (a *App) SaveHTTPProxy(proxy string) error {
+	err := a.ready()
+	if err != nil {
+		return err
+	}
+
+	return a.svc.SaveHTTPProxy(proxy)
 }
 
 // RebuildHistoryIndex fills the missing inform times that the stored daily reports
