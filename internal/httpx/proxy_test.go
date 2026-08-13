@@ -55,6 +55,20 @@ func TestSetProxyClearsWhenEmpty(t *testing.T) {
 	assert.Nil(t, proxy)
 }
 
+func TestNewClientHonorsConfiguredProxy(t *testing.T) {
+	t.Cleanup(func() {
+		require.NoError(t, httpx.SetProxy(""))
+	})
+
+	require.NoError(t, httpx.SetProxy("http://127.0.0.1:7890"))
+
+	client := httpx.NewClient(0)
+	proxy, err := client.Transport.(*http.Transport).Proxy(nil)
+	require.NoError(t, err)
+	require.NotNil(t, proxy)
+	assert.Equal(t, "http://127.0.0.1:7890", proxy.String())
+}
+
 func TestSetProxyRejectsAnInvalidURL(t *testing.T) {
 	t.Cleanup(func() {
 		require.NoError(t, httpx.SetProxy(""))

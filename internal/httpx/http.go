@@ -118,6 +118,16 @@ func CurrentProxy() string {
 	return proxy.String()
 }
 
+// NewClient returns an http.Client that shares HTTPClient's Transport and
+// therefore honors the same configured http_proxy. The caller supplies the
+// per-request timeout; no cookie jar is attached.
+func NewClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Transport: HTTPClient.Transport,
+		Timeout:   timeout,
+	}
+}
+
 //nolint:gochecknoglobals //ignore this.
 var defaultHTTPHeaders = map[string]string{
 	"accept":          "*/*",
