@@ -11,7 +11,7 @@
     !define INFO_COMPANYNAME "vogo"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "informer-ui"
+    !define INFO_PRODUCTNAME "informer"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "1.0.0"

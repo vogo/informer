@@ -21,7 +21,7 @@ Unicode true
 ####
 ## !define INFO_PROJECTNAME    "my-project" # Default "informer-ui"
 ## !define INFO_COMPANYNAME    "My Company" # Default "vogo"
-## !define INFO_PRODUCTNAME    "My Product Name" # Default "informer-ui"
+## !define INFO_PRODUCTNAME    "My Product Name" # Default "informer"
 ## !define INFO_PRODUCTVERSION "1.0.0"     # Default "1.0.0"
 ## !define INFO_COPYRIGHT      "(c) Now, My Company" # Default "© 2026, My Company"
 ###

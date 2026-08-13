@@ -4,7 +4,9 @@
         <key>CFBundlePackageType</key>
             <string>APPL</string>
         <key>CFBundleName</key>
-            <string>informer-ui</string>
+            <string>informer</string>
+        <key>CFBundleDisplayName</key>
+            <string>informer</string>
         <key>CFBundleExecutable</key>
             <string>informer-ui</string>
         <key>CFBundleIdentifier</key>

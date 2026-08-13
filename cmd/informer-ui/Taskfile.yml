@@ -1,7 +1,10 @@
 version: '3'
 
 vars:
+  # Binary / release artifact basename (informer-ui-*.dmg, .exe, …).
   APP_NAME: "informer-ui"
+  # User-facing product name (Dock, Finder .app, Start Menu, About).
+  APP_DISPLAY_NAME: "informer"
   BIN_DIR: "bin"
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'

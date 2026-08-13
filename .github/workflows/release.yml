@@ -62,14 +62,14 @@ jobs:
       # a half universal app is worse than failing the job.
       - name: Verify universal binary
         run: |
-          archs=$(lipo -archs cmd/informer-ui/bin/informer-ui.app/Contents/MacOS/informer-ui)
+          archs=$(lipo -archs cmd/informer-ui/bin/informer.app/Contents/MacOS/informer-ui)
           echo "architectures: $archs"
           echo "$archs" | grep -q x86_64
           echo "$archs" | grep -q arm64
 
       - name: Verify injected version
         run: |
-          shown=$(cmd/informer-ui/bin/informer-ui.app/Contents/MacOS/informer-ui version)
+          shown=$(cmd/informer-ui/bin/informer.app/Contents/MacOS/informer-ui version)
           test "$shown" = "${{ github.ref_name }}"
 
       # updater-consumable archive: single top-level .app entry.
@@ -77,21 +77,21 @@ jobs:
       - name: Package app.zip for updater
         run: |
           ditto -c -k --keepParent --norsrc --noextattr \
-            cmd/informer-ui/bin/informer-ui.app \
+            cmd/informer-ui/bin/informer.app \
             "informer-ui-${{ github.ref_name }}-darwin-universal.app.zip"
 
       - name: Package dmg (unsigned, manual install)
         run: |
           brew install create-dmg
           create-dmg \
-            --volname "informer-ui ${{ github.ref_name }}" \
+            --volname "informer ${{ github.ref_name }}" \
             --window-size 600 400 \
             --icon-size 96 \
-            --icon "informer-ui.app" 180 190 \
+            --icon "informer.app" 180 190 \
             --app-drop-link 420 190 \
             --no-internet-enable \
             "informer-ui-${{ github.ref_name }}-darwin-universal.dmg" \
-            "cmd/informer-ui/bin/informer-ui.app"
+            "cmd/informer-ui/bin/informer.app"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4

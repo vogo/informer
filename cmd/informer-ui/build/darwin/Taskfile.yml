@@ -162,7 +162,7 @@ tasks:
     platforms: [darwin]
     cmds:
       - >-
-        wails3 tool package --format dmg --name "{{.APP_NAME}}" --out "{{.BIN_DIR}}"
+        wails3 tool package --format dmg --name "{{.APP_DISPLAY_NAME}}" --out "{{.BIN_DIR}}"
         --background "{{.DMG_BACKGROUND}}"
         --volume-icon "{{.DMG_VOLUME_ICON}}"
         --file-icon "{{.DMG_FILE_ICON}}"
@@ -170,6 +170,7 @@ tasks:
         --window-height "{{.DMG_WINDOW_HEIGHT}}"
         {{if .DMG_FILES}}--files "{{.DMG_FILES}}"{{end}}
     vars:
+      APP_DISPLAY_NAME: '{{.APP_DISPLAY_NAME | default "informer"}}'
       DMG_BACKGROUND: '{{.DMG_BACKGROUND | default "build/darwin/dmg-background.png"}}'
       DMG_VOLUME_ICON: '{{.DMG_VOLUME_ICON | default "build/darwin/icons.icns"}}'
       DMG_FILE_ICON: '{{.DMG_FILE_ICON | default "build/darwin/dmg-file-icon.icns"}}'
@@ -181,22 +182,26 @@ tasks:
   create:app:bundle:
     summary: Creates an `.app` bundle
     cmds:
-      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
-      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
-      - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.app/Contents/MacOS"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.app/Contents/Resources"
+      - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.app/Contents/Resources"
       - |
         if [ -f build/darwin/Assets.car ]; then
-          cp build/darwin/Assets.car "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
+          cp build/darwin/Assets.car "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.app/Contents/Resources"
         fi
-      - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
-      - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
+      - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.app/Contents/MacOS"
+      - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.app/Contents"
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
+    vars:
+      APP_DISPLAY_NAME: '{{.APP_DISPLAY_NAME | default "informer"}}'
 
   codesign:adhoc:
     summary: Ad-hoc signs the app bundle (macOS only)
     internal: true
     cmds:
-      - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+      - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.app"
+    vars:
+      APP_DISPLAY_NAME: '{{.APP_DISPLAY_NAME | default "informer"}}'
 
   codesign:skip:
     summary: Skips codesigning when cross-compiling
@@ -206,17 +211,19 @@ tasks:
 
   run:
     cmds:
-      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
-      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources"
-      - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.dev.app/Contents/MacOS"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.dev.app/Contents/Resources"
+      - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.dev.app/Contents/Resources"
       - |
         if [ -f build/darwin/Assets.car ]; then
-          cp build/darwin/Assets.car "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources"
+          cp build/darwin/Assets.car "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.dev.app/Contents/Resources"
         fi
-      - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
-      - cp "build/darwin/Info.dev.plist" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Info.plist"
-      - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app"
-      - '"{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS/{{.APP_NAME}}"'
+      - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.dev.app/Contents/MacOS"
+      - cp "build/darwin/Info.dev.plist" "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.dev.app/Contents/Info.plist"
+      - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.dev.app"
+      - '"{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.dev.app/Contents/MacOS/{{.APP_NAME}}"'
+    vars:
+      APP_DISPLAY_NAME: '{{.APP_DISPLAY_NAME | default "informer"}}'
 
   sign:
     summary: Signs the application bundle with Developer ID
@@ -227,7 +234,9 @@ tasks:
     deps:
       - task: package
     cmds:
-      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app" {{.CLI_ARGS}}
+      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.app" {{.CLI_ARGS}}
+    vars:
+      APP_DISPLAY_NAME: '{{.APP_DISPLAY_NAME | default "informer"}}'
 
   sign:notarize:
     summary: Signs and notarizes the application bundle
@@ -240,4 +249,6 @@ tasks:
     deps:
       - task: package
     cmds:
-      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.app" --notarize {{.CLI_ARGS}}
+      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_DISPLAY_NAME}}.app" --notarize {{.CLI_ARGS}}
+    vars:
+      APP_DISPLAY_NAME: '{{.APP_DISPLAY_NAME | default "informer"}}'

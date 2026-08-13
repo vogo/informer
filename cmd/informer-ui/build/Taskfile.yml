@@ -234,7 +234,7 @@ tasks:
     summary: Updates the build assets
     dir: build
     cmds:
-      - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
+      - wails3 update build-assets -name "{{.APP_DISPLAY_NAME | default "informer"}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
 
   build:server:
     summary: Builds the application in server mode (no GUI, HTTP server only)

@@ -6,7 +6,7 @@ version: '3'
 # This information is used to generate the build assets.
 info:
   companyName: "vogo"
-  productName: "informer-ui"
+  productName: "informer"
   productIdentifier: "com.vogo.informer-ui"
   description: "informer desktop client"
   copyright: "Copyright © 2026 vogo, Apache-2.0 licensed"
