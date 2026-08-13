@@ -32,6 +32,8 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
+
+	"github.com/vogo/informer/internal/httpx"
 )
 
 // appTitle is the product name shown in the window chrome, kept in one place
@@ -43,6 +45,9 @@ const githubRepo = "vogo/informer"
 
 // checksumAsset is the fixed checksums filename published with each release.
 const checksumAsset = "SHA256SUMS"
+
+// updaterHTTPTimeout covers GitHub API checks and full release archive downloads.
+const updaterHTTPTimeout = 10 * time.Minute
 
 const (
 	platformDarwin  = "darwin"
@@ -120,6 +125,7 @@ func initUpdater(app *application.App) error {
 		Repository:    githubRepo,
 		ChecksumAsset: checksumAsset,
 		AssetMatcher:  informerAssetMatcher,
+		HTTPClient:    httpx.NewClient(updaterHTTPTimeout),
 	})
 	if err != nil {
 		return err

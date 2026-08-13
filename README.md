@@ -134,13 +134,13 @@ informer 不会自动同步多个数据主目录，也不支持同时使用多�
 | --- | --- | --- |
 | `webhook` | 推送用的机器人 webhook | URL 字符串；留空或不写表示不推送 |
 
-还有一个顶层字段 `http_proxy`，供 URL 抓取与 Agent 子进程共用：
+还有一个顶层字段 `http_proxy`，供 URL 抓取、桌面版应用内更新与 Agent 子进程共用：
 
 | 配置项 | 含义 | 取值 |
 | --- | --- | --- |
 | `http_proxy` | HTTP(S) 代理地址 | 如 `http://127.0.0.1:7890`；留空或不写表示不使用代理 |
 
-有配置时，订阅抓取、每日鸡汤、机器人推送会经共享 HTTP 客户端走代理；Agent（如 `claude`）子进程会注入 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`。这与 `agent.base_url`（API 网关地址）无关。
+有配置时，订阅抓取、每日鸡汤、机器人推送与桌面版检查/下载新版本会经共享 HTTP 客户端走代理；Agent（如 `claude`）子进程会注入 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`。这与 `agent.base_url`（API 网关地址）无关。
 
 还有一个顶层节 `schedule`，只被桌面版「定时任务」读取，命令行与系统 crontab 会忽略它（命令行的定时推送仍由 crontab 负责）：
 
