@@ -75,6 +75,9 @@ type FileConfigView struct {
 	// endpoint rather than a secret, so the settings page shows it in full.
 	Webhook string `json:"webhook"`
 
+	// HTTPProxy is the optional HTTP(S) proxy stored in informer.json.
+	HTTPProxy string `json:"http_proxy"`
+
 	// PreservedKeys lists the top level keys this build does not edit but keeps on
 	// save, so the page can state plainly that nothing else is dropped.
 	PreservedKeys []string `json:"preserved_keys"`
@@ -140,8 +143,13 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 		return nil, err
 	}
 
+	view.HTTPProxy, err = s.readHTTPProxy()
+	if err != nil {
+		return nil, err
+	}
+
 	for _, key := range doc.Keys() {
-		if key != feedSectionKey && key != scheduleSectionKey && key != agentSectionKey && key != webhookKey {
+		if key != feedSectionKey && key != scheduleSectionKey && key != agentSectionKey && key != webhookKey && key != httpProxyKey {
 			view.PreservedKeys = append(view.PreservedKeys, key)
 		}
 	}

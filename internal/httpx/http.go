@@ -19,10 +19,13 @@ package httpx
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/html/charset"
@@ -40,11 +43,19 @@ const (
 //nolint:gochecknoglobals //ignore this.
 var jar, _ = cookiejar.New(nil)
 
+// configuredProxy holds the optional HTTP(S) proxy URL for HTTPClient.
+// It is read through Transport.Proxy so a settings change never races a
+// request that is already reading the Proxy field.
+//
+//nolint:gochecknoglobals //shared client state.
+var configuredProxy atomic.Pointer[url.URL]
+
 // HTTPClient the default http client.
 //
 //nolint:exhaustivestruct,gochecknoglobals // ignore this
 var HTTPClient = &http.Client{
 	Transport: &http.Transport{
+		Proxy:               proxyFromConfig,
 		MaxIdleConns:        DefaultMaxIdleConns,
 		MaxIdleConnsPerHost: DefaultMaxIdleConnsPerHost,
 		MaxConnsPerHost:     DefaultMaxConnsPerHost,
@@ -52,6 +63,59 @@ var HTTPClient = &http.Client{
 	},
 	Timeout: DefaultRequestTimeout,
 	Jar:     jar,
+}
+
+// proxyFromConfig returns the configured proxy, or nil when none is set.
+func proxyFromConfig(_ *http.Request) (*url.URL, error) {
+	proxy := configuredProxy.Load()
+	if proxy == nil {
+		return nil, nil
+	}
+
+	return proxy, nil
+}
+
+// SetProxy configures the shared HTTPClient to use the given HTTP(S) proxy URL.
+// An empty value clears the proxy. The URL must include a scheme such as
+// "http://127.0.0.1:7890".
+func SetProxy(proxyURL string) error {
+	parsed, err := ParseProxyURL(proxyURL)
+	if err != nil {
+		return err
+	}
+
+	configuredProxy.Store(parsed)
+
+	return nil
+}
+
+// ParseProxyURL validates an HTTP(S) proxy URL. An empty value returns nil.
+func ParseProxyURL(proxyURL string) (*url.URL, error) {
+	trimmed := strings.TrimSpace(proxyURL)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("invalid http proxy %q: %w", trimmed, err)
+	}
+
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("invalid http proxy %q: scheme and host are required", trimmed)
+	}
+
+	return parsed, nil
+}
+
+// CurrentProxy returns the configured proxy URL string, or empty when none is set.
+func CurrentProxy() string {
+	proxy := configuredProxy.Load()
+	if proxy == nil {
+		return ""
+	}
+
+	return proxy.String()
 }
 
 //nolint:gochecknoglobals //ignore this.

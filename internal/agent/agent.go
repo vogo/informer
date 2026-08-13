@@ -119,6 +119,11 @@ type Config struct {
 	// WorkDir is the directory the agent process runs in. It is set by the
 	// caller rather than configured, so it never lands in informer.json.
 	WorkDir string `json:"-"`
+
+	// HTTPProxy is the HTTP(S) proxy the agent process should use. It is filled
+	// from the top level http_proxy of informer.json at run time, never stored
+	// inside the agent section.
+	HTTPProxy string `json:"-"`
 }
 
 // DefaultConfig is the agent section a data directory without one starts from.
@@ -179,6 +184,7 @@ func (c *Config) Normalized() *Config {
 	normalized.APIKey = strings.TrimSpace(normalized.APIKey)
 	normalized.Model = strings.TrimSpace(normalized.Model)
 	normalized.Command = strings.TrimSpace(normalized.Command)
+	normalized.HTTPProxy = strings.TrimSpace(normalized.HTTPProxy)
 
 	normalized.AllowedTools = strings.TrimSpace(normalized.AllowedTools)
 	if normalized.AllowedTools == "" {

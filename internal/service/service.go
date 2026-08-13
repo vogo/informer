@@ -66,7 +66,10 @@ func New(homeDir string) (*Service, error) {
 		return nil, err
 	}
 
-	return &Service{db: db, homeDir: homeDir}, nil
+	svc := &Service{db: db, homeDir: homeDir}
+	svc.ApplyHTTPProxy()
+
+	return svc, nil
 }
 
 // HomeDir returns the active data directory the service reads and writes.

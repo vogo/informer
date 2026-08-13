@@ -22,6 +22,7 @@ export {
   SaveAgentAPIKey,
   SaveAgentConfig,
   SaveConfig,
+  SaveHTTPProxy,
   SaveSchedule,
   SaveWebhook,
   SetSourceEnabled,

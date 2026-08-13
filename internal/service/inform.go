@@ -36,6 +36,8 @@ import (
 // The inform timestamp of the selected articles is written only after the
 // notification step actually succeeded, so a failed delivery leaves InformedAt empty.
 func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
+	s.ApplyHTTPProxy()
+
 	fileConfig, err := s.ReadFileConfig()
 	if err != nil {
 		return nil, err

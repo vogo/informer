@@ -37,6 +37,10 @@ const (
 	envBaseURL   = "ANTHROPIC_BASE_URL"
 	envAuthToken = "ANTHROPIC_AUTH_TOKEN" //nolint:gosec //variable name, not a credential.
 	envAPIKey    = "ANTHROPIC_API_KEY"    //nolint:gosec //variable name, not a credential.
+
+	envHTTPProxy  = "HTTP_PROXY"
+	envHTTPSProxy = "HTTPS_PROXY"
+	envAllProxy   = "ALL_PROXY"
 )
 
 // claudeEnvelope is the --output-format json document the command line prints.
@@ -110,9 +114,9 @@ func claudeArgs(cfg *Config, prompt string) []string {
 }
 
 // claudeEnv builds the child environment: the current one, with the configured
-// endpoint and credential replacing whatever it already carried. An unconfigured
-// field is left alone rather than blanked, which is what makes "just run claude
-// with the machine's own login" work.
+// endpoint, credential and proxy replacing whatever it already carried. An
+// unconfigured field is left alone rather than blanked, which is what makes
+// "just run claude with the machine's own login" work.
 func claudeEnv(cfg *Config) []string {
 	overrides := map[string]string{}
 
@@ -125,6 +129,14 @@ func claudeEnv(cfg *Config) []string {
 		// either the bearer token or the x-api-key header.
 		overrides[envAuthToken] = cfg.APIKey
 		overrides[envAPIKey] = cfg.APIKey
+	}
+
+	if cfg.HTTPProxy != "" {
+		// all three names are set so http, https and socks-aware clients inside
+		// the agent process honour the same configured proxy.
+		overrides[envHTTPProxy] = cfg.HTTPProxy
+		overrides[envHTTPSProxy] = cfg.HTTPProxy
+		overrides[envAllProxy] = cfg.HTTPProxy
 	}
 
 	if len(overrides) == 0 {

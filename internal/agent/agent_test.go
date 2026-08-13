@@ -70,6 +70,9 @@ func fakeClaude(t *testing.T, stdout string, exitCode int) fakeAgent {
 		"  printf 'env:ANTHROPIC_BASE_URL=%s\\n' \"$ANTHROPIC_BASE_URL\"\n" +
 		"  printf 'env:ANTHROPIC_AUTH_TOKEN=%s\\n' \"$ANTHROPIC_AUTH_TOKEN\"\n" +
 		"  printf 'env:ANTHROPIC_API_KEY=%s\\n' \"$ANTHROPIC_API_KEY\"\n" +
+		"  printf 'env:HTTP_PROXY=%s\\n' \"$HTTP_PROXY\"\n" +
+		"  printf 'env:HTTPS_PROXY=%s\\n' \"$HTTPS_PROXY\"\n" +
+		"  printf 'env:ALL_PROXY=%s\\n' \"$ALL_PROXY\"\n" +
 		"} > " + record + "\n" +
 		"cat <<'INFORMER_EOF'\n" + stdout + "\nINFORMER_EOF\n" +
 		"exit " + strconv.Itoa(exitCode) + "\n"
@@ -111,6 +114,7 @@ func TestRunPassesConfigurationToTheCommandLine(t *testing.T) {
 		Model:        "claude-sonnet-5",
 		AllowedTools: "WebFetch",
 		WorkDir:      workDir,
+		HTTPProxy:    "http://127.0.0.1:7890",
 	}, testInstruction, 3)
 	require.NoError(t, err)
 
@@ -126,6 +130,9 @@ func TestRunPassesConfigurationToTheCommandLine(t *testing.T) {
 	require.Contains(t, call, "env:ANTHROPIC_BASE_URL=https://proxy.example.com\n")
 	require.Contains(t, call, "env:ANTHROPIC_AUTH_TOKEN=secret-key\n")
 	require.Contains(t, call, "env:ANTHROPIC_API_KEY=secret-key\n")
+	require.Contains(t, call, "env:HTTP_PROXY=http://127.0.0.1:7890\n")
+	require.Contains(t, call, "env:HTTPS_PROXY=http://127.0.0.1:7890\n")
+	require.Contains(t, call, "env:ALL_PROXY=http://127.0.0.1:7890\n")
 	require.Contains(t, call, testInstruction)
 }
 
