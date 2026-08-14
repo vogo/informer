@@ -17,3 +17,6 @@ test:
 		go test ./... -coverprofile=coverage.txt -covermode=atomic
 
 build: format test
+
+cli:
+	CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o informer ./cmd/informer

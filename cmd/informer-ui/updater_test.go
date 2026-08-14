@@ -35,6 +35,9 @@ func TestInformerAssetMatcher(t *testing.T) {
 	t.Parallel()
 
 	assets := []github.ReleaseAsset{
+		{Name: "informer-cli-v9.9.9-linux-amd64.tar.gz"},
+		{Name: "informer-cli-v9.9.9-windows-amd64.zip"},
+		{Name: "informer-cli-v9.9.9-darwin-universal.tar.gz"},
 		{Name: "informer-ui-v9.9.9-darwin-universal.dmg"},
 		{Name: testAssetDarwinZip},
 		{Name: "informer-ui-v9.9.9-windows-amd64-setup.exe"},
@@ -75,4 +78,18 @@ func TestInformerAssetMatcher(t *testing.T) {
 			require.Equal(t, tt.want, assets[idx].Name)
 		})
 	}
+}
+
+func TestInformerAssetMatcherIgnoresCLIArchives(t *testing.T) {
+	t.Parallel()
+
+	assets := []github.ReleaseAsset{
+		{Name: "informer-cli-v9.9.9-linux-amd64.tar.gz"},
+		{Name: "informer-cli-v9.9.9-windows-amd64.zip"},
+		{Name: "informer-cli-v9.9.9-darwin-universal.tar.gz"},
+		{Name: checksumAsset},
+	}
+
+	idx := informerAssetMatcher(updater.CheckRequest{Platform: platformLinux, Arch: archAMD64}, assets)
+	require.Equal(t, -1, idx)
 }

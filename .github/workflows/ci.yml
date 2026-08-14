@@ -104,6 +104,13 @@ jobs:
           test -x /tmp/informer-root
           test -x /tmp/informer-cmd
 
+      # sqlite (mattn/go-sqlite3) needs CGO at runtime; release CLI archives
+      # are built this way so a feed command actually opens feed.db.
+      - name: CLI smoke (CGO_ENABLED=1)
+        run: |
+          CGO_ENABLED=1 go build -o /tmp/informer-cgo ./cmd/informer
+          INFORMER_HOME=$(mktemp -d) /tmp/informer-cgo feed list
+
   # every platform builds natively - no cross compile - and stores its result
   # as a run artifact. CI never creates a release; release.yml owns that.
   wails-build:
