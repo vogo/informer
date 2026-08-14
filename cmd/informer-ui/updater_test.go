@@ -29,15 +29,19 @@ const (
 	testAssetDarwinZip  = "informer-ui-v9.9.9-darwin-universal.app.zip"
 	testAssetWindowsZip = "informer-ui-v9.9.9-windows-amd64.zip"
 	testAssetLinuxTar   = "informer-ui-v9.9.9-linux-amd64.tar.gz"
+
+	testCLIAssetLinuxTar   = "informer-cli-v9.9.9-linux-amd64.tar.gz"
+	testCLIAssetWindowsZip = "informer-cli-v9.9.9-windows-amd64.zip"
+	testCLIAssetDarwinTar  = "informer-cli-v9.9.9-darwin-universal.tar.gz"
 )
 
 func TestInformerAssetMatcher(t *testing.T) {
 	t.Parallel()
 
 	assets := []github.ReleaseAsset{
-		{Name: "informer-cli-v9.9.9-linux-amd64.tar.gz"},
-		{Name: "informer-cli-v9.9.9-windows-amd64.zip"},
-		{Name: "informer-cli-v9.9.9-darwin-universal.tar.gz"},
+		{Name: testCLIAssetLinuxTar},
+		{Name: testCLIAssetWindowsZip},
+		{Name: testCLIAssetDarwinTar},
 		{Name: "informer-ui-v9.9.9-darwin-universal.dmg"},
 		{Name: testAssetDarwinZip},
 		{Name: "informer-ui-v9.9.9-windows-amd64-setup.exe"},
@@ -84,9 +88,9 @@ func TestInformerAssetMatcherIgnoresCLIArchives(t *testing.T) {
 	t.Parallel()
 
 	assets := []github.ReleaseAsset{
-		{Name: "informer-cli-v9.9.9-linux-amd64.tar.gz"},
-		{Name: "informer-cli-v9.9.9-windows-amd64.zip"},
-		{Name: "informer-cli-v9.9.9-darwin-universal.tar.gz"},
+		{Name: testCLIAssetLinuxTar},
+		{Name: testCLIAssetWindowsZip},
+		{Name: testCLIAssetDarwinTar},
 		{Name: checksumAsset},
 	}
 
