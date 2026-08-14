@@ -4,288 +4,9 @@
 
 订阅源支持四种解析方式：标准 feed（RSS/Atom）、正则匹配网页、JSON 接口，以及交给命令行 AI Agent 去找。
 
-## 一、选择使用方式
+推荐使用桌面版：图形化管理分类与订阅、浏览日报、检索文章库、配置参数与机器人。需要在服务器上定时推送时，再用命令行，见 [cli-usage.md](cli-usage.md)。两者共用同一个数据目录和 Service 层，可以同时使用。
 
-| 方式 | 适合 | 能做什么 |
-| --- | --- | --- |
-| 命令行 `informer` | 服务器上定时推送 | 管理订阅、抓取文章、生成日报、推送机器人 |
-| 桌面版 `informer-ui` | 本机图形化管理 | 分类与订阅维护、日报浏览、文章库检索、参数与机器人配置 |
-
-两者共用同一个数据目录和 Service 层，可以同时使用：用桌面版维护订阅和参数，用命令行做定时推送。
-
-## 二、快速开始（命令行）
-
-### 1. 安装
-
-需要 Go 1.25 或更高版本：
-
-```bash
-GOBIN=$(pwd) go install github.com/vogo/informer/cmd/informer@master
-```
-
-`cmd/informer` 是命令行入口；仓库根包是等价的入口，`go install github.com/vogo/informer@master` 得到的是同一个程序。
-命令行版本可在 `CGO_ENABLED=0` 下构建，适合放到服务器上跑。
-
-### 2. 创建配置文件
-
-推送运行时**必须**能读到 `informer.json`。把它放在数据主目录下（默认路径 `~/.informer/informer.json`）：
-
-```bash
-mkdir -p ~/.informer
-cat > ~/.informer/informer.json <<'EOF'
-{
-  "feed": {
-    "same_site_max_count": 3,
-    "feed_expire_days": 150,
-    "max_inform_feed_size": 20,
-    "max_fetch_num": 1
-  }
-}
-EOF
-```
-
-各项含义与取值约束见下文[配置文件](#四配置文件)。也可以装好桌面版后在「设置」Tab 里填写保存，写的是同一个文件。
-
-### 3. 添加订阅
-
-```bash
-# 添加订阅，输出为「id, 标题, 地址」
-./informer feed add "阮一峰blog" http://www.ruanyifeng.com/blog/atom.xml
-# 1,	阮一峰blog,	http://www.ruanyifeng.com/blog/atom.xml
-
-# 测试抓取（只解析并打印，不写库、不改订阅状态）
-./informer feed parse 1
-# 科技爱好者周刊（第 243 期）：与孔子 AI 聊天 : http://www.ruanyifeng.com/blog/2023/02/weekly-issue-243.html
-# 科技爱好者周刊（第 242 期）：一次尴尬的服务器被黑 : http://www.ruanyifeng.com/blog/2023/02/weekly-issue-242.html
-```
-
-### 4. 配置机器人
-
-在钉钉或飞书中创建群机器人，安全设置选「自定义关键词」，得到 webhook 地址：
-
-- 钉钉：`https://oapi.dingtalk.com/robot/send?access_token=xxxxx`
-- 飞书：`https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxx`
-
-地址可以在命令行显式传入，也可以保存到 `informer.json` 的顶层 `webhook` 字段后不带参数运行。
-
-### 5. 执行一次推送
-
-```bash
-./informer "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"
-```
-
-命令行传入的地址优先；不传时使用 `informer.json` 里保存的 webhook。两处都没有地址时，
-只生成内容并写入日报文件，不推送。
-
-### 6. 配置定时任务
-
-crontab 不会加载 shell 的 profile，需要在命令里显式写环境变量和绝对路径。每天早上 10 点推送：
-
-```
-00 10 * * * INFORMER_HOME=/root/.informer /root/informer/informer "https://oapi.dingtalk.com/robot/send?access_token=xxxxx" >> /root/informer/cron.log 2>&1
-```
-
-飞书同理，把地址换成飞书的 webhook 即可。地址已保存在 `informer.json` 时可以省略参数：
-
-```
-00 10 * * * INFORMER_HOME=/root/.informer /root/informer/informer >> /root/informer/cron.log 2>&1
-```
-
-## 三、数据目录
-
-informer 的所有数据（`informer.json`、`informer.secret.json`、`feed.db`、`data/<年份>/<日期>.md`）都存放在**同一个数据主目录**中：
-
-| `INFORMER_HOME` | 数据主目录 |
-| --- | --- |
-| 未设置或为空 | `~/.informer`（Windows 为 `%USERPROFILE%\.informer`） |
-| 已设置 | 该环境变量指向的目录（相对路径会转成绝对路径） |
-
-数据目录与可执行文件所在位置无关，因此从 Finder / 桌面快捷方式启动（不继承 shell 环境变量）时，找到的是同一份数据。
-如果 `INFORMER_HOME` 指向的目录无法创建或不可写，informer 会直接报错退出，**不会**退回到另一份数据继续跑。
-注意 crontab 中 `~` 取决于运行该任务的用户，显式写绝对路径更稳妥。
-
-切换到另一个目录时，先把当前数据主目录整体复制过去，再修改 `INFORMER_HOME`：
-
-```bash
-cp -a ~/.informer /data/informer-home
-# 然后把 crontab 里的 INFORMER_HOME 改成 /data/informer-home
-```
-
-informer 不会自动同步多个数据主目录，也不支持同时使用多个 `INFORMER_HOME`。
-
-## 四、配置文件
-
-`informer.json` 是一份人类可读的整份 JSON，不入库、不做版本历史。范例见 [examples/informer.json](examples/informer.json)。
-
-| 配置项 | 含义 | 取值 |
-| --- | --- | --- |
-| `same_site_max_count` | 同一站点在一条消息中最多出现几篇 | 必须大于 0 |
-| `feed_expire_days` | 文章多少天之后视为过期，不再推荐 | 必须大于 0 |
-| `max_inform_feed_size` | 一条消息最多推荐多少篇文章 | 必须大于 0 |
-| `max_fetch_num` | 每个订阅默认抓取的文章数上限 | 填 0 表示不做全局限制 |
-
-前三项为 0 会让推荐算法选不出任何文章，因此被拒绝；超出合理范围的值同样会被拒绝，且被拒绝的保存不会改动文件。
-
-除 `feed` 节外还有一个顶层节 `agent`，供 `agent` 类型的订阅使用，详见[「agent 解析订阅」](#agent-解析订阅)。
-
-还有一个顶层字段 `webhook`，存放钉钉 / 飞书机器人地址（不是敏感凭证）：
-
-| 配置项 | 含义 | 取值 |
-| --- | --- | --- |
-| `webhook` | 推送用的机器人 webhook | URL 字符串；留空或不写表示不推送 |
-
-还有一个顶层字段 `http_proxy`，供 URL 抓取、桌面版应用内更新与 Agent 子进程共用：
-
-| 配置项 | 含义 | 取值 |
-| --- | --- | --- |
-| `http_proxy` | HTTP(S) 代理地址 | 如 `http://127.0.0.1:7890`；留空或不写表示不使用代理 |
-
-有配置时，订阅抓取、每日鸡汤、机器人推送与桌面版检查/下载新版本会经共享 HTTP 客户端走代理；Agent（如 `claude`）子进程会注入 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`。这与 `agent.base_url`（API 网关地址）无关。
-
-还有一个顶层节 `schedule`，只被桌面版「定时任务」读取，命令行与系统 crontab 会忽略它（命令行的定时推送仍由 crontab 负责）：
-
-| 配置项 | 含义 | 取值 |
-| --- | --- | --- |
-| `schedule.enabled` | 是否启用桌面版定时推送 | `true` / `false` |
-| `schedule.time` | 每日推送时间（本机时区） | 24 小时制 `"HH:MM"`，如 `"10:00"` |
-
-桌面版定时仅在应用保持打开时生效，每个自然日最多成功推送一次（记录在数据目录的 `informer.schedule-state`，重启同一天不会再补推；失败会在下次轮询重试）；当天过了设定时间才打开应用，会补推一次。
-
-无论是命令行手写还是桌面版「设置」页保存，写入都遵守下面几条约定：
-
-- **保留未知字段**：保存只替换 `feed`、`agent`、`schedule`、`webhook` 与 `http_proxy`，文件里其它顶层字段（包括这个版本还不认识的字段）连同顺序一起原样保留。
-- **原子替换**：先写同目录下的临时文件再 `rename` 覆盖，所以并发运行的 crontab 读到的要么是旧文件、要么是新文件，不会读到写了一半的内容。
-- **跨进程写锁**：写入前会创建 `informer.json.lock`，两个「读—改—写」不会互相覆盖造成丢失更新。锁有等待上限，
-  等不到会直接报错而不是一直卡住；进程被杀留下的陈旧锁会在明显过期后被自动接管。
-
-### 敏感配置文件 informer.secret.json
-
-Agent API Key 不写进 `informer.json`，而是单独存放在数据主目录下的 `informer.secret.json`：
-
-```json
-{
-  "agent_api_key": "sk-xxxxx"
-}
-```
-
-- 该文件无论新建还是改写，权限都会被设置并校验为 **0600**；权限无法落实时保存直接失败，不会以不安全的状态写下去
-  （Windows 不支持 Unix 权限位，这一步在 Windows 上无法校验）。
-- 桌面版「设置」页只显示「是否已配置」，不回传原文。
-- 机器人 webhook 写在 `informer.json` 里，不进入这个文件；若旧版本曾把 webhook 写在这里，运行时仍会读取，并在下次保存地址时迁出。
-
-## 五、订阅管理命令
-
-```bash
-./informer feed list              # 列出所有订阅（id, 标题, 地址）
-./informer feed view <id>         # 查看单个订阅的全部字段
-./informer feed add <标题> <地址>   # 添加订阅
-./informer feed agent <标题> <提示词>  # 添加 agent 类型订阅（不需要地址）
-./informer feed copy <id>         # 复制一个订阅（连同其设置）
-./informer feed remove <id>       # 删除订阅
-./informer feed update <id> <字段> <值>   # 修改订阅的某个字段
-./informer feed parse <id>        # 测试抓取，只打印不写库
-./informer feed category          # 列出分类（id, 名称, 排序值）
-```
-
-常用字段：
-
-| 字段 | 说明 |
-| --- | --- |
-| `title` / `url` | 订阅标题与抓取地址 |
-| `weight` | 文章排序权重，越大越靠前 |
-| `max_fetch_num` | 该订阅单次抓取的文章数上限 |
-| `parse_type` | 解析方式，合法值 `feed` / `regex` / `json` / `agent` |
-| `category_id` | 所属分类，默认 `1`（内置「未分类」，不可删除） |
-| `enabled` | 是否参与定时抓取；停用后 `feed parse` 仍可测试 |
-| `regex` / `title_exp` / `url_exp` | 正则解析用的匹配式与标题、链接表达式 |
-| `json_title_path` / `json_url_path` | JSON 解析用的标题、链接路径 |
-| `agent_prompt` / `agent_provider` | agent 解析用的提示词与指定的 Agent |
-| `redirect` | 是否跟随解析出的链接跳转 |
-
-示例：
-
-```bash
-./informer feed update 1 weight 80          # 提高排序权重
-./informer feed update 1 max_fetch_num 1    # 每次只取 1 篇
-./informer feed update 1 category_id 2      # 归入分类 2
-./informer feed update 1 enabled false      # 停用订阅
-```
-
-### 正则解析订阅
-
-对于不提供 feed 的网页，用正则从 HTML 中提取标题和链接：
-
-```bash
-./informer feed add "Julian Shapiro blog" https://www.julian.com/
-./informer feed update 14 parse_type regex
-./informer feed update 14 regex '<a href="([^"]+)" class="blog-post-link[^"]+"><div class="blog-post-link-text">([^<]+)</div>'
-./informer feed update 14 title_exp '$2'
-./informer feed update 14 url_exp 'https://www.julian.com$1'
-
-# 测试抓取
-./informer feed parse 14
-# Armageddon : https://www.julian.com/blog/armageddon
-# What to do with your life : https://www.julian.com/blog/life-planning
-```
-
-`title_exp` 和 `url_exp` 用 `$1`、`$2` 引用 `regex` 中的捕获分组，可与固定前缀拼接成完整链接。
-
-### agent 解析订阅
-
-`agent` 类型的订阅不抓取某个固定地址，而是把一段自然语言的任务交给本机安装的命令行 AI Agent 去找文章。
-**你只需要描述要找什么**，JSON 输出格式要求由 informer 自动追加到提示词末尾，返回内容再被解析成文章列表：
-
-```bash
-./informer feed agent "Go 语言周报" "搜索 Go 语言最近的技术文章与发布公告，挑出最值得阅读的几篇，给出标题和链接。"
-# 1,	Go 语言周报,	agent
-
-./informer feed update 1 max_fetch_num 3   # 最多要 3 条，这个数字也会写进提示词
-
-# 测试抓取（真的会调用一次 Agent，可能需要几十秒）
-./informer feed parse 1
-```
-
-几点约定：
-
-- 订阅本身**不需要 `url`**；`agent_prompt` 为空的 agent 订阅会被拒绝保存。
-- 返回条目里 `title` 为空、或 `url` 不是 `http://` / `https://` 开头的会被丢弃，重复链接只保留一条，
-  所以 Agent 给出相对路径或编造格式时不会污染文章库。
-- Agent 只被允许使用只读的联网工具（默认 `WebSearch,WebFetch`），并且整次运行有超时上限，
-  超时会被杀掉并把原因记到订阅的抓取状态里，不会拖住整轮抓取。
-
-Agent 的接口地址、密钥与模型是全局配置，写在 `informer.json` 的 `agent` 节（密钥除外）：
-
-```json
-{
-  "agent": {
-    "provider": "claude",
-    "base_url": "",
-    "model": "",
-    "allowed_tools": "WebSearch,WebFetch",
-    "timeout_seconds": 300,
-    "command": ""
-  }
-}
-```
-
-| 配置项 | 含义 | 取值 |
-| --- | --- | --- |
-| `provider` | 使用哪个命令行 Agent | 目前只实现了 `claude`（Claude Code）；`codex` 已预留但本版本运行时会报错 |
-| `base_url` | Agent 的接口地址 | 留空表示沿用本机上该 Agent 自己的配置 |
-| `model` | 使用的模型 | 留空表示沿用 Agent 的默认模型 |
-| `allowed_tools` | 允许 Agent 使用的工具，逗号分隔 | 留空使用默认 `WebSearch,WebFetch` |
-| `timeout_seconds` | 单次运行超时 | 填 0 表示使用默认 300 秒，合法范围 10 ~ 3600 |
-| `command` | Agent 可执行文件 | 留空时会在 PATH、常见安装目录与登录 Shell 中自动查找 `claude`/`codex`，找到后写入配置；也可在设置页手动填写或点「自动查找」 |
-
-API Key 不写进 `informer.json`，而是放在同目录的 `informer.secret.json` 的 `agent_api_key` 字段里。
-`base_url` 与 `agent_api_key` 都留空时，informer 直接运行本机 Agent，用的就是该 Agent 自身已登录的凭据——
-也就是说，只要本机 `claude`（或对应 Agent）能跑，agent 订阅就能跑，不需要额外配置。
-
-桌面版从 Dock / Finder 启动时往往没有终端里的 PATH。`command` 留空时，informer 会在 PATH、Homebrew / npm / nvm 等常见目录以及登录 Shell 里查找可执行文件，并把绝对路径写回 `informer.json`；设置页也可以手动填写或点「自动查找」。
-
-前置条件：本机已安装对应命令行 Agent（例如 `claude --version` 能正常输出）。
-
-## 六、桌面版 informer-ui
+## 一、桌面版（推荐）
 
 `cmd/informer-ui` 是 Wails v3 + Vue 3 + Naive UI 的桌面入口。窗口顶部分为四个 Tab：
 
@@ -341,7 +62,125 @@ wails3 package  # 按当前平台打包（macOS .app / Windows NSIS / Linux 等�
 
 不做拖拽排序、不做订阅批量导入导出、不做全文搜索；配置不迁移到数据库、不提供配置的版本历史或回滚，也不支持多用户 / 多环境配置。
 
-## 七、参与开发
+## 二、数据目录
+
+informer 的所有数据（`informer.json`、`informer.secret.json`、`feed.db`、`data/<年份>/<日期>.md`）都存放在**同一个数据主目录**中：
+
+| `INFORMER_HOME` | 数据主目录 |
+| --- | --- |
+| 未设置或为空 | `~/.informer`（Windows 为 `%USERPROFILE%\.informer`） |
+| 已设置 | 该环境变量指向的目录（相对路径会转成绝对路径） |
+
+数据目录与可执行文件所在位置无关，因此从 Finder / 桌面快捷方式启动（不继承 shell 环境变量）时，找到的是同一份数据。
+如果 `INFORMER_HOME` 指向的目录无法创建或不可写，informer 会直接报错退出，**不会**退回到另一份数据继续跑。
+注意 crontab 中 `~` 取决于运行该任务的用户，显式写绝对路径更稳妥。
+
+切换到另一个目录时，先把当前数据主目录整体复制过去，再修改 `INFORMER_HOME`：
+
+```bash
+cp -a ~/.informer /data/informer-home
+# 然后把 crontab 里的 INFORMER_HOME 改成 /data/informer-home
+```
+
+informer 不会自动同步多个数据主目录，也不支持同时使用多个 `INFORMER_HOME`。
+
+## 三、配置文件
+
+`informer.json` 是一份人类可读的整份 JSON，不入库、不做版本历史。范例见 [examples/informer.json](examples/informer.json)。
+
+| 配置项 | 含义 | 取值 |
+| --- | --- | --- |
+| `same_site_max_count` | 同一站点在一条消息中最多出现几篇 | 必须大于 0 |
+| `feed_expire_days` | 文章多少天之后视为过期，不再推荐 | 必须大于 0 |
+| `max_inform_feed_size` | 一条消息最多推荐多少篇文章 | 必须大于 0 |
+| `max_fetch_num` | 每个订阅默认抓取的文章数上限 | 填 0 表示不做全局限制 |
+
+前三项为 0 会让推荐算法选不出任何文章，因此被拒绝；超出合理范围的值同样会被拒绝，且被拒绝的保存不会改动文件。
+
+还有一个顶层字段 `webhook`，存放钉钉 / 飞书机器人地址（不是敏感凭证）：
+
+| 配置项 | 含义 | 取值 |
+| --- | --- | --- |
+| `webhook` | 推送用的机器人 webhook | URL 字符串；留空或不写表示不推送 |
+
+还有一个顶层字段 `http_proxy`，供 URL 抓取、桌面版应用内更新与 Agent 子进程共用：
+
+| 配置项 | 含义 | 取值 |
+| --- | --- | --- |
+| `http_proxy` | HTTP(S) 代理地址 | 如 `http://127.0.0.1:7890`；留空或不写表示不使用代理 |
+
+有配置时，订阅抓取、每日鸡汤、机器人推送与桌面版检查/下载新版本会经共享 HTTP 客户端走代理；Agent（如 `claude`）子进程会注入 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`。这与 `agent.base_url`（API 网关地址）无关。
+
+还有一个顶层节 `schedule`，只被桌面版「定时任务」读取，命令行与系统 crontab 会忽略它（命令行的定时推送仍由 crontab 负责）：
+
+| 配置项 | 含义 | 取值 |
+| --- | --- | --- |
+| `schedule.enabled` | 是否启用桌面版定时推送 | `true` / `false` |
+| `schedule.time` | 每日推送时间（本机时区） | 24 小时制 `"HH:MM"`，如 `"10:00"` |
+
+桌面版定时仅在应用保持打开时生效，每个自然日最多成功推送一次（记录在数据目录的 `informer.schedule-state`，重启同一天不会再补推；失败会在下次轮询重试）；当天过了设定时间才打开应用，会补推一次。
+
+除 `feed` 节外还有一个顶层节 `agent`，供 `agent` 类型的订阅使用：
+
+```json
+{
+  "agent": {
+    "provider": "claude",
+    "base_url": "",
+    "model": "",
+    "allowed_tools": "WebSearch,WebFetch",
+    "timeout_seconds": 300,
+    "command": ""
+  }
+}
+```
+
+| 配置项 | 含义 | 取值 |
+| --- | --- | --- |
+| `provider` | 使用哪个命令行 Agent | 目前只实现了 `claude`（Claude Code）；`codex` 已预留但本版本运行时会报错 |
+| `base_url` | Agent 的接口地址 | 留空表示沿用本机上该 Agent 自己的配置 |
+| `model` | 使用的模型 | 留空表示沿用 Agent 的默认模型 |
+| `allowed_tools` | 允许 Agent 使用的工具，逗号分隔 | 留空使用默认 `WebSearch,WebFetch` |
+| `timeout_seconds` | 单次运行超时 | 填 0 表示使用默认 300 秒，合法范围 10 ~ 3600 |
+| `command` | Agent 可执行文件 | 留空时会在 PATH、常见安装目录与登录 Shell 中自动查找 `claude`/`codex`，找到后写入配置；也可在设置页手动填写或点「自动查找」 |
+
+API Key 不写进 `informer.json`，而是放在同目录的 `informer.secret.json` 的 `agent_api_key` 字段里。
+`base_url` 与 `agent_api_key` 都留空时，informer 直接运行本机 Agent，用的就是该 Agent 自身已登录的凭据——
+也就是说，只要本机 `claude`（或对应 Agent）能跑，agent 订阅就能跑，不需要额外配置。
+
+桌面版从 Dock / Finder 启动时往往没有终端里的 PATH。`command` 留空时，informer 会在 PATH、Homebrew / npm / nvm 等常见目录以及登录 Shell 里查找可执行文件，并把绝对路径写回 `informer.json`；设置页也可以手动填写或点「自动查找」。
+
+前置条件：本机已安装对应命令行 Agent（例如 `claude --version` 能正常输出）。命令行添加 agent 订阅的方式见 [cli-usage.md](cli-usage.md#agent-解析订阅)。
+
+无论是命令行手写还是桌面版「设置」页保存，写入都遵守下面几条约定：
+
+- **保留未知字段**：保存只替换 `feed`、`agent`、`schedule`、`webhook` 与 `http_proxy`，文件里其它顶层字段（包括这个版本还不认识的字段）连同顺序一起原样保留。
+- **原子替换**：先写同目录下的临时文件再 `rename` 覆盖，所以并发运行的 crontab 读到的要么是旧文件、要么是新文件，不会读到写了一半的内容。
+- **跨进程写锁**：写入前会创建 `informer.json.lock`，两个「读—改—写」不会互相覆盖造成丢失更新。锁有等待上限，
+  等不到会直接报错而不是一直卡住；进程被杀留下的陈旧锁会在明显过期后被自动接管。
+
+### 敏感配置文件 informer.secret.json
+
+Agent API Key 不写进 `informer.json`，而是单独存放在数据主目录下的 `informer.secret.json`：
+
+```json
+{
+  "agent_api_key": "sk-xxxxx"
+}
+```
+
+- 该文件无论新建还是改写，权限都会被设置并校验为 **0600**；权限无法落实时保存直接失败，不会以不安全的状态写下去
+  （Windows 不支持 Unix 权限位，这一步在 Windows 上无法校验）。
+- 桌面版「设置」页只显示「是否已配置」，不回传原文。
+- 机器人 webhook 写在 `informer.json` 里，不进入这个文件；若旧版本曾把 webhook 写在这里，运行时仍会读取，并在下次保存地址时迁出。
+
+## 四、命令行
+
+服务器定时推送、或不方便开图形界面时，使用命令行版 `informer`。安装、订阅管理、crontab 见 **[cli-usage.md](cli-usage.md)**。
+
+Release 里的命令行包名为 `informer-cli-<版本>-<平台>.tar.gz`（Windows 为 `.zip`），解压后命令为 `informer`。
+
+## 五、参与开发
 
 ```bash
 make test      # 跑测试并生成覆盖率
@@ -349,8 +188,8 @@ make format    # 按 golangci-lint 配置格式化
 make check     # 许可证头检查 + golangci-lint
 ```
 
-打 `v*` 标签后由 `.github/workflows/release.yml` 在 macOS / Windows / Linux 三个原生 runner 上构建桌面版，
-并聚合发布到 GitHub Release（含手动安装包与应用内更新用的 zip/tar.gz，以及固定名 `SHA256SUMS`）。
+打 `v*` 标签后由 `.github/workflows/release.yml` 在 macOS / Windows / Linux 三个原生 runner 上构建桌面版与命令行版，
+并聚合发布到 GitHub Release（含桌面安装包与应用内更新用的 zip/tar.gz，命令行 `informer-cli` 压缩包，以及固定名 `SHA256SUMS`）。
 当前阶段不做代码签名 / 公证。
 
 许可证：[Apache License 2.0](LICENSE)。

@@ -155,9 +155,10 @@ func initUpdater(app *application.App) error {
 	return nil
 }
 
-// informerAssetMatcher picks the updater-consumable archive for each OS:
+// informerAssetMatcher picks the updater-consumable desktop archive for each OS:
 // macOS universal .app.zip, Windows plain .zip (not the NSIS setup), Linux
-// .tar.gz. Installer / dmg / deb assets stay available for manual download.
+// .tar.gz. Installer / dmg / deb and informer-cli archives stay available for
+// manual download and must not be selected for in-app update.
 func informerAssetMatcher(req updater.CheckRequest, assets []github.ReleaseAsset) int {
 	plat := strings.ToLower(req.Platform)
 	arch := strings.ToLower(req.Arch)
@@ -173,6 +174,12 @@ func informerAssetMatcher(req updater.CheckRequest, assets []github.ReleaseAsset
 }
 
 func matchUpdateAsset(plat, arch, name string) bool {
+	// CLI archives share OS/arch tokens (linux-amd64.tar.gz, windows-amd64.zip)
+	// with the desktop updater payloads; require the desktop package prefix.
+	if !strings.Contains(name, "informer-ui") {
+		return false
+	}
+
 	switch plat {
 	case platformDarwin:
 		return matchDarwinAsset(name)

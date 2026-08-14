@@ -245,12 +245,108 @@ jobs:
             informer-ui-${{ github.ref_name }}-linux-amd64.deb
           if-no-files-found: error
 
+  # command-line archives: package name informer-cli-*, extracted binary informer.
+  # CGO is required at runtime (mattn/go-sqlite3); each cell builds natively.
+  cli:
+    name: CLI (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: darwin-universal
+            os: macos-14
+            archive: informer-cli-${{ github.ref_name }}-darwin-universal.tar.gz
+          - name: linux-amd64
+            os: ubuntu-24.04
+            archive: informer-cli-${{ github.ref_name }}-linux-amd64.tar.gz
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            archive: informer-cli-${{ github.ref_name }}-linux-arm64.tar.gz
+          - name: windows-amd64
+            os: windows-2022
+            archive: informer-cli-${{ github.ref_name }}-windows-amd64.zip
+    steps:
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: go.sum
+
+      - name: Install C compiler (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Install MinGW (Windows CGO / sqlite)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install mingw -y --no-progress
+
+      - name: Build and package CLI
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+          ARCHIVE: ${{ matrix.archive }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/cli
+          case "${{ matrix.name }}" in
+            darwin-universal)
+              export CGO_CFLAGS="-mmacosx-version-min=12.0"
+              export CGO_LDFLAGS="-mmacosx-version-min=12.0"
+              GOARCH=arm64 go build -trimpath -ldflags="-s -w" \
+                -o dist/cli/informer-arm64 ./cmd/informer
+              GOARCH=amd64 go build -trimpath -ldflags="-s -w" \
+                -o dist/cli/informer-amd64 ./cmd/informer
+              lipo -create -output dist/cli/informer \
+                dist/cli/informer-amd64 dist/cli/informer-arm64
+              rm -f dist/cli/informer-amd64 dist/cli/informer-arm64
+              archs=$(lipo -archs dist/cli/informer)
+              echo "architectures: $archs"
+              echo "$archs" | grep -q x86_64
+              echo "$archs" | grep -q arm64
+              tar -czf "$ARCHIVE" -C dist/cli informer
+              tar -tzf "$ARCHIVE" | grep -qx informer
+              ;;
+            linux-*)
+              go build -trimpath -ldflags="-s -w" -o dist/cli/informer ./cmd/informer
+              tar -czf "$ARCHIVE" -C dist/cli informer
+              tar -tzf "$ARCHIVE" | grep -qx informer
+              INFORMER_HOME=$(mktemp -d) dist/cli/informer feed list
+              ;;
+            windows-amd64)
+              export PATH="/c/ProgramData/mingw64/mingw64/bin:/c/mingw64/bin:$PATH"
+              gcc --version
+              go build -trimpath -ldflags="-s -w" -o dist/cli/informer.exe ./cmd/informer
+              (cd dist/cli && powershell.exe -Command \
+                "Compress-Archive -Path informer.exe -DestinationPath '$GITHUB_WORKSPACE/$ARCHIVE'")
+              test -f "$ARCHIVE"
+              ;;
+            *)
+              echo "unknown matrix cell: ${{ matrix.name }}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-cli-${{ matrix.name }}
+          path: ${{ matrix.archive }}
+          if-no-files-found: error
+
   # the aggregate job only collects and publishes. It depends on every
   # platform job, so a partial set of assets never becomes a release; a rerun
   # of the same tag updates the same release with identically named assets.
   publish:
     name: Publish GitHub Release
-    needs: [macos, windows, linux]
+    needs: [macos, windows, linux, cli]
     runs-on: ubuntu-24.04
     steps:
 
