@@ -31,6 +31,8 @@ import {
   CreateCategory,
   CreateSource,
   DeleteSource,
+  ExportSourcesToFile,
+  ImportSourcesFromFile,
   ListCategories,
   ListSources,
   PreviewSource,
@@ -41,6 +43,7 @@ import {
   type ArticleDTO,
   type CategoryDTO,
   type SourceDTO,
+  type SourceImportResultDTO,
 } from './bindings'
 import CategoryPanel from './CategoryPanel.vue'
 import {errorText} from './errors'
@@ -98,6 +101,13 @@ const listError = ref('')
 const showModal = ref(false)
 const saving = ref(false)
 const togglingId = ref(0)
+
+// the transfer state of this session: one of the two buttons is busy at a time,
+// because both open a modal native dialog the user has to answer first.
+const exporting = ref(false)
+const importing = ref(false)
+const showImportResult = ref(false)
+const importResult = ref<SourceImportResultDTO | null>(null)
 
 const showPreview = ref(false)
 const previewLoading = ref(false)
@@ -440,6 +450,47 @@ async function toggleEnabled(row: SourceDTO, enabled: boolean) {
   }
 }
 
+// exportSources writes every stored subscription - not only the filtered ones -
+// to a file the user picks. A canceled dialog leaves everything untouched.
+async function exportSources() {
+  exporting.value = true
+  try {
+    const result = requireValue(await ExportSourcesToFile(), 'SourceExportResultDTO')
+    if (result.canceled) {
+      message.info('已取消导出')
+      return
+    }
+
+    message.success(`已导出 ${result.total} 个订阅到 ${result.path}`)
+  } catch (e) {
+    message.error(`导出失败：${errorText(e)}`)
+  } finally {
+    exporting.value = false
+  }
+}
+
+// importSources merges a picked export file into the stored subscriptions: a
+// known subscription is overwritten, an unknown one appended, nothing is deleted.
+// The result modal reports the counts and every entry that could not be applied.
+async function importSources() {
+  importing.value = true
+  try {
+    const result = requireValue(await ImportSourcesFromFile(), 'SourceImportResultDTO')
+    if (result.canceled) {
+      message.info('已取消导入')
+      return
+    }
+
+    importResult.value = result
+    showImportResult.value = true
+    await refreshAll()
+  } catch (e) {
+    message.error(`导入失败：${errorText(e)}`)
+  } finally {
+    importing.value = false
+  }
+}
+
 // refreshAll reloads the list and the counts shown in the category tree.
 async function refreshAll() {
   await Promise.all([loadCategories(), loadSources()])
@@ -495,6 +546,16 @@ function openArticle(url: string) {
           <n-tag v-if="hasActiveFilter" size="small" type="info" :bordered="false">已过滤</n-tag>
         </n-space>
         <n-space>
+          <n-button :loading="exporting" :disabled="importing" size="small" tertiary @click="exportSources">
+            导出
+          </n-button>
+          <n-popconfirm @positive-click="importSources">
+            <template #trigger>
+              <n-button :loading="importing" :disabled="exporting" size="small" tertiary>导入</n-button>
+            </template>
+            导入会按「URL 相同视为同一个订阅，没有 URL 时按标题」合并：已存在的订阅覆盖配置，
+            没有的追加，不会删除任何订阅。
+          </n-popconfirm>
           <n-button :loading="loading" size="small" tertiary @click="refreshAll">刷新</n-button>
           <n-button size="small" type="primary" @click="openCreate">新增订阅</n-button>
         </n-space>
@@ -675,6 +736,36 @@ function openArticle(url: string) {
         <n-space justify="end">
           <n-button @click="showModal = false">取消</n-button>
           <n-button :loading="saving" type="primary" @click="save">保存</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="showImportResult" preset="card" title="导入结果" style="width: 560px">
+      <template v-if="importResult">
+        <n-text depth="3" style="font-size: 12px">{{ importResult.path }}</n-text>
+        <n-space :size="6" style="margin: 10px 0">
+          <n-tag size="small" :bordered="false">共 {{ importResult.total }} 条</n-tag>
+          <n-tag size="small" type="success" :bordered="false">新增 {{ importResult.created }}</n-tag>
+          <n-tag size="small" type="info" :bordered="false">覆盖 {{ importResult.updated }}</n-tag>
+          <n-tag v-if="importResult.failed > 0" size="small" type="error" :bordered="false">
+            失败 {{ importResult.failed }}
+          </n-tag>
+        </n-space>
+
+        <n-alert v-if="importResult.errors && importResult.errors.length > 0" type="warning" title="以下条目未导入">
+          <!-- a long file can fail many entries; the list scrolls inside the
+               modal instead of pushing the close button off screen. -->
+          <n-list :bordered="false" style="max-height: 260px; overflow-y: auto">
+            <n-list-item v-for="(err, i) in importResult.errors" :key="i">
+              <n-text depth="3" style="font-size: 12px">{{ err }}</n-text>
+            </n-list-item>
+          </n-list>
+        </n-alert>
+      </template>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button size="small" @click="showImportResult = false">关闭</n-button>
         </n-space>
       </template>
     </n-modal>
