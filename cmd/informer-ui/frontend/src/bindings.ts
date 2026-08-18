@@ -10,7 +10,9 @@ export {
   DeleteCategory,
   DeleteSource,
   DetectAgentCommand,
+  ExportSourcesToFile,
   HomeDir,
+  ImportSourcesFromFile,
   ListArticles,
   ListCategories,
   ListSources,
@@ -56,5 +58,7 @@ export type {
   ScheduleDTO,
   SecretsViewDTO,
   SourceDTO,
+  SourceExportResultDTO,
+  SourceImportResultDTO,
   SourceQueryRequest,
 } from '../bindings/github.com/vogo/informer/cmd/informer-ui/models'
