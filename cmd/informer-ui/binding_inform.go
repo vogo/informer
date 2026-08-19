@@ -66,6 +66,17 @@ func (a *App) TriggerNow() (*InformResultDTO, error) {
 	return toInformResultDTO(result, err), nil
 }
 
+// InformRunning reports whether an inform run of this process is in flight,
+// whether the scheduler or the user started it. The subscription page polls it
+// to replace the push button with a "抓取中" state, so a second push is not
+// offered while the first one is still fetching.
+//
+// It answers from the in process guard alone, so a startup failure - and a run
+// of the command line version outside this process - both read as false.
+func (a *App) InformRunning() bool {
+	return a.informRunning.Load()
+}
+
 func toInformResultDTO(result *inform.Result, err error) *InformResultDTO {
 	dto := &InformResultDTO{}
 

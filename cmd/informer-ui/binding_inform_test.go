@@ -27,6 +27,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// blockedBotPath is the bot endpoint the guard tests point the webhook at: it
+// carries the lark host so the notification step routes to the real client, and
+// the handler blocks there until the test releases it.
+const blockedBotPath = "/feishu.cn/block"
+
 // validFeedDTO is a feed section every validation rule accepts, the payload the
 // trigger tests store so an inform run can start at all.
 func validFeedDTO() *FeedConfigDTO {
@@ -142,7 +147,7 @@ func TestTriggerNowRefusesWhileARunIsInFlight(t *testing.T) {
 	// the bot endpoint blocks until released, so the first run provably holds the
 	// process wide guard while the second one asks for it.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/feishu.cn/block" {
+		if r.URL.Path != blockedBotPath {
 			http.NotFound(w, r)
 
 			return
@@ -161,7 +166,7 @@ func TestTriggerNowRefusesWhileARunIsInFlight(t *testing.T) {
 
 	app := newTestApp(t)
 	require.NoError(t, app.SaveConfig(validFeedDTO()))
-	require.NoError(t, app.SaveWebhook(server.URL+"/feishu.cn/block"))
+	require.NoError(t, app.SaveWebhook(server.URL+blockedBotPath))
 
 	type outcome struct {
 		result *InformResultDTO
@@ -192,4 +197,58 @@ func TestTriggerNowRefusesWhileARunIsInFlight(t *testing.T) {
 	require.NotNil(t, done.result)
 	assert.True(t, done.result.Success)
 	assert.True(t, done.result.Notified)
+}
+
+func TestInformRunningReportsARunInFlight(t *testing.T) {
+	t.Parallel()
+
+	reached := make(chan struct{}, 1)
+	release := make(chan struct{})
+
+	// the bot endpoint blocks until released, so the run provably sits inside
+	// the guard while the state is read.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != blockedBotPath {
+			http.NotFound(w, r)
+
+			return
+		}
+
+		select {
+		case reached <- struct{}{}:
+		default:
+		}
+
+		<-release
+
+		_, _ = w.Write([]byte(`{"code":0}`))
+	}))
+	defer server.Close()
+
+	app := newTestApp(t)
+	require.NoError(t, app.SaveConfig(validFeedDTO()))
+	require.NoError(t, app.SaveWebhook(server.URL+blockedBotPath))
+
+	assert.False(t, app.InformRunning(), "an idle app reports no run")
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		_, _ = app.TriggerNow()
+	}()
+
+	select {
+	case <-reached:
+	case <-time.After(10 * time.Second):
+		require.Fail(t, "the run never reached the bot endpoint")
+	}
+
+	assert.True(t, app.InformRunning(), "the state holds while the run is in flight")
+
+	close(release)
+	<-done
+
+	assert.False(t, app.InformRunning(), "the state clears once the run finished")
 }

@@ -12,7 +12,6 @@ import {
   NInput,
   NInputGroup,
   NInputNumber,
-  NPopconfirm,
   NSpace,
   NSelect,
   NSpin,
@@ -34,9 +33,7 @@ import {
   SaveHTTPProxy,
   SaveSchedule,
   SaveWebhook,
-  TriggerNow,
   type HistoryIndexDTO,
-  type InformResultDTO,
 } from './bindings'
 import {errorText} from './errors'
 import {requireValue} from './nulls'
@@ -99,10 +96,6 @@ const schedule = reactive({
   time: '10:00'
 })
 const scheduleSaving = ref(false)
-
-const triggering = ref(false)
-const triggerResult = ref<InformResultDTO | null>(null)
-const triggerError = ref('')
 
 const rebuilding = ref(false)
 const rebuildResult = ref<HistoryIndexDTO | null>(null)
@@ -170,19 +163,6 @@ async function saveSchedule() {
     message.error(`保存失败：${errorText(e)}`)
   } finally {
     scheduleSaving.value = false
-  }
-}
-
-async function triggerNow() {
-  triggering.value = true
-  triggerError.value = ''
-  triggerResult.value = null
-  try {
-    triggerResult.value = await TriggerNow()
-  } catch (e) {
-    triggerError.value = errorText(e)
-  } finally {
-    triggering.value = false
   }
 }
 
@@ -289,8 +269,8 @@ async function rebuild() {
     </n-alert>
 
     <n-spin :show="loading">
-      <!-- 多列瀑布流：窄窗口自动退化为单列，宽窗口一屏内尽量多地铺开配置项 -->
-      <div class="masonry">
+      <!-- 单列纵向排列的紧凑卡片 -->
+      <div class="stack">
         <n-card
           size="small"
           :header-style="cardHeaderStyle"
@@ -546,49 +526,23 @@ async function rebuild() {
         >
           <template #header>
             <span class="card-title">
-              手动操作
+              重建索引
               <n-tooltip :style="tipStyle">
                 <template #trigger><span class="hint">?</span></template>
-                「立即推送」执行一次完整流程：抓取所有启用的订阅、生成今日日报 Markdown 并推送给机器人，
-                未配置机器人地址时只生成日报。「重建索引」扫描已生成的日报 Markdown，提取文章链接，
-                为「链接唯一匹配且通知时间为空」的文章补上通知时间（精确到日报当天）；已有时间不会被覆盖，
-                匹配不到或匹配到多条的保持为空，重复执行结果一致。
+                扫描已生成的日报 Markdown，提取文章链接，为「链接唯一匹配且通知时间为空」的文章补上
+                通知时间（精确到日报当天）；已有时间不会被覆盖，匹配不到或匹配到多条的保持为空，
+                重复执行结果一致。手动推送已移到「订阅」页面。
               </n-tooltip>
             </span>
           </template>
           <template #header-extra>
-            <n-space :size="6" align="center">
-              <n-button size="tiny" :loading="rebuilding" @click="rebuild">重建索引</n-button>
-              <n-popconfirm @positive-click="() => { triggerNow() }">
-                <template #trigger>
-                  <n-button size="tiny" :loading="triggering" type="primary">立即推送</n-button>
-                </template>
-                将抓取所有启用的订阅并发送到机器人，确认立即推送？
-              </n-popconfirm>
-            </n-space>
+            <n-button size="tiny" :loading="rebuilding" @click="rebuild">重建索引</n-button>
           </template>
 
           <n-space vertical :size="8">
-            <n-text v-if="!triggerError && !triggerResult && !rebuildError && !rebuildResult" depth="3" class="tiny">
-              手动执行一次推送，或从历史日报回补文章的通知时间。
+            <n-text v-if="!rebuildError && !rebuildResult" depth="3" class="tiny">
+              从历史日报回补文章的通知时间。
             </n-text>
-
-            <n-alert v-if="triggerError" type="error" title="推送失败" :bordered="false">
-              {{ triggerError }}
-            </n-alert>
-            <n-alert v-else-if="triggerResult && !triggerResult.success" type="warning" title="推送未完成" :bordered="false">
-              {{ triggerResult.errorInfo }}
-              <div v-if="triggerResult.contentFilePath" class="tiny">日报已写入：{{ triggerResult.contentFilePath }}</div>
-            </n-alert>
-            <n-alert v-else-if="triggerResult" type="success" title="推送完成" :bordered="false">
-              <template v-if="triggerResult.notified">
-                已推送 {{ triggerResult.articleCount }} 篇文章到机器人。
-              </template>
-              <template v-else>
-                日报已生成，但未配置机器人地址（或地址无法识别），未发送推送。
-              </template>
-              <div v-if="triggerResult.contentFilePath" class="tiny">日报文件：{{ triggerResult.contentFilePath }}</div>
-            </n-alert>
 
             <n-alert v-if="rebuildError" type="error" title="重建失败" :bordered="false">
               {{ rebuildError }}
@@ -618,18 +572,11 @@ async function rebuild() {
   padding: 12px;
 }
 
-/* CSS 多列而非 grid：卡片高度不一致时按内容紧凑回填，不留等高行的空白 */
-.masonry {
-  columns: 440px;
-  column-gap: 12px;
-}
-
-.masonry > * {
-  break-inside: avoid;
-  margin-bottom: 12px;
-  /* Safari 下多列子元素需要 inline-block + 满宽才不被拆断 */
-  display: inline-block;
-  width: 100%;
+/* 单列纵向排列，卡片内部保持紧凑 */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .card-title {

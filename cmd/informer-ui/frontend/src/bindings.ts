@@ -13,6 +13,7 @@ export {
   ExportSourcesToFile,
   HomeDir,
   ImportSourcesFromFile,
+  InformRunning,
   ListArticles,
   ListCategories,
   ListSources,

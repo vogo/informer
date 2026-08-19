@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
@@ -50,6 +51,11 @@ type App struct {
 	// and a manual push share one pipeline, and two runs at once would fetch,
 	// score and deliver the very same articles twice.
 	informMu sync.Mutex
+
+	// informRunning mirrors the guard above for the UI: the subscription page
+	// polls it to show "抓取中" instead of the push button, for a scheduled fire
+	// just as for a manual one. It is written only under informMu.
+	informRunning atomic.Bool
 
 	// sched runs the configured daily push while the window is open; nil when
 	// startup failed or before the window exists.
@@ -184,7 +190,12 @@ func (a *App) runInform() (*inform.Result, error) {
 		return nil, ErrInformRunning
 	}
 
-	defer a.informMu.Unlock()
+	a.informRunning.Store(true)
+
+	defer func() {
+		a.informRunning.Store(false)
+		a.informMu.Unlock()
+	}()
 
 	return a.svc.TriggerInform("")
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, onMounted, reactive, ref} from 'vue'
+import {computed, onMounted, onUnmounted, reactive, ref} from 'vue'
 import {
   NAlert,
   NButton,
@@ -33,12 +33,14 @@ import {
   DeleteSource,
   ExportSourcesToFile,
   ImportSourcesFromFile,
+  InformRunning,
   ListCategories,
   ListSources,
   PreviewSource,
   SetSourceEnabled,
   SupportedAgentProviders,
   SupportedParseTypes,
+  TriggerNow,
   UpdateSource,
   type ArticleDTO,
   type CategoryDTO,
@@ -108,6 +110,18 @@ const exporting = ref(false)
 const importing = ref(false)
 const showImportResult = ref(false)
 const importResult = ref<SourceImportResultDTO | null>(null)
+
+// the push state has two sources: `triggering` is this window's own click, and
+// `informRunning` is what the backend reports - a scheduled fire counts too.
+// The button is hidden while either holds, so a second push is never offered
+// while one is still fetching.
+const triggering = ref(false)
+const informRunning = ref(false)
+const pushing = computed(() => triggering.value || informRunning.value)
+// a scheduled run starts without this page knowing, so the state is polled
+// rather than derived from the click alone.
+const informPollInterval = 3000
+let runningTimer: ReturnType<typeof setInterval> | null = null
 
 const showPreview = ref(false)
 const previewLoading = ref(false)
@@ -231,7 +245,50 @@ const agentProviderOptions = ref<{label: string; value: string}[]>([
 
 onMounted(async () => {
   await Promise.all([loadCategories(), loadParseTypeOptions(), loadAgentProviders(), loadSources()])
+  await pollInformRunning()
+  runningTimer = setInterval(() => void pollInformRunning(), informPollInterval)
 })
+
+onUnmounted(() => {
+  if (runningTimer !== null) {
+    clearInterval(runningTimer)
+    runningTimer = null
+  }
+})
+
+async function pollInformRunning() {
+  try {
+    informRunning.value = await InformRunning()
+  } catch {
+    // a failed poll says nothing about the run; keep the last known state and
+    // let the next tick correct it rather than flashing the button back.
+  }
+}
+
+// triggerNow runs one full push - fetch every enabled subscription, build the
+// daily markdown, deliver it to the bot - and reports the outcome as a message.
+// A pipeline failure arrives inside the result, so a written daily file is
+// still reported when the delivery failed.
+async function triggerNow() {
+  triggering.value = true
+  try {
+    const result = requireValue(await TriggerNow(), 'InformResultDTO')
+    if (!result.success) {
+      message.warning(`推送未完成：${result.errorInfo}`)
+    } else if (result.notified) {
+      message.success(`已推送 ${result.articleCount} 篇文章到机器人`)
+    } else {
+      message.success('日报已生成，但未配置机器人地址，未发送推送')
+    }
+
+    await refreshAll()
+  } catch (e) {
+    message.error(`推送失败：${errorText(e)}`)
+  } finally {
+    triggering.value = false
+    await pollInformRunning()
+  }
+}
 
 async function loadAgentProviders() {
   try {
@@ -557,6 +614,15 @@ function openArticle(url: string) {
             没有的追加，不会删除任何订阅。
           </n-popconfirm>
           <n-button :loading="loading" size="small" tertiary @click="refreshAll">刷新</n-button>
+          <!-- while a push runs - this window's or the scheduler's - the button
+               is replaced by a disabled 抓取中 state instead of staying clickable. -->
+          <n-button v-if="pushing" size="small" tertiary loading disabled>抓取中</n-button>
+          <n-popconfirm v-else @positive-click="() => { void triggerNow() }">
+            <template #trigger>
+              <n-button size="small" tertiary>立即推送</n-button>
+            </template>
+            将抓取所有启用的订阅、生成今日日报并发送到机器人，确认立即推送？
+          </n-popconfirm>
           <n-button size="small" type="primary" @click="openCreate">新增订阅</n-button>
         </n-space>
       </div>
