@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import {computed, onMounted, reactive, ref} from 'vue'
+import {computed, nextTick, onMounted, onUnmounted, reactive, ref, watch} from 'vue'
 import {
   NAlert,
   NButton,
   NCard,
+  NCollapse,
+  NCollapseItem,
   NDivider,
   NDrawer,
   NDrawerContent,
@@ -26,7 +28,7 @@ import {
   NTooltip,
   useMessage
 } from 'naive-ui'
-import {Browser} from '@wailsio/runtime'
+import {Browser, Clipboard, Events} from '@wailsio/runtime'
 import {
   CreateCategory,
   CreateSource,
@@ -114,6 +116,41 @@ const previewLoading = ref(false)
 const previewError = ref('')
 const previewRow = ref<SourceDTO | null>(null)
 const previewArticles = ref<ArticleDTO[]>([])
+
+// PreviewLogEntry mirrors PreviewLogDTO in cmd/informer-ui/binding_preview.go.
+// A wails event payload is not part of the generated bindings, so the two shapes
+// are kept in step by hand.
+interface PreviewLogEntry {
+  runId: string
+  seq: number
+  time: number
+  level: 'info' | 'warn' | 'error'
+  text: string
+}
+
+// PREVIEW_LOG_EVENT is the same constant as PreviewLogEvent on the Go side.
+const PREVIEW_LOG_EVENT = 'informer:preview:log'
+
+// MAX_PREVIEW_LOGS bounds what the panel keeps. An agent run narrates every
+// search and page it reads, and an unbounded array in a webview is a leak.
+const MAX_PREVIEW_LOGS = 500
+
+const previewRunId = ref('')
+const previewLogs = ref<PreviewLogEntry[]>([])
+const previewLogsDropped = ref(0)
+const previewLogExpanded = ref<string[]>([])
+const previewLogBox = ref<HTMLElement | null>(null)
+
+// previewLogPinned keeps the panel scrolled to the newest line until the user
+// scrolls up to read an earlier one.
+const previewLogPinned = ref(true)
+
+const previewLogProblems = computed(() => previewLogs.value.filter(entry => entry.level !== 'info').length)
+const previewLastLog = computed(() => previewLogs.value.at(-1)?.text ?? '')
+
+// the log doubles as the progress indicator of a fetch that has nothing else to
+// show, so it opens itself while one is running and closes again once it worked.
+const previewLogPanel = 'log'
 
 const form = reactive<SourceForm>(emptyForm())
 
@@ -229,9 +266,59 @@ const agentProviderOptions = ref<{label: string; value: string}[]>([
   {label: '使用全局配置', value: ''}
 ])
 
+// unsubs holds the wails event listeners this page owns, released on unmount.
+const unsubs: Array<() => void> = []
+
 onMounted(async () => {
+  unsubs.push(Events.On(PREVIEW_LOG_EVENT, onPreviewLog))
+
   await Promise.all([loadCategories(), loadParseTypeOptions(), loadAgentProviders(), loadSources()])
 })
+
+onUnmounted(() => {
+  for (const off of unsubs) {
+    off()
+  }
+})
+
+function onPreviewLog(e: {data?: PreviewLogEntry}) {
+  const entry = e?.data
+  // a fetch the user already moved on from keeps reporting until it finishes;
+  // its lines belong to a run id that is no longer the current one.
+  if (!entry || entry.runId !== previewRunId.value) {
+    return
+  }
+
+  previewLogs.value.push(entry)
+
+  const overflow = previewLogs.value.length - MAX_PREVIEW_LOGS
+  if (overflow > 0) {
+    previewLogs.value.splice(0, overflow)
+    previewLogsDropped.value += overflow
+  }
+
+  if (previewLogPinned.value) {
+    void nextTick(scrollPreviewLogToEnd)
+  }
+}
+
+function scrollPreviewLogToEnd() {
+  const box = previewLogBox.value
+  if (box) {
+    box.scrollTop = box.scrollHeight
+  }
+}
+
+// onPreviewLogScroll unpins as soon as the user scrolls up, so reading an early
+// line is not fought by every line that arrives after it.
+function onPreviewLogScroll() {
+  const box = previewLogBox.value
+  if (!box) {
+    return
+  }
+
+  previewLogPinned.value = box.scrollHeight - box.scrollTop - box.clientHeight < 24
+}
 
 async function loadAgentProviders() {
   try {
@@ -498,17 +585,58 @@ async function refreshAll() {
 }
 
 async function openPreview(row: SourceDTO) {
+  // crypto.randomUUID is not guaranteed in a webview served over a custom
+  // scheme, and this id only has to be unique among this window's own fetches.
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+
   previewRow.value = row
   previewArticles.value = []
   previewError.value = ''
+  previewLogs.value = []
+  previewLogsDropped.value = 0
+  previewLogPinned.value = true
+  // open while it runs: until the articles arrive, the log is the only thing
+  // that shows the fetch is doing something.
+  previewLogExpanded.value = [previewLogPanel]
+  // set before the call: the first lines can arrive before it returns.
+  previewRunId.value = runId
   previewLoading.value = true
   showPreview.value = true
+
   try {
-    previewArticles.value = compact(await PreviewSource(row.id))
+    previewArticles.value = compact(await PreviewSource(row.id, runId))
+    // it worked, so the articles are what the user came for.
+    previewLogExpanded.value = []
   } catch (e) {
     previewError.value = errorText(e)
+    // it failed, and the log is exactly where the reason is.
+    previewLogExpanded.value = [previewLogPanel]
   } finally {
-    previewLoading.value = false
+    // a slow fetch the user already replaced must not clear the new one's state.
+    if (previewRunId.value === runId) {
+      previewLoading.value = false
+    }
+  }
+}
+
+// a closed drawer drops the lines a still running fetch keeps reporting.
+watch(showPreview, open => {
+  if (!open) {
+    previewRunId.value = ''
+  }
+})
+
+function formatLogTime(time: number): string {
+  return new Date(time).toLocaleTimeString('zh-CN', {hour12: false})
+}
+
+async function copyPreviewLogs() {
+  const text = previewLogs.value.map(entry => `${formatLogTime(entry.time)} ${entry.text}`).join('\n')
+  try {
+    await Clipboard.SetText(text)
+    message.success('日志已复制')
+  } catch (e) {
+    message.error(`复制失败：${errorText(e)}`)
   }
 }
 
@@ -770,11 +898,14 @@ function openArticle(url: string) {
       </template>
     </n-modal>
 
-    <n-drawer v-model:show="showPreview" :width="520">
+    <n-drawer v-model:show="showPreview" :width="640">
       <n-drawer-content
         :title="previewRow ? `测试抓取：${previewRow.title || previewRow.url}` : '测试抓取'"
         closable
       >
+        <!-- the spin covers the result area only: the log below it is what makes
+             a fetch that takes minutes bearable, and a mask over it defeats the
+             whole point. -->
         <n-spin :show="previewLoading">
           <n-alert v-if="previewError" type="error" title="抓取失败">
             {{ previewError }}
@@ -783,7 +914,13 @@ function openArticle(url: string) {
             </div>
           </n-alert>
 
-          <template v-else-if="!previewLoading">
+          <div v-else-if="previewLoading" class="preview-progress">
+            <n-text depth="3" style="font-size: 12px">
+              <n-ellipsis :line-clamp="2">{{ previewLastLog || '正在抓取…' }}</n-ellipsis>
+            </n-text>
+          </div>
+
+          <template v-else>
             <n-text depth="3" style="font-size: 12px">
               共解析出 {{ previewArticles.length }} 条候选文章（停用订阅同样可以预览；预览不写库）
             </n-text>
@@ -803,6 +940,42 @@ function openArticle(url: string) {
             <n-empty v-else description="没有解析到文章" style="margin-top: 24px" />
           </template>
         </n-spin>
+
+        <n-collapse v-model:expanded-names="previewLogExpanded" style="margin-top: 14px">
+          <n-collapse-item :name="previewLogPanel">
+            <template #header>
+              <n-space :size="6" align="center">
+                <n-text depth="2" style="font-size: 12px">执行日志（{{ previewLogs.length }} 条）</n-text>
+                <n-tag v-if="previewLogProblems > 0" size="tiny" type="error" :bordered="false">
+                  {{ previewLogProblems }} 异常
+                </n-tag>
+              </n-space>
+            </template>
+            <template #header-extra>
+              <!-- click.stop so copying never folds the panel shut -->
+              <n-button
+                size="tiny"
+                text
+                :disabled="previewLogs.length === 0"
+                @click.stop="copyPreviewLogs"
+              >复制</n-button>
+            </template>
+            <div ref="previewLogBox" class="log-box" @scroll="onPreviewLogScroll">
+              <div v-if="previewLogsDropped > 0" class="log-line log-warn">
+                …已省略较早的 {{ previewLogsDropped }} 条
+              </div>
+              <div
+                v-for="entry in previewLogs"
+                :key="entry.seq"
+                class="log-line"
+                :class="`log-${entry.level}`"
+              >
+                <span class="log-time">{{ formatLogTime(entry.time) }}</span>{{ entry.text }}
+              </div>
+              <n-text v-if="previewLogs.length === 0" depth="3" style="font-size: 12px">暂无日志</n-text>
+            </div>
+          </n-collapse-item>
+        </n-collapse>
       </n-drawer-content>
     </n-drawer>
   </div>
@@ -850,5 +1023,40 @@ function openArticle(url: string) {
 
 .card {
   overflow: hidden;
+}
+
+.preview-progress {
+  padding: 24px 0;
+}
+
+.log-box {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border-radius: 3px;
+  background: var(--n-code-color, rgba(0, 0, 0, 0.04));
+}
+
+.log-line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  /* a log line carries urls and whole regexes: it wraps rather than pushing the
+     drawer into a horizontal scroll. */
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-time {
+  margin-right: 6px;
+  opacity: 0.5;
+}
+
+.log-warn {
+  color: #d97706;
+}
+
+.log-error {
+  color: #d03050;
 }
 </style>

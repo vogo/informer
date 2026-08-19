@@ -143,7 +143,7 @@ func TestPreviewParsesWithoutWriting(t *testing.T) {
 	created, err := app.CreateSource(req)
 	require.NoError(t, err)
 
-	articles, err := app.PreviewSource(created.ID)
+	articles, err := app.PreviewSource(created.ID, "")
 	require.NoError(t, err)
 	require.Len(t, articles, 1)
 	assert.Equal(t, "Hello Preview", articles[0].Title)

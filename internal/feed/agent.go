@@ -28,6 +28,7 @@ import (
 	"github.com/vogo/vogo/vnet/vurl"
 
 	"github.com/vogo/informer/internal/agent"
+	"github.com/vogo/informer/internal/runlog"
 )
 
 // ErrAgentPromptEmpty marks an agent source that has no instruction to run.
@@ -36,7 +37,7 @@ var ErrAgentPromptEmpty = errors.New("agent source has no prompt")
 func agentParseFeed(config *Config, source *Source, agentConfig *agent.Config, _ int64) {
 	logger.Info("agent parse feed: ", source.Title)
 
-	articles, err := AgentParse(source, agentConfig)
+	articles, err := AgentParse(source, agentConfig, nil)
 	if err != nil {
 		logger.Infof("agent parse feed error! source: %s, error: %v", source.Title, err)
 
@@ -56,7 +57,9 @@ func agentParseFeed(config *Config, source *Source, agentConfig *agent.Config, _
 // limit are added here, so what the user typed stays exactly what they meant.
 // The source may override the provider of the shared agent configuration, which
 // is what lets one subscription run on a different agent than the rest.
-func AgentParse(source *Source, agentConfig *agent.Config) ([]*Article, error) {
+//
+//nolint:gosmopolitan //informer is a chinese product; the recorded lines speak the user's language.
+func AgentParse(source *Source, agentConfig *agent.Config, sink runlog.Sink) ([]*Article, error) {
 	prompt := strings.TrimSpace(source.AgentPrompt)
 	if prompt == "" {
 		return nil, ErrAgentPromptEmpty
@@ -67,8 +70,16 @@ func AgentParse(source *Source, agentConfig *agent.Config) ([]*Article, error) {
 		runConfig.Provider = provider
 	}
 
-	result, err := agent.Run(context.Background(), runConfig, prompt, source.MaxFetchNum)
+	runlog.Infof(sink, "交给 %s 去找，最多 %d 条", runConfig.Provider, source.MaxFetchNum)
+
+	result, err := agent.Run(context.Background(), runConfig, prompt, source.MaxFetchNum, agentObserver(sink))
 	if err != nil {
+		// the answer text survives a parse failure and is the only way to tell
+		// "the agent said nothing" apart from "the agent answered in prose".
+		if result != nil && result.Raw != "" {
+			runlog.Errorf(sink, "无法从返回中解析出文章：%v", err)
+		}
+
 		return nil, fmt.Errorf("agent source %q: %w", source.Title, err)
 	}
 
@@ -91,7 +102,7 @@ func AgentParse(source *Source, agentConfig *agent.Config) ([]*Article, error) {
 		})
 	}
 
-	logger.Infof("agent parse, source: %s, articles: %d", source.Title, len(articles))
+	runlog.Infof(sink, "解析出 %d 条文章", len(articles))
 
 	return articles, nil
 }

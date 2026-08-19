@@ -296,28 +296,6 @@ func (a *App) SetSourceEnabled(id int64, enabled bool) error {
 	return a.svc.SetSourceEnabled(id, enabled)
 }
 
-// PreviewSource runs one real fetch and parse of a stored subscription and
-// returns the candidate articles. It writes nothing - not the source, not
-// articles, not health state - and a disabled source previews just the same.
-func (a *App) PreviewSource(id int64) ([]*ArticleDTO, error) {
-	err := a.ready()
-	if err != nil {
-		return nil, err
-	}
-
-	articles, err := a.svc.Preview(id)
-	if err != nil {
-		return nil, err
-	}
-
-	dtos := make([]*ArticleDTO, 0, len(articles))
-	for _, article := range articles {
-		dtos = append(dtos, &ArticleDTO{Title: article.Title, URL: article.URL})
-	}
-
-	return dtos, nil
-}
-
 // applyRequest copies every editable request field onto one source record.
 func applyRequest(source *feed.Source, req *SaveSourceRequest) *feed.Source {
 	source.ID = req.ID

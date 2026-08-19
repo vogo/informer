@@ -17,7 +17,12 @@
 
 package feed
 
-import "github.com/vogo/informer/internal/agent"
+import (
+	"time"
+
+	"github.com/vogo/informer/internal/agent"
+	"github.com/vogo/informer/internal/runlog"
+)
 
 // ParseArticles parses a source with the parser its ParseType selects, falling back
 // to the historical derivation when no legal parse type is set.
@@ -28,15 +33,41 @@ import "github.com/vogo/informer/internal/agent"
 // It performs network reads and agent runs only: no source, article, status,
 // timestamp or config record is created or modified, so it can be called repeatedly
 // without changing any persisted state.
-func ParseArticles(source *Source, agentConfig *agent.Config) ([]*Article, error) {
-	switch source.ResolveParseType() {
+//
+//nolint:gosmopolitan //informer is a chinese product; the recorded lines speak the user's language.
+func ParseArticles(source *Source, agentConfig *agent.Config, sink runlog.Sink) ([]*Article, error) {
+	parseType := source.ResolveParseType()
+
+	runlog.Infof(sink, "开始解析「%s」，类型：%s", source.Title, parseType)
+
+	started := time.Now()
+
+	articles, err := parseArticlesBy(parseType, source, agentConfig, sink)
+	elapsed := time.Since(started).Round(time.Millisecond)
+
+	if err != nil {
+		runlog.Errorf(sink, "解析失败，耗时 %s：%v", elapsed, err)
+
+		return nil, err
+	}
+
+	runlog.Infof(sink, "解析完成，%d 条，耗时 %s", len(articles), elapsed)
+
+	return articles, nil
+}
+
+// parseArticlesBy dispatches to the parser of one parse type.
+func parseArticlesBy(parseType string, source *Source, agentConfig *agent.Config,
+	sink runlog.Sink,
+) ([]*Article, error) {
+	switch parseType {
 	case ParseTypeJSON:
-		return JsonParse(source)
+		return JsonParse(source, sink)
 	case ParseTypeRegex:
-		return RegexParse(source)
+		return RegexParse(source, sink)
 	case ParseTypeAgent:
-		return AgentParse(source, agentConfig)
+		return AgentParse(source, agentConfig, sink)
 	default:
-		return GoFeedArticles(source)
+		return GoFeedArticles(source, sink)
 	}
 }

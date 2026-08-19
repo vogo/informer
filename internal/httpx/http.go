@@ -142,39 +142,65 @@ var wechatHTTPHeaders = map[string]string{
 }
 
 func GetLinkData(link string) ([]byte, error) {
+	data, _, err := getWithHeaders(link, defaultHTTPHeaders)
+
+	return data, err
+}
+
+// GetLinkDataStats reads a link and also reports what the exchange looked like,
+// so a caller that wants to show the user why a fetch came back empty - a 404
+// page fed to a regex, a body of two bytes - has the facts to say it with.
+func GetLinkDataStats(link string) ([]byte, *FetchStats, error) {
 	return getWithHeaders(link, defaultHTTPHeaders)
 }
 
 // GetWechatLinkData 添加固定头部并不能获取微信公众号信息.
 func GetWechatLinkData(link string) ([]byte, error) {
-	return getWithHeaders(link, wechatHTTPHeaders)
+	data, _, err := getWithHeaders(link, wechatHTTPHeaders)
+
+	return data, err
 }
 
-func getWithHeaders(link string, headers map[string]string) ([]byte, error) {
+func getWithHeaders(link string, headers map[string]string) ([]byte, *FetchStats, error) {
+	stats := &FetchStats{URL: link}
+
 	httpReq, err := http.NewRequest(http.MethodGet, link, bytes.NewReader(nil))
 	if err != nil {
-		return nil, err
+		return nil, stats, err
 	}
 
 	for k, v := range headers {
 		httpReq.Header.Set(k, v)
 	}
 
+	started := time.Now()
+
 	resp, err := HTTPClient.Do(httpReq)
 	if err != nil {
-		return nil, err
+		stats.Duration = time.Since(started)
+
+		return nil, stats, err
 	}
 	defer resp.Body.Close()
 
+	stats.StatusCode = resp.StatusCode
+	stats.ContentType = resp.Header.Get(headerContentType)
+
 	var contentReader io.Reader = resp.Body
 
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(contentType, "charset") {
-		contentReader, err = charset.NewReader(contentReader, contentType)
+	if strings.Contains(stats.ContentType, "charset") {
+		contentReader, err = charset.NewReader(contentReader, stats.ContentType)
 		if err != nil {
-			return nil, err
+			stats.Duration = time.Since(started)
+
+			return nil, stats, err
 		}
 	}
 
-	return io.ReadAll(contentReader)
+	data, err := io.ReadAll(contentReader)
+
+	stats.Bytes = len(data)
+	stats.Duration = time.Since(started)
+
+	return data, stats, err
 }

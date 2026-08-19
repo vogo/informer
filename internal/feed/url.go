@@ -20,11 +20,13 @@ package feed
 import (
 	"net/url"
 	"strings"
-
-	"github.com/vogo/informer/internal/httpx"
-	"github.com/vogo/vogo/vos"
+	"time"
 
 	"github.com/vogo/logger"
+	"github.com/vogo/vogo/vos"
+
+	"github.com/vogo/informer/internal/httpx"
+	"github.com/vogo/informer/internal/runlog"
 )
 
 func FormatURL(link string) (string, bool) {
@@ -89,15 +91,54 @@ func GetHostPrefix(link string) string {
 	return link
 }
 
-func readURLData(source *Source) ([]byte, error) {
-	var data []byte
-	var err error
+// readURLData fetches the document a source parses, through the shell command it
+// carries or through plain http, and records what the exchange looked like.
+//
+//nolint:gosmopolitan //informer is a chinese product; the recorded lines speak the user's language.
+func readURLData(source *Source, sink runlog.Sink) ([]byte, error) {
 	if source.CURL != "" {
-		data, err = vos.ExecShell(source.CURL)
-	} else {
-		data, err = httpx.GetLinkData(source.URL)
+		return readCURLData(source, sink)
 	}
-	return data, err
+
+	started := time.Now()
+
+	data, stats, err := httpx.GetLinkDataStats(source.URL)
+	if err != nil {
+		runlog.Errorf(sink, "GET %s 失败，耗时 %s：%v", source.URL, time.Since(started).Round(millisecond), err)
+
+		return nil, err
+	}
+
+	logFetchStats(sink, stats)
+
+	return data, nil
+}
+
+// readCURLData runs the source's own curl line.
+//
+// vos.ExecShell returns the combined output, so a failing curl writes its
+// complaint into what would otherwise be the document; saying which one happened
+// is the point of logging it separately.
+//
+//nolint:gosmopolitan //informer is a chinese product; the recorded lines speak the user's language.
+func readCURLData(source *Source, sink runlog.Sink) ([]byte, error) {
+	runlog.Infof(sink, "执行 curl：%s", source.CURL)
+
+	started := time.Now()
+
+	data, err := vos.ExecShell(source.CURL)
+	elapsed := time.Since(started).Round(millisecond)
+
+	if err != nil {
+		runlog.Errorf(sink, "curl 失败，耗时 %s：%v，输出：%s",
+			elapsed, err, runlog.Truncate(string(data), maxLoggedBodyRunes))
+
+		return nil, err
+	}
+
+	runlog.Infof(sink, "curl 返回 %s，耗时 %s", byteSize(len(data)), elapsed)
+
+	return data, nil
 }
 
 func adjustLink(hostPrefix, link string) string {

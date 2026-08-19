@@ -22,8 +22,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -95,7 +97,7 @@ func TestRunParsesTheAgentAnswer(t *testing.T) {
 
 	stub := fakeClaude(t, envelope(`{"items":[{"title":"a","url":"`+sampleURL+`"}]}`), 0)
 
-	result, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3)
+	result, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3, nil)
 
 	require.NoError(t, err)
 	require.Equal(t, []agent.Item{{Title: "a", URL: sampleURL}}, result.Items)
@@ -115,7 +117,7 @@ func TestRunPassesConfigurationToTheCommandLine(t *testing.T) {
 		AllowedTools: "WebFetch",
 		WorkDir:      workDir,
 		HTTPProxy:    "http://127.0.0.1:7890",
-	}, testInstruction, 3)
+	}, testInstruction, 3, nil)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(stub.record)
@@ -123,7 +125,8 @@ func TestRunPassesConfigurationToTheCommandLine(t *testing.T) {
 
 	call := string(raw)
 	require.Contains(t, call, "arg:--print\n")
-	require.Contains(t, call, "arg:--output-format\narg:json\n")
+	require.Contains(t, call, "arg:--output-format\narg:stream-json\n")
+	require.Contains(t, call, "arg:--verbose\n")
 	require.Contains(t, call, "arg:--model\narg:claude-sonnet-5\n")
 	require.Contains(t, call, "arg:--tools\narg:WebFetch\n")
 	require.Contains(t, call, "arg:--allowedTools\narg:WebFetch\n")
@@ -142,7 +145,7 @@ func TestRunLeavesTheMachineCredentialsAloneWhenUnconfigured(t *testing.T) {
 	t.Setenv("ANTHROPIC_BASE_URL", "https://machine.example.com")
 	t.Setenv("ANTHROPIC_AUTH_TOKEN", "machine-token")
 
-	_, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3)
+	_, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3, nil)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(stub.record)
@@ -157,7 +160,7 @@ func TestRunReportsACommandFailure(t *testing.T) {
 
 	stub := fakeClaude(t, "boom", 1)
 
-	_, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3)
+	_, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3, nil)
 
 	require.ErrorIs(t, err, agent.ErrAgentFailed)
 }
@@ -167,7 +170,7 @@ func TestRunReportsAnErrorEnvelope(t *testing.T) {
 
 	stub := fakeClaude(t, `{"type":"result","subtype":"error_max_turns","is_error":true,"result":"too many turns"}`, 0)
 
-	_, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3)
+	_, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3, nil)
 
 	require.ErrorIs(t, err, agent.ErrAgentFailed)
 	require.Contains(t, err.Error(), "error_max_turns")
@@ -178,7 +181,7 @@ func TestRunKeepsTheRawAnswerWhenParsingFails(t *testing.T) {
 
 	stub := fakeClaude(t, envelope("I could not find anything."), 0)
 
-	result, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3)
+	result, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3, nil)
 
 	require.ErrorIs(t, err, agent.ErrNoJSONOutput)
 	require.NotNil(t, result)
@@ -188,7 +191,7 @@ func TestRunKeepsTheRawAnswerWhenParsingFails(t *testing.T) {
 func TestRunRefusesAnEmptyPrompt(t *testing.T) {
 	t.Parallel()
 
-	_, err := agent.Run(t.Context(), agent.DefaultConfig(), "   ", 3)
+	_, err := agent.Run(t.Context(), agent.DefaultConfig(), "   ", 3, nil)
 
 	require.ErrorIs(t, err, agent.ErrEmptyPrompt)
 }
@@ -197,7 +200,7 @@ func TestRunRefusesAProviderThisBuildCannotDrive(t *testing.T) {
 	t.Parallel()
 
 	for _, provider := range []string{agent.ProviderCodex, "gemini"} {
-		_, err := agent.Run(t.Context(), &agent.Config{Provider: provider}, testInstruction, 3)
+		_, err := agent.Run(t.Context(), &agent.Config{Provider: provider}, testInstruction, 3, nil)
 
 		require.ErrorIs(t, err, agent.ErrUnsupportedProvider, provider)
 	}
@@ -220,7 +223,7 @@ func TestRunHonoursTheConfiguredTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	t.Cleanup(cancel)
 
-	_, err := agent.Run(ctx, &agent.Config{Command: slow}, testInstruction, 3)
+	_, err := agent.Run(ctx, &agent.Config{Command: slow}, testInstruction, 3, nil)
 
 	require.ErrorIs(t, err, agent.ErrAgentFailed)
 }
@@ -250,4 +253,82 @@ func TestLegalProvidersIsACopy(t *testing.T) {
 
 	require.True(t, agent.IsLegalProvider(agent.ProviderClaude))
 	require.False(t, agent.IsLegalProvider("gemini"))
+}
+
+// observed collects the notes of one run, guarded because the answer stream and
+// the error stream are narrated from two goroutines.
+type observed struct {
+	mu     sync.Mutex
+	levels []string
+	texts  []string
+}
+
+func (o *observed) Note(level, text string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	o.levels = append(o.levels, level)
+	o.texts = append(o.texts, text)
+}
+
+func (o *observed) document() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	return strings.Join(o.texts, "\n")
+}
+
+func (o *observed) hasLevel(level string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	return slices.Contains(o.levels, level)
+}
+
+//nolint:gosmopolitan //the narration this asserts on is chinese by design.
+func TestRunTellsTheObserverWhatHappened(t *testing.T) {
+	t.Parallel()
+
+	stream := `{"type":"system","subtype":"init","tools":["WebSearch"]}` + "\n" +
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"WebSearch","input":{"query":"go news"}}]}}` + "\n" +
+		envelope(`{"items":[{"title":"a","url":"`+sampleURL+`"}]}`)
+
+	stub := fakeClaude(t, stream, 0)
+	watcher := &observed{}
+
+	result, err := agent.Run(t.Context(), &agent.Config{Command: stub.binary}, testInstruction, 3, watcher)
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+
+	document := watcher.document()
+	require.Contains(t, document, "启动 "+stub.binary)
+	require.Contains(t, document, "提示词")
+	require.Contains(t, document, testInstruction)
+	require.Contains(t, document, "会话已启动")
+	require.Contains(t, document, `调用 WebSearch {"query":"go news"}`)
+	require.Contains(t, document, "原始返回")
+}
+
+func TestRunShowsTheObserverWhatTheAgentComplainedAbout(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsGOOS {
+		t.Skip("the fake agent is a posix shell script")
+	}
+
+	dir := t.TempDir()
+	noisy := filepath.Join(dir, "noisy-claude")
+	script := "#!/bin/sh\n" +
+		"echo 'deprecation warning' >&2\n" +
+		"echo '" + envelope(`{"items":[]}`) + "'\n"
+
+	require.NoError(t, os.WriteFile(noisy, []byte(script), 0o700)) //nolint:gosec //test helper binary.
+
+	watcher := &observed{}
+
+	_, err := agent.Run(t.Context(), &agent.Config{Command: noisy}, testInstruction, 3, watcher)
+	require.NoError(t, err)
+
+	require.Contains(t, watcher.document(), "deprecation warning")
+	require.True(t, watcher.hasLevel(agent.NoteWarn))
 }

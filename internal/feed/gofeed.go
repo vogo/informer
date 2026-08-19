@@ -26,20 +26,34 @@ import (
 	"github.com/vogo/vogo/vnet/vurl"
 
 	"github.com/vogo/informer/internal/httpx"
+	"github.com/vogo/informer/internal/runlog"
 )
 
 // ParseGoFeed parse feed.
-func ParseGoFeed(source *Source) (*gofeed.Feed, error) {
+//
+// sink, when not nil, receives the run's progress. The fetch itself is left to
+// gofeed - it handles the redirects, the headers and the charset of a feed - so
+// the exchange is watched by swapping in a client that reports it, rather than
+// by reading the body here and handing gofeed already decoded bytes.
+//
+//nolint:gosmopolitan //informer is a chinese product; the recorded lines speak the user's language.
+func ParseGoFeed(source *Source, sink runlog.Sink) (*gofeed.Feed, error) {
 	fp := gofeed.NewParser()
 	// bound the fetch with the shared 60s client: the parser default has no
 	// timeout, so a source that accepts the connection but never answers would
 	// otherwise park the inform run, and its lock, forever.
-	fp.Client = httpx.HTTPClient
+	fp.Client = httpx.NewTracingClient(httpTrace(sink))
+
+	runlog.Infof(sink, "读取 feed：%s", source.URL)
 
 	feed, err := fp.ParseURL(source.URL)
 	if err != nil {
+		runlog.Errorf(sink, "feed 解析失败：%v", err)
+
 		return nil, err
 	}
+
+	runlog.Infof(sink, "feed 标题：%s，共 %d 条", feed.Title, len(feed.Items))
 
 	now := time.Now()
 
@@ -69,7 +83,7 @@ func ParseGoFeed(source *Source) (*gofeed.Feed, error) {
 func addGoFeed(config *Config, source *Source, expireTime int64) {
 	logger.Info("parse feed: ", source.URL)
 
-	feed, err := ParseGoFeed(source)
+	feed, err := ParseGoFeed(source, nil)
 	if err != nil {
 		logger.Warnf("parse feed url error! url: %s, error: %v", source.URL, err)
 
@@ -152,8 +166,10 @@ func goFeedItemArticle(source *Source, item *gofeed.Item) (*Article, bool) {
 
 // GoFeedArticles parses the source as a feed and returns the candidate articles
 // without reading or writing any persisted record.
-func GoFeedArticles(source *Source) ([]*Article, error) {
-	feedData, err := ParseGoFeed(source)
+//
+//nolint:gosmopolitan //informer is a chinese product; the recorded lines speak the user's language.
+func GoFeedArticles(source *Source, sink runlog.Sink) ([]*Article, error) {
+	feedData, err := ParseGoFeed(source, sink)
 	if err != nil {
 		return nil, err
 	}
@@ -168,8 +184,12 @@ func GoFeedArticles(source *Source) ([]*Article, error) {
 
 		article, ok := goFeedItemArticle(source, item)
 		if !ok {
+			runlog.Warnf(sink, "第 %d 条链接不可用，已跳过：%s | %s", i+1, item.Title, item.Link)
+
 			continue
 		}
+
+		runlog.Infof(sink, "第 %d 条：%s | %s", i+1, article.Title, article.URL)
 
 		articles = append(articles, article)
 	}

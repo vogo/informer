@@ -24,36 +24,77 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vogo/logger"
 	"github.com/vogo/vogo/vnet/vurl"
 	"github.com/vogo/vogo/vregexp"
+
+	"github.com/vogo/informer/internal/runlog"
 )
 
-// ErrNoRegexMatch is returned when the source regex matches nothing.
-// The caller decides whether that marks the source unhealthy; parsing itself
-// never writes to the database so that Preview stays side effect free.
-var ErrNoRegexMatch = errors.New("no match")
+// Errors of a regex source.
+var (
+	// ErrNoRegexMatch is returned when the source regex matches nothing.
+	// The caller decides whether that marks the source unhealthy; parsing itself
+	// never writes to the database so that Preview stays side effect free.
+	ErrNoRegexMatch = errors.New("no match")
+
+	// ErrNoURLExp and ErrNoTitleExp mark a half configured regex source. They are
+	// errors rather than an empty result because "no articles" and "this source
+	// was never finished" are different answers, and only one of them is worth
+	// showing the user as a failure.
+	ErrNoURLExp   = errors.New("url exp is empty")
+	ErrNoTitleExp = errors.New("title exp is empty")
+)
 
 // RegexParse parses the source with its regex. It performs network reads only
 // and leaves every persisted record untouched.
-func RegexParse(source *Source) ([]*Article, error) {
+//
+// sink, when not nil, receives the run's progress as it happens; nil parses
+// exactly as before and reports nothing.
+//
+//nolint:gosmopolitan //the recorded lines are read by a chinese user.
+func RegexParse(source *Source, sink runlog.Sink) ([]*Article, error) {
 	re, err := regexp.Compile(source.Regex)
 	if err != nil {
+		runlog.Errorf(sink, "正则编译失败：%v", err)
+
 		return nil, err
 	}
 
 	if source.URLExp == "" {
-		logger.Errorf("url exp is empty, url: %s", source.URL)
+		runlog.Errorf(sink, "%v, url: %s", ErrNoURLExp, source.URL)
 
-		return nil, nil
+		return nil, ErrNoURLExp
 	}
 
 	if source.TitleExp == "" {
-		logger.Errorf("title exp is empty, url: %s", source.URL)
+		runlog.Errorf(sink, "%v, url: %s", ErrNoTitleExp, source.URL)
 
-		return nil, nil
+		return nil, ErrNoTitleExp
 	}
 
+	data, err := readURLData(source, sink)
+	if err != nil {
+		return nil, err
+	}
+
+	match := re.FindAllSubmatch(data, -1)
+	if len(match) == 0 {
+		runlog.Warnf(sink, "正则没有匹配到内容，url: %s，正则: %s，响应开头：%s",
+			source.URL, source.Regex, runlog.Truncate(string(data), maxLoggedBodyRunes))
+
+		return nil, ErrNoRegexMatch
+	}
+
+	runlog.Infof(sink, "正则匹配到 %d 组", len(match))
+
+	return regexArticles(source, match, sink), nil
+}
+
+// regexArticles turns the matched groups into articles, up to the source's fetch
+// limit.
+//
+//nolint:gosmopolitan //the recorded lines are read by a chinese user.
+func regexArticles(source *Source, match [][][]byte, sink runlog.Sink) []*Article {
 	urlRegexRender := vregexp.RegexGroupRender(source.URLExp)
 	linkParser := func(groups [][]byte) string {
 		return string(urlRegexRender(groups))
@@ -63,22 +104,11 @@ func RegexParse(source *Source) ([]*Article, error) {
 	titleParser := func(groups [][]byte) string {
 		t := bytes.TrimSpace(titleRegexRender(groups))
 		s := string(t)
+
 		return strings.Join(strings.Fields(s), " ")
 	}
 
-	data, err := readURLData(source)
-	if err != nil {
-		return nil, err
-	}
-
 	hostPrefix := GetHostPrefix(source.URL)
-
-	match := re.FindAllSubmatch(data, -1)
-	if len(match) == 0 {
-		logger.Warnf("no match, url: %s, data: %s", source.URL, data)
-
-		return nil, ErrNoRegexMatch
-	}
 
 	//nolint:prealloc //ignore this.
 	var articles []*Article
@@ -88,25 +118,23 @@ func RegexParse(source *Source) ([]*Article, error) {
 			break
 		}
 
-		link := linkParser(groups)
-		link = adjustLink(hostPrefix, link)
+		link := adjustLink(hostPrefix, linkParser(groups))
 		title := titleParser(groups)
-		logger.Infof("regex parse, link: %s, title: %s", link, title)
+
+		runlog.Infof(sink, "第 %d 条：%s | %s", i+1, title, link)
 
 		if source.Redirect {
 			link = vurl.RedirectURL(link)
 		}
 
-		article := &Article{
+		articles = append(articles, &Article{
 			URL:       link,
 			Title:     title,
 			Timestamp: time.Now().Unix(),
 			Weight:    source.Weight,
 			SourceID:  source.ID,
-		}
-
-		articles = append(articles, article)
+		})
 	}
 
-	return articles, nil
+	return articles
 }
