@@ -22,11 +22,17 @@ import ArticleLibrary from './ArticleLibrary.vue'
 import DailyReport from './DailyReport.vue'
 import SettingsPanel from './SettingsPanel.vue'
 import SourceManager from './SourceManager.vue'
+import SystemLogViewer from './SystemLogViewer.vue'
 
 const version = ref('')
 const homeDir = ref('')
 const startupError = ref('')
 const ready = ref(false)
+
+// showLogs drives the log panel behind the header button. It reads the process
+// log buffer, which is filled whether or not startup succeeded - a failed start
+// is exactly when the log is worth opening.
+const showLogs = ref(false)
 
 // updateBadge drives the header CTA: downloading → ready → click Restart.
 type UpdateBadge = '' | 'downloading' | 'ready' | 'error'
@@ -108,6 +114,12 @@ async function onRestartUpdate() {
             </n-space>
 
             <n-space align="center" :size="8" class="header-right">
+              <n-tooltip>
+                <template #trigger>
+                  <n-button size="small" quaternary @click="showLogs = true">日志</n-button>
+                </template>
+                查看本次运行的系统日志
+              </n-tooltip>
               <n-text v-if="updateBadge === 'downloading'" depth="3" style="font-size: 12px">
                 正在下载更新{{ updateDetail ? ` ${updateDetail}` : '…' }}
               </n-text>
@@ -175,6 +187,7 @@ async function onRestartUpdate() {
               informer 桌面版 {{ version }} · 测试抓取执行真实网络请求，但不写库、不修改订阅状态
             </n-text>
           </footer>
+          <SystemLogViewer v-model:show="showLogs" />
         </div>
       </n-dialog-provider>
     </n-message-provider>

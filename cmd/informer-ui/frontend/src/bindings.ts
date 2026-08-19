@@ -3,6 +3,7 @@
  * depend on the long module path under frontend/bindings/.
  */
 export {
+  ClearSystemLogs,
   CreateCategory,
   CreateSource,
   DailyContent,
@@ -32,6 +33,7 @@ export {
   StartupError,
   SupportedAgentProviders,
   SupportedParseTypes,
+  SystemLogs,
   TriggerNow,
   UpdateCategory,
   UpdateSource,
@@ -62,4 +64,6 @@ export type {
   SourceExportResultDTO,
   SourceImportResultDTO,
   SourceQueryRequest,
+  SystemLogEntryDTO,
+  SystemLogPageDTO,
 } from '../bindings/github.com/vogo/informer/cmd/informer-ui/models'
