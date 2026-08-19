@@ -3,6 +3,7 @@
  * depend on the long module path under frontend/bindings/.
  */
 export {
+  ApplySourceFix,
   ClearSystemLogs,
   CreateCategory,
   CreateSource,
@@ -11,6 +12,7 @@ export {
   DeleteCategory,
   DeleteSource,
   DetectAgentCommand,
+  DiagnoseSource,
   ExportSourcesToFile,
   HomeDir,
   ImportSourcesFromFile,
@@ -53,7 +55,10 @@ export type {
   DailyMonthDTO,
   DailyYearDTO,
   DeleteCategoryResult,
+  DiagnoseReportDTO,
+  DiagnoseVerificationDTO,
   FeedConfigDTO,
+  FieldChangeDTO,
   HistoryIndexDTO,
   InformResultDTO,
   SaveCategoryRequest,

@@ -147,12 +147,20 @@ func drainStderr(reader io.Reader, kept *strings.Builder, observer Observer) {
 // The tool set is passed twice on purpose: --tools bounds what the session may
 // reach for at all, and --allowedTools pre-approves exactly that set so a
 // headless run never stalls on a permission prompt it has no way to answer.
+//
+// --strict-mcp-config is passed whether or not a server is configured, so the
+// run reaches exactly the servers informer named and never a server the user
+// happens to have configured for their own interactive sessions.
 func claudeArgs(cfg *Config, prompt string) []string {
 	args := []string{
 		"--print", prompt,
 		"--output-format", "stream-json",
 		"--verbose",
 		"--strict-mcp-config",
+	}
+
+	if cfg.MCPConfigPath != "" {
+		args = append(args, "--mcp-config", cfg.MCPConfigPath)
 	}
 
 	if cfg.Model != "" {

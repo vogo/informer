@@ -65,10 +65,10 @@ func TestPreviewSinkForSkipsAnEmptyRunID(t *testing.T) {
 }
 
 //nolint:gosmopolitan //asserting on the shipped chinese notice.
-func TestPreviewSinkNumbersLinesAndStopsAtTheBudget(t *testing.T) {
+func TestRunLogSinkNumbersLinesAndStopsAtTheBudget(t *testing.T) {
 	t.Parallel()
 
-	sink := &previewSink{runID: "run-1"}
+	sink := &runLogSink{event: PreviewLogEvent, runID: "run-1"}
 
 	first, ok := sink.next(runlog.Entry{Time: 7, Level: runlog.LevelInfo, Text: firstLine})
 	require.True(t, ok)
@@ -77,7 +77,7 @@ func TestPreviewSinkNumbersLinesAndStopsAtTheBudget(t *testing.T) {
 	assert.Equal(t, int64(7), first.Time)
 	assert.Equal(t, firstLine, first.Text)
 
-	for range maxPreviewLogEntries - 1 {
+	for range maxRunLogEntries - 1 {
 		_, ok = sink.next(runlog.Entry{Level: runlog.LevelInfo, Text: "filler"})
 		require.True(t, ok)
 	}
