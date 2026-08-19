@@ -189,11 +189,12 @@ jobs:
       # pinned together on purpose.
       - name: Install Linux dependencies
         run: |
-          # azure.archive.ubuntu.com intermittently hangs on GHA runners; fall back
-          # to archive.ubuntu.com and cap apt network waits so the job fails fast.
-          sudo sed -i 's|http://azure.archive.ubuntu.com|https://archive.ubuntu.com|g' \
-            /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          # GHA ubuntu runners route apt through azure.archive.ubuntu.com via
+          # /etc/apt/apt-mirrors.txt; that mirror intermittently hangs for hours.
+          # Replace it everywhere it can appear so apt never contacts it.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/*.sources /etc/apt/sources.list /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=60 update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
 
@@ -285,9 +286,9 @@ jobs:
       - name: Install C compiler (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com|https://archive.ubuntu.com|g' \
-            /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/*.sources /etc/apt/sources.list /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=60 update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential
 
       - name: Install MinGW (Windows CGO / sqlite)
