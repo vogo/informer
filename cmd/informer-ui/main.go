@@ -29,11 +29,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vogo/logger"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 
 	"github.com/vogo/informer/internal/httpx"
+	"github.com/vogo/informer/internal/logbuf"
 )
 
 // appTitle is the product name shown in the window chrome, kept in one place
@@ -77,7 +79,18 @@ func main() {
 		return
 	}
 
+	// the window is launched from Finder or the start menu, so nothing reads its
+	// stdout; capture the log into memory before anything is logged, so the 日志
+	// panel can show what a scheduled push did while nobody was watching.
+	logbuf.Install()
+
 	desktop := newApp()
+
+	logger.Infof("informer-ui %s started, home dir: %s", version, desktop.HomeDir())
+
+	if startupErr := desktop.StartupError(); startupErr != "" {
+		logger.Errorf("informer-ui startup failed: %s", startupErr)
+	}
 
 	app := application.New(application.Options{
 		Name:        appTitle,
