@@ -1,11 +1,24 @@
 <script setup lang="ts">
-import {computed, onMounted, ref} from 'vue'
-import {NAlert, NButton, NCollapse, NCollapseItem, NEmpty, NSpin, NTag, NText} from 'naive-ui'
+import {computed, onMounted, onUnmounted, ref} from 'vue'
+import {
+  NAlert,
+  NButton,
+  NCollapse,
+  NCollapseItem,
+  NEmpty,
+  NPopconfirm,
+  NSpin,
+  NTag,
+  NText,
+  useMessage
+} from 'naive-ui'
 import {Browser} from '@wailsio/runtime'
-import {DailyContent, DailyIndex} from './bindings'
+import {DailyContent, DailyIndex, InformRunning, TriggerNow} from './bindings'
 import {errorText} from './errors'
 import {renderMarkdown} from './markdown'
-import {compact} from './nulls'
+import {compact, requireValue} from './nulls'
+
+const message = useMessage()
 
 type DailyDay = {date: string; size: number}
 type DailyMonth = {month: string; days: DailyDay[]}
@@ -24,7 +37,64 @@ const contentEmpty = ref(false)
 // the newest year and month open by default, which is the day a user wants first.
 const expandedYears = computed(() => (years.value.length > 0 ? [years.value[0].year] : []))
 
-onMounted(loadIndex)
+// the push state has two sources: `triggering` is this window's own click, and
+// `informRunning` is what the backend reports - a scheduled fire counts too.
+// The button is hidden while either holds, so a second push is never offered
+// while one is still fetching.
+const triggering = ref(false)
+const informRunning = ref(false)
+const pushing = computed(() => triggering.value || informRunning.value)
+// a scheduled run starts without this page knowing, so the state is polled
+// rather than derived from the click alone.
+const informPollInterval = 3000
+let runningTimer: ReturnType<typeof setInterval> | null = null
+
+onMounted(async () => {
+  await loadIndex()
+  await pollInformRunning()
+  runningTimer = setInterval(() => void pollInformRunning(), informPollInterval)
+})
+
+onUnmounted(() => {
+  if (runningTimer !== null) {
+    clearInterval(runningTimer)
+    runningTimer = null
+  }
+})
+
+async function pollInformRunning() {
+  try {
+    informRunning.value = await InformRunning()
+  } catch {
+    // a failed poll says nothing about the run; keep the last known state and
+    // let the next tick correct it rather than flashing the button back.
+  }
+}
+
+// triggerNow runs one full push - fetch every enabled subscription, build the
+// daily markdown, deliver it to the bot - and reloads the index, so the day the
+// run just wrote shows up right away. A pipeline failure arrives inside the
+// result, so a written daily file is still reported when the delivery failed.
+async function triggerNow() {
+  triggering.value = true
+  try {
+    const result = requireValue(await TriggerNow(), 'InformResultDTO')
+    if (!result.success) {
+      message.warning(`推送未完成：${result.errorInfo}`)
+    } else if (result.notified) {
+      message.success(`已推送 ${result.articleCount} 篇文章到机器人`)
+    } else {
+      message.success('日报已生成，但未配置机器人地址，未发送推送')
+    }
+
+    await loadIndex()
+  } catch (e) {
+    message.error(`推送失败：${errorText(e)}`)
+  } finally {
+    triggering.value = false
+    await pollInformRunning()
+  }
+}
 
 async function loadIndex() {
   indexLoading.value = true
@@ -87,7 +157,18 @@ function onContentClick(event: MouseEvent) {
   <div class="layout">
     <div class="side">
       <div class="side-header">
-        <n-text strong>日报</n-text>
+        <div class="side-title">
+          <n-text strong>日报</n-text>
+          <!-- while a push runs - this window's or the scheduler's - the button
+               is replaced by a disabled 抓取中 state instead of staying clickable. -->
+          <n-button v-if="pushing" size="tiny" tertiary loading disabled>抓取中</n-button>
+          <n-popconfirm v-else @positive-click="() => { void triggerNow() }">
+            <template #trigger>
+              <n-button size="tiny" tertiary>立即推送</n-button>
+            </template>
+            将抓取所有启用的订阅、生成今日日报并发送到机器人，确认立即推送？
+          </n-popconfirm>
+        </div>
         <n-button size="tiny" tertiary :loading="indexLoading" @click="loadIndex">刷新</n-button>
       </div>
 
@@ -181,6 +262,12 @@ function onContentClick(event: MouseEvent) {
   justify-content: space-between;
   padding: 10px 12px;
   border-bottom: 1px solid var(--n-border-color, #efeff5);
+}
+
+.side-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .side-body {
