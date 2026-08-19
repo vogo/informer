@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/vogo/informer/internal/feed"
 )
 
@@ -48,7 +49,7 @@ func TestRegexParse(t *testing.T) {
 		Regex:       `,"url":"([^"]+)","title":"([^"]+)",`,
 		TitleExp:    "$2",
 		URLExp:      "$1",
-	})
+	}, nil)
 
 	assert.Nil(t, err)
 
@@ -75,7 +76,7 @@ func TestRegexParse2(t *testing.T) {
 		Regex:       `<h6[^>]+class="favorite"><a[^>]+ href="([^"]+)" target="_blank" rel="" class="com-article-title"><!----> ([^<>]+) </a></h6>`,
 		TitleExp:    "$2",
 		URLExp:      "$1",
-	})
+	}, nil)
 
 	assert.Nil(t, err)
 
@@ -102,7 +103,7 @@ func TestRegexParse3(t *testing.T) {
 		Regex:       `"article_title":"([^"]+)".*?"uuid":"([^"]+)"`,
 		TitleExp:    "$1",
 		URLExp:      "https://www.infoq.cn/article/$2",
-	})
+	}, nil)
 
 	assert.Nil(t, err)
 

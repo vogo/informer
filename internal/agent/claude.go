@@ -18,13 +18,15 @@
 package agent
 
 import (
-	"bytes"
+	"bufio"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 // ClaudeCommand is the default executable of the Claude Code command line.
@@ -43,19 +45,14 @@ const (
 	envAllProxy   = "ALL_PROXY"
 )
 
-// claudeEnvelope is the --output-format json document the command line prints.
-// Only the fields informer acts on are declared; everything else - cost, token
-// usage, session id - is deliberately ignored.
-type claudeEnvelope struct {
-	Type    string `json:"type"`
-	Subtype string `json:"subtype"`
-	IsError bool   `json:"is_error"`
-	Result  string `json:"result"`
-	Error   string `json:"error"`
-}
-
 // runClaude executes one non interactive Claude Code run and returns its answer text.
-func runClaude(ctx context.Context, cfg *Config, prompt string) (string, error) {
+//
+// The run is read as it happens rather than waited out: a browsing agent spends
+// minutes searching, and an observer that sees "searching for X" as it goes is
+// the difference between a diagnosable source and a spinner.
+//
+//nolint:gosmopolitan //informer is a chinese product; the notes speak the user's language.
+func runClaude(ctx context.Context, cfg *Config, prompt string, observer Observer) (string, error) {
 	command, err := ResolveCommand(cfg.Provider, cfg.Command)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrAgentFailed, err)
@@ -66,41 +63,97 @@ func runClaude(ctx context.Context, cfg *Config, prompt string) (string, error) 
 	cmd.Env = claudeEnv(cfg)
 	cmd.Stdin = nil
 
-	var stdout, stderr bytes.Buffer
-
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err = cmd.Run()
+	answers, err := cmd.StdoutPipe()
 	if err != nil {
-		// the timeout is the common failure of a browsing agent, and the raw
-		// exec message does not say so; name it where the source error is stored.
-		ctxErr := ctx.Err()
-		if ctxErr != nil {
-			return "", fmt.Errorf("%w: %s run stopped after %ds: %w",
-				ErrAgentFailed, command, cfg.TimeoutSeconds, ctxErr)
-		}
-
-		// a silent failure - a missing binary, a killed process - carries no
-		// stderr, and appending an empty tail would only end the stored source
-		// error in a dangling colon.
-		if details := truncate(stderr.String()); details != "" {
-			return "", fmt.Errorf("%w: %s run: %w: %s", ErrAgentFailed, command, err, details)
-		}
-
-		return "", fmt.Errorf("%w: %s run: %w", ErrAgentFailed, command, err)
+		return "", fmt.Errorf("%w: %s stdout: %w", ErrAgentFailed, command, err)
 	}
 
-	return claudeResultText(stdout.Bytes())
+	complaints, err := cmd.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("%w: %s stderr: %w", ErrAgentFailed, command, err)
+	}
+
+	notef(observer, NoteInfo, "启动 %s，超时上限 %ds", command, cfg.TimeoutSeconds)
+
+	err = cmd.Start()
+	if err != nil {
+		return "", fmt.Errorf("%w: %s start: %w", ErrAgentFailed, command, err)
+	}
+
+	var (
+		stderr strings.Builder
+		group  sync.WaitGroup
+	)
+
+	group.Go(func() {
+		drainStderr(complaints, &stderr, observer)
+	})
+
+	result, streamErr := readClaudeStream(answers, observer)
+
+	group.Wait()
+
+	err = cmd.Wait()
+	if err != nil {
+		return "", claudeRunError(ctx, cfg, command, err, stderr.String())
+	}
+
+	if streamErr != nil {
+		return "", streamErr
+	}
+
+	return result, nil
+}
+
+// claudeRunError names why the process ended badly, keeping the timeout - the
+// common failure of a browsing agent - distinguishable from a crash.
+func claudeRunError(ctx context.Context, cfg *Config, command string, runErr error, stderr string) error {
+	// the raw exec message does not mention the deadline; name it where the
+	// stored source error will be read.
+	ctxErr := ctx.Err()
+	if ctxErr != nil {
+		return fmt.Errorf("%w: %s run stopped after %ds: %w",
+			ErrAgentFailed, command, cfg.TimeoutSeconds, ctxErr)
+	}
+
+	// a silent failure - a missing binary, a killed process - carries no
+	// stderr, and appending an empty tail would only end the stored source
+	// error in a dangling colon.
+	if details := truncate(stderr); details != "" {
+		return fmt.Errorf("%w: %s run: %w: %s", ErrAgentFailed, command, runErr, details)
+	}
+
+	return fmt.Errorf("%w: %s run: %w", ErrAgentFailed, command, runErr)
+}
+
+// drainStderr keeps the error stream flowing - a full pipe would deadlock the
+// child - while showing each line to the observer and keeping a copy for the
+// error message.
+func drainStderr(reader io.Reader, kept *strings.Builder, observer Observer) {
+	for line := range lines(reader) {
+		kept.WriteString(line)
+		kept.WriteString("\n")
+
+		notef(observer, NoteWarn, "%s", truncateTo(line, maxNoteRunes))
+	}
 }
 
 // claudeArgs builds the non interactive invocation.
+//
+// The output format is the streaming one so the run can be watched; --verbose is
+// what the command line requires to actually emit the intermediate events under
+// --print, and without it the stream carries the final result alone.
 //
 // The tool set is passed twice on purpose: --tools bounds what the session may
 // reach for at all, and --allowedTools pre-approves exactly that set so a
 // headless run never stalls on a permission prompt it has no way to answer.
 func claudeArgs(cfg *Config, prompt string) []string {
-	args := []string{"--print", prompt, "--output-format", "json", "--strict-mcp-config"}
+	args := []string{
+		"--print", prompt,
+		"--output-format", "stream-json",
+		"--verbose",
+		"--strict-mcp-config",
+	}
 
 	if cfg.Model != "" {
 		args = append(args, "--model", cfg.Model)
@@ -164,23 +217,84 @@ func claudeEnv(cfg *Config) []string {
 	return kept
 }
 
-// claudeResultText unwraps the json envelope and returns the answer text.
-func claudeResultText(output []byte) (string, error) {
-	var envelope claudeEnvelope
+// errNoResultEvent marks a stream that ended without the closing result event.
+var errNoResultEvent = errors.New("printed no result event")
 
-	err := json.Unmarshal(bytes.TrimSpace(output), &envelope)
-	if err != nil {
-		return "", fmt.Errorf("parse claude output envelope: %w: %s", err, truncate(string(output)))
-	}
+// readClaudeStream consumes the newline delimited json the command line prints,
+// narrating it to the observer, and returns the answer text of the closing
+// result event.
+func readClaudeStream(reader io.Reader, observer Observer) (string, error) {
+	var (
+		answer  string
+		settled bool
+		failure error
+		tail    []string
+	)
 
-	if envelope.IsError {
-		reason := envelope.Error
-		if reason == "" {
-			reason = envelope.Result
+	for line := range lines(reader) {
+		tail = keepTail(tail, line)
+
+		event, ok := decodeClaudeEvent(line)
+		if !ok {
+			continue
 		}
 
-		return "", fmt.Errorf("%w: claude reported %q: %s", ErrAgentFailed, envelope.Subtype, truncate(reason))
+		if event.Type == eventResult {
+			answer, failure = claudeResultText(event)
+			settled = true
+
+			continue
+		}
+
+		narrate(event, observer)
 	}
 
-	return envelope.Result, nil
+	if failure != nil {
+		return "", failure
+	}
+
+	if !settled {
+		return "", fmt.Errorf("%w: %s %w: %s",
+			ErrAgentFailed, ProviderClaude, errNoResultEvent, truncate(strings.Join(tail, "\n")))
+	}
+
+	return answer, nil
+}
+
+// maxTailLines is how much of an unusable stream is quoted back in the error.
+const maxTailLines = 5
+
+// keepTail remembers the last lines of a stream for the diagnostic message.
+func keepTail(tail []string, line string) []string {
+	tail = append(tail, line)
+	if len(tail) > maxTailLines {
+		tail = tail[len(tail)-maxTailLines:]
+	}
+
+	return tail
+}
+
+// lines yields the non empty lines of a reader.
+//
+// It reads with a plain reader rather than a bufio.Scanner because one event of
+// an agent stream - a fetched page handed back as a tool result - easily passes
+// the scanner's 64KB line limit, and a run that dies on a large answer is worse
+// than no streaming at all.
+func lines(reader io.Reader) func(func(string) bool) {
+	return func(yield func(string) bool) {
+		buffered := bufio.NewReader(reader)
+
+		for {
+			line, err := buffered.ReadString('\n')
+
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" && !yield(trimmed) {
+				return
+			}
+
+			if err != nil {
+				return
+			}
+		}
+	}
 }

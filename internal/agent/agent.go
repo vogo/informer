@@ -203,8 +203,9 @@ func (c *Config) Normalized() *Config {
 	return normalized
 }
 
-// runner executes one instruction and returns the agent's answer text.
-type runner func(ctx context.Context, cfg *Config, prompt string) (string, error)
+// runner executes one instruction and returns the agent's answer text, telling
+// observer what it is doing while it does it.
+type runner func(ctx context.Context, cfg *Config, prompt string, observer Observer) (string, error)
 
 // runnerOf returns the runner of a provider, or an error for one this build
 // accepts in configuration but cannot execute yet.
@@ -225,7 +226,13 @@ func runnerOf(provider string) (runner, error) {
 //
 // maxItems bounds what the prompt asks for; a value of zero uses DefaultMaxItems.
 // The run is always bounded by the configured timeout, whatever deadline ctx carries.
-func Run(ctx context.Context, cfg *Config, userPrompt string, maxItems int) (*Result, error) {
+//
+// observer, when not nil, is told what the run is doing as it happens: the whole
+// prompt that went out, every search and page the agent reached for, and the
+// answer that came back. A run watched this way is one a user can debug.
+//
+//nolint:gosmopolitan //the notes are read by a chinese user in a chinese window.
+func Run(ctx context.Context, cfg *Config, userPrompt string, maxItems int, observer Observer) (*Result, error) {
 	instruction := strings.TrimSpace(userPrompt)
 	if instruction == "" {
 		return nil, ErrEmptyPrompt
@@ -241,10 +248,16 @@ func Run(ctx context.Context, cfg *Config, userPrompt string, maxItems int) (*Re
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(config.TimeoutSeconds)*time.Second)
 	defer cancel()
 
-	raw, err := run(runCtx, config, BuildPrompt(instruction, maxItems))
+	prompt := BuildPrompt(instruction, maxItems)
+
+	notef(observer, NoteInfo, "提示词（%d 字符）：\n%s", len([]rune(prompt)), truncateTo(prompt, maxNoteRunes))
+
+	raw, err := run(runCtx, config, prompt, observer)
 	if err != nil {
 		return nil, err
 	}
+
+	notef(observer, NoteInfo, "原始返回（%d 字符）：\n%s", len([]rune(raw)), truncateTo(raw, maxNoteRunes))
 
 	items, err := ParseItems(raw)
 	if err != nil {

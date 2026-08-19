@@ -165,19 +165,32 @@ func extractJSON(text string) string {
 	return text[start : end+1]
 }
 
-// maxDiagnosticRunes bounds the raw output quoted in an error message.
-const maxDiagnosticRunes = 300
+// Bounds of the text this package quotes back at its caller.
+const (
+	// maxDiagnosticRunes bounds the raw output quoted in an error message.
+	maxDiagnosticRunes = 300
+
+	// maxNoteRunes bounds one note handed to an Observer. It is far larger than
+	// the error bound because a note is read in a scrollable panel, not in a
+	// single line of error text.
+	maxNoteRunes = 2000
+)
 
 // truncate shortens output quoted into an error so a runaway answer cannot
-// bury the actual failure. It cuts on rune boundaries, so a chinese answer is
-// never sliced into invalid utf-8.
+// bury the actual failure.
 func truncate(text string) string {
+	return truncateTo(text, maxDiagnosticRunes)
+}
+
+// truncateTo shortens text to at most limit runes. It cuts on rune boundaries,
+// so a chinese answer is never sliced into invalid utf-8.
+func truncateTo(text string, limit int) string {
 	trimmed := strings.TrimSpace(text)
 
 	runes := []rune(trimmed)
-	if len(runes) <= maxDiagnosticRunes {
+	if len(runes) <= limit {
 		return trimmed
 	}
 
-	return string(runes[:maxDiagnosticRunes]) + "..."
+	return string(runes[:limit]) + "..."
 }

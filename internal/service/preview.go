@@ -25,6 +25,7 @@ import (
 	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/inform"
+	"github.com/vogo/informer/internal/runlog"
 )
 
 // Preview parses a stored source and returns its candidate articles.
@@ -34,17 +35,34 @@ import (
 // Enabled flag does not restrict a preview, and a parse failure is reported as an
 // error without marking the source unhealthy.
 func (s *Service) Preview(sourceID int64) ([]*feed.Article, error) {
+	return s.PreviewTraced(sourceID, nil)
+}
+
+// PreviewTraced is Preview with somewhere to send the run's progress.
+//
+// A fetch can take minutes - an agent source browses the web before it answers -
+// and until it returns, the only thing a caller can show is a spinner. A sink
+// turns that wait into a readable account of what was requested, what came back
+// and why it did or did not become articles. A nil sink parses exactly as
+// Preview does and reports nothing.
+func (s *Service) PreviewTraced(sourceID int64, sink runlog.Sink) ([]*feed.Article, error) {
 	source, err := s.GetSource(sourceID)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.PreviewSource(source)
+	return s.PreviewSourceTraced(source, sink)
 }
 
 // PreviewSource parses an in memory source without persisting anything at all,
 // which lets a caller try out a source before it is stored.
 func (s *Service) PreviewSource(source *feed.Source) ([]*feed.Article, error) {
+	return s.PreviewSourceTraced(source, nil)
+}
+
+// PreviewSourceTraced is PreviewSource with somewhere to send the run's
+// progress. A nil sink parses exactly as PreviewSource does.
+func (s *Service) PreviewSourceTraced(source *feed.Source, sink runlog.Sink) ([]*feed.Article, error) {
 	err := ValidateSource(source)
 	if err != nil {
 		return nil, err
@@ -52,7 +70,7 @@ func (s *Service) PreviewSource(source *feed.Source) ([]*feed.Article, error) {
 
 	s.ApplyHTTPProxy()
 
-	articles, err := feed.ParseArticles(source, s.agentConfig())
+	articles, err := feed.ParseArticles(source, s.agentConfig(), sink)
 	if err != nil {
 		return nil, fmt.Errorf("preview source %d: %w", source.ID, err)
 	}

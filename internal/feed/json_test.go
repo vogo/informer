@@ -42,7 +42,8 @@ func TestJsonParseFeed(t *testing.T) {
 		JsonTitlePath: "data/focus_articles[]/article/title",
 		JsonURLPath:   "data/focus_articles[]/article/share_url",
 	}
-	articles, err := JsonParse(src)
+
+	articles, err := JsonParse(src, nil)
 	if err != nil || len(articles) == 0 {
 		t.Skipf("live JSON endpoint unavailable: err=%v articles=%d", err, len(articles))
 	}

@@ -24,7 +24,7 @@ import (
 func regexParseFeed(config *Config, source *Source, _ int64) {
 	logger.Info("regex parse feed: ", source.URL)
 
-	articles, err := RegexParse(source)
+	articles, err := RegexParse(source, nil)
 	if err != nil {
 		logger.Infof("regex parse feed url error! url: %s, error: %v", source.URL, err)
 

@@ -19,11 +19,14 @@ package service_test
 
 import (
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/runlog"
 	"github.com/vogo/informer/internal/service"
 )
 
@@ -218,4 +221,81 @@ func TestPreviewSourceWorksWithoutStoredRecord(t *testing.T) {
 	assert.Len(t, articles, 2)
 
 	assert.Equal(t, before, snapshotDB(t, svc))
+}
+
+// previewRecorder keeps what one traced preview reported.
+type previewRecorder struct {
+	entries []runlog.Entry
+}
+
+func (r *previewRecorder) Write(entry runlog.Entry) {
+	r.entries = append(r.entries, entry)
+}
+
+func (r *previewRecorder) document() string {
+	texts := make([]string, 0, len(r.entries))
+	for _, entry := range r.entries {
+		texts = append(texts, entry.Text)
+	}
+
+	return strings.Join(texts, "\n")
+}
+
+//nolint:gosmopolitan //the recorded lines this asserts on are chinese by design.
+func TestPreviewTracedRecordsTheRun(t *testing.T) {
+	server := newContentServer(t)
+	svc := newService(t)
+
+	source := regexSource(server)
+	require.NoError(t, svc.CreateSource(source))
+
+	sink := &previewRecorder{}
+
+	articles, err := svc.PreviewTraced(source.ID, sink)
+	require.NoError(t, err)
+	assert.Len(t, articles, 2)
+
+	document := sink.document()
+	assert.Contains(t, document, "开始解析")
+	assert.Contains(t, document, "GET "+server.URL)
+	assert.Contains(t, document, "解析完成，2 条")
+}
+
+// TestPreviewTracedWithoutASinkMatchesPreview keeps the untraced path honest: a
+// caller with nothing to show must get exactly what it got before.
+func TestPreviewTracedWithoutASinkMatchesPreview(t *testing.T) {
+	server := newContentServer(t)
+	svc := newService(t)
+
+	source := feedSource(server)
+	require.NoError(t, svc.CreateSource(source))
+
+	traced, err := svc.PreviewTraced(source.ID, nil)
+	require.NoError(t, err)
+
+	plain, err := svc.Preview(source.ID)
+	require.NoError(t, err)
+
+	require.Len(t, traced, len(plain))
+
+	for i := range plain {
+		assert.Equal(t, plain[i].Title, traced[i].Title)
+		assert.Equal(t, plain[i].URL, traced[i].URL)
+	}
+}
+
+//nolint:gosmopolitan //the recorded lines this asserts on are chinese by design.
+func TestPreviewSourceTracedRecordsAFailure(t *testing.T) {
+	server := newContentServer(t)
+	svc := newService(t)
+
+	broken := regexSource(server)
+	broken.Regex = `<never-matches ([^"]+)>`
+
+	sink := &previewRecorder{}
+
+	_, err := svc.PreviewSourceTraced(broken, sink)
+	require.Error(t, err)
+
+	assert.Contains(t, sink.document(), "正则没有匹配到内容")
 }
