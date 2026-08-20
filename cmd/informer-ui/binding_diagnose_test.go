@@ -232,8 +232,8 @@ func TestDiagnoseSourceRefusesASecondConcurrentRun(t *testing.T) {
 
 	app := noAgentApp(t)
 
-	app.diagnoseMu.Lock()
-	defer app.diagnoseMu.Unlock()
+	app.agentMu.Lock()
+	defer app.agentMu.Unlock()
 
 	_, err := app.DiagnoseSource(1, "")
 	require.ErrorIs(t, err, ErrDiagnoseRunning)

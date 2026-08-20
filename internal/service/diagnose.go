@@ -39,17 +39,24 @@ const (
 	// never runs with less than this even when the fetch budget is smaller.
 	DiagnoseTimeoutSeconds = 900
 
-	// diagnoseSampleArticles is how many verified articles the report quotes
-	// back, so a person can see the fix produced real titles before applying it.
-	diagnoseSampleArticles = 10
+	// verifySampleArticles is how many verified articles a report quotes back,
+	// so a person can see the configuration produced real titles before it is
+	// saved. Composing a new source verifies exactly the same way, and reads the
+	// same number of samples.
+	verifySampleArticles = 10
 )
 
 // DiagnoseVerification is informer's own check of a proposed repair.
+type DiagnoseVerification = ParseVerification
+
+// ParseVerification is informer's own check of a proposed configuration.
 //
 // It exists because the agent's word is not enough: it reports what it believes
 // it verified, and this is what actually happened when informer parsed the
-// source with the proposal applied, in this process, just now.
-type DiagnoseVerification struct {
+// source with the proposal applied, in this process, just now. Repairing a
+// source and composing one share it, so the bar a proposal has to clear cannot
+// drift between the two.
+type ParseVerification struct {
 	// Ran says a verification parse was attempted at all. It is false when the
 	// diagnosis proposed no change to verify.
 	Ran bool `json:"ran"`
@@ -63,6 +70,13 @@ type DiagnoseVerification struct {
 
 	// Error is why the verification parse failed, empty when it succeeded.
 	Error string `json:"error"`
+
+	// Note says why no verification ran, when none did. It exists because "not
+	// verified" and "verified and failed" have to look different to the person
+	// deciding whether to save: an agent candidate cannot be tried from inside
+	// an agent run, and that is a fact about informer, not a fault of the
+	// configuration.
+	Note string `json:"note"`
 }
 
 // DiagnoseReport is the outcome of one diagnosis run.
@@ -143,7 +157,7 @@ func (s *Service) DiagnoseSource(ctx context.Context, sourceID int64, sink runlo
 
 	runlog.Infof(sink, "启动诊断 agent（%s），超时上限 %ds", config.Provider, config.TimeoutSeconds)
 
-	raw, err := agent.RunRaw(ctx, config, diagnose.BuildPrompt(session), diagnoseObserver(sink))
+	raw, err := agent.RunRaw(ctx, config, diagnose.BuildPrompt(session), agentObserver(sink))
 	if err != nil {
 		runlog.Errorf(sink, "诊断 agent 运行失败：%v", err)
 
@@ -216,8 +230,9 @@ func (s *Service) diagnoseAgentConfig(dir string, session *diagnose.Session,
 	config := s.agentConfig()
 	config.MCPConfigPath = mcpPath
 
-	// only the session's own tools: a diagnosis that could search the web would
-	// read what people say about the site instead of the bytes informer got.
+	// the session's own tools, plus the read only web ones to explore with. What
+	// keeps a diagnosis honest is not the absence of a search engine but the
+	// rule in the prompt that the verdict rests on fetch_content's bytes.
 	config.AllowedTools = diagnose.AllowedTools()
 
 	if config.TimeoutSeconds < DiagnoseTimeoutSeconds {
@@ -263,7 +278,7 @@ func (s *Service) buildDiagnoseReport(source *feed.Source, report *diagnose.Repo
 		runlog.Infof(sink, "建议修改 %s：%q -> %q", change.Field, change.Old, change.New)
 	}
 
-	result.Verification = s.verifyDiagnose(result.Changes.Apply(source), sink)
+	result.Verification = s.verifyCandidate(result.Changes.Apply(source), sink)
 	result.Fixed = result.Verification.Error == "" && result.Verification.ArticleCount > 0
 
 	if !result.Fixed && report.Fixed {
@@ -273,17 +288,17 @@ func (s *Service) buildDiagnoseReport(source *feed.Source, report *diagnose.Repo
 	return result
 }
 
-// verifyDiagnose parses the source once more with the proposal applied.
+// verifyCandidate parses a candidate configuration once more, for real.
 //
 // It is informer's own answer to "does this actually work", run in this process
 // against the live page, and it is what the desktop shows above the apply
 // button. The agent's claim is never the thing a person acts on.
 //
 //nolint:gosmopolitan //informer is a chinese product; the recorded lines speak the user's language.
-func (s *Service) verifyDiagnose(candidate *feed.Source, sink runlog.Sink) *DiagnoseVerification {
+func (s *Service) verifyCandidate(candidate *feed.Source, sink runlog.Sink) *ParseVerification {
 	runlog.Infof(sink, "用建议的配置复核一次")
 
-	verification := &DiagnoseVerification{Ran: true}
+	verification := &ParseVerification{Ran: true}
 
 	err := ValidateSource(candidate)
 	if err != nil {
@@ -306,8 +321,8 @@ func (s *Service) verifyDiagnose(candidate *feed.Source, sink runlog.Sink) *Diag
 	verification.ArticleCount = len(articles)
 	verification.Samples = articles
 
-	if len(articles) > diagnoseSampleArticles {
-		verification.Samples = articles[:diagnoseSampleArticles]
+	if len(articles) > verifySampleArticles {
+		verification.Samples = articles[:verifySampleArticles]
 	}
 
 	if len(articles) == 0 {
@@ -395,9 +410,9 @@ func (s *Service) markSourceStatus(sourceID int64, status int, errorInfo string,
 	}
 }
 
-// diagnoseObserver adapts the agent's own progress notes onto the run log, so a
-// diagnosis narrates itself exactly the way a test fetch does.
-func diagnoseObserver(sink runlog.Sink) agent.Observer {
+// agentObserver adapts the agent's own progress notes onto the run log, so an
+// agent run narrates itself exactly the way a test fetch does.
+func agentObserver(sink runlog.Sink) agent.Observer {
 	if sink == nil {
 		return nil
 	}

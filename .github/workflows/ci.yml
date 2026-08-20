@@ -39,7 +39,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27.0'
           cache-dependency-path: |
             go.sum
             cmd/informer-ui/go.sum
@@ -65,10 +65,17 @@ jobs:
       # golangci-lint owns formatting (gci/gofumpt/goimports) and the full
       # enable-all linter set; only-new-issues keeps the historical baseline
       # while failing loudly on anything a change introduces.
+      #
+      # install-mode goinstall builds it with the toolchain set up above rather
+      # than downloading a release binary. The released binaries are built with
+      # the previous Go, and a type checker older than the standard library it
+      # reads cannot import packages that use newer language features - which
+      # turns every lint run into a typecheck failure or an outright panic.
       - name: golangci-lint (root module)
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.12.2
+          version: latest
+          install-mode: goinstall
           only-new-issues: true
           args: --timeout=10m
 
@@ -77,7 +84,8 @@ jobs:
       - name: golangci-lint (desktop module)
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.12.2
+          version: latest
+          install-mode: goinstall
           working-directory: cmd/informer-ui
           only-new-issues: true
           args: --timeout=10m --build-tags=gtk3
@@ -149,7 +157,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27.0'
           cache-dependency-path: |
             go.sum
             cmd/informer-ui/go.sum

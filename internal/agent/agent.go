@@ -133,6 +133,24 @@ type Config struct {
 	// servers a run can reach; an empty value means no mcp server at all, which
 	// is what every fetching source wants.
 	MCPConfigPath string `json:"-"`
+
+	// SessionID names the conversation this run belongs to. An empty value is a
+	// one shot run that names no conversation at all, which is what a fetching
+	// source and a diagnosis both are. Session fills it in; nothing configures
+	// it, so it carries no json tag.
+	SessionID string `json:"-"`
+
+	// ResumeSession says SessionID names a conversation that already exists and
+	// this run continues it. It is a separate flag rather than an inference
+	// from SessionID because the command line refuses to both name and resume a
+	// session in one invocation.
+	ResumeSession bool `json:"-"`
+
+	// AppendSystemPrompt carries the rules of a conversation, restated on every
+	// turn. A rule stated once in the first user message is a rule the agent may
+	// summarize away as the conversation grows; one appended to the system
+	// prompt is present at every turn regardless.
+	AppendSystemPrompt string `json:"-"`
 }
 
 // DefaultConfig is the agent section a data directory without one starts from.
@@ -195,6 +213,8 @@ func (c *Config) Normalized() *Config {
 	normalized.Command = strings.TrimSpace(normalized.Command)
 	normalized.HTTPProxy = strings.TrimSpace(normalized.HTTPProxy)
 	normalized.MCPConfigPath = strings.TrimSpace(normalized.MCPConfigPath)
+	normalized.SessionID = strings.TrimSpace(normalized.SessionID)
+	normalized.AppendSystemPrompt = strings.TrimSpace(normalized.AppendSystemPrompt)
 
 	normalized.AllowedTools = strings.TrimSpace(normalized.AllowedTools)
 	if normalized.AllowedTools == "" {

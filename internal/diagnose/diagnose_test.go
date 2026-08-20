@@ -213,6 +213,12 @@ func TestWriteMCPConfigNamesTheServer(t *testing.T) {
 
 // Every offered tool has to be pre-approved by name, or a headless run stalls on
 // a permission prompt it has no way to answer.
+//
+// The web tools are allowed alongside them so a diagnosis can go looking - for
+// where a feed moved to, for whether the site announced a redesign - instead of
+// only staring at one document. Judging is a different matter, and the rule that
+// the verdict rests on fetch_content's bytes lives in the prompt, which the case
+// below asserts.
 func TestAllowedToolsCoversEveryOfferedTool(t *testing.T) {
 	t.Parallel()
 
@@ -222,8 +228,8 @@ func TestAllowedToolsCoversEveryOfferedTool(t *testing.T) {
 		require.Contains(t, allowed, "mcp__"+diagnose.ServerName+"__"+tool.Name)
 	}
 
-	require.NotContains(t, allowed, "WebFetch",
-		"a diagnosis reads the bytes informer received, not the ones a search engine has")
+	require.Contains(t, allowed, "WebSearch")
+	require.Contains(t, allowed, "WebFetch")
 }
 
 // The tools are the contract: a diagnosis may look and try, and has no way at
@@ -375,6 +381,11 @@ func TestBuildPromptStatesTheRulesTheToolsEnforce(t *testing.T) {
 
 	require.Contains(t, prompt, "你没有保存配置的能力")
 	require.Contains(t, prompt, `{"fixed":`)
+
+	// the web tools are allowed by AllowedTools, so the only thing keeping the
+	// verdict on informer's own bytes is this sentence.
+	require.Contains(t, prompt, "WebSearch / WebFetch 只能用来探索")
+	require.Contains(t, prompt, "任何结论都必须以 fetch_content 取到的字节为准")
 }
 
 // toolsByName indexes a session's tools so a test can call one by the name the

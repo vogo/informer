@@ -21,6 +21,7 @@ import {ApplySourceFix, DiagnoseSource} from './bindings'
 import type {DiagnoseReportDTO, SourceDTO} from './bindings'
 import {errorText} from './errors'
 import {compact} from './nulls'
+import {fieldLabel, fieldValue} from './sourceFields'
 
 const props = defineProps<{source: SourceDTO | null}>()
 const emit = defineEmits<{applied: []}>()
@@ -44,23 +45,6 @@ const DIAGNOSE_LOG_EVENT = 'informer:diagnose:log'
 // MAX_LOGS bounds what the panel keeps, matching the budget the Go sink stops
 // at. An unbounded array in a webview is a leak.
 const MAX_LOGS = 500
-
-// FIELD_LABELS names the configuration columns the way the edit form does, so a
-// proposed change reads as「正则表达式」rather than as a database column.
-const FIELD_LABELS: Record<string, string> = {
-  url: '订阅 URL',
-  curl: '自定义请求',
-  parse_type: '解析类型',
-  regex: '正则表达式',
-  title_exp: '标题表达式',
-  url_exp: '链接表达式',
-  is_json: 'is_json 旧标志',
-  json_title_path: 'JSON 标题路径',
-  json_url_path: 'JSON 链接路径',
-  agent_provider: 'Agent',
-  agent_prompt: 'Agent 提示词',
-  redirect: '链接重定向'
-}
 
 const running = ref(false)
 const applying = ref(false)
@@ -217,16 +201,6 @@ async function apply() {
   }
 }
 
-function fieldLabel(field: string): string {
-  return FIELD_LABELS[field] ?? field
-}
-
-// shown renders a value for the diff table, naming an empty one rather than
-// leaving a blank cell that reads like a rendering bug.
-function shown(value: string): string {
-  return value === '' ? '（空）' : value
-}
-
 function formatLogTime(time: number): string {
   return new Date(time).toLocaleTimeString('zh-CN', {hour12: false})
 }
@@ -284,8 +258,8 @@ function openArticle(url: string) {
         <div class="diff">
           <div v-for="change in diff" :key="change.field" class="diff-row">
             <div class="diff-field">{{ fieldLabel(change.field) }}</div>
-            <div class="diff-value diff-old">{{ shown(change.old) }}</div>
-            <div class="diff-value diff-new">{{ shown(change.new) }}</div>
+            <div class="diff-value diff-old">{{ fieldValue(change.old) }}</div>
+            <div class="diff-value diff-new">{{ fieldValue(change.new) }}</div>
           </div>
         </div>
       </template>

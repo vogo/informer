@@ -34,6 +34,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/updater"
 	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 
+	"github.com/vogo/informer/internal/compose"
 	"github.com/vogo/informer/internal/diagnose"
 	"github.com/vogo/informer/internal/httpx"
 	"github.com/vogo/informer/internal/logbuf"
@@ -70,16 +71,10 @@ var version = "dev" //nolint:gochecknoglobals //build time injection point.
 var assets embed.FS //nolint:gochecknoglobals //wails asset server entry.
 
 func main() {
-	// tool server mode answers before anything else: a diagnosis launches this
-	// very binary to reach its tools, the conversation runs on stdin/stdout,
-	// and no window or database may come near it.
-	if dir, ok := diagnose.ServeArgs(os.Args[1:]); ok {
-		serveErr := diagnose.ServeStdio(context.Background(), dir, version)
-		if serveErr != nil {
-			fmt.Fprintln(os.Stderr, "informer-ui: mcp:", serveErr)
-			os.Exit(1)
-		}
-
+	// tool server mode answers before anything else: a diagnosis and a composing
+	// conversation both launch this very binary to reach their tools, the
+	// exchange runs on stdin/stdout, and no window or database may come near it.
+	if serveTools(os.Args[1:]) {
 		return
 	}
 
@@ -137,6 +132,38 @@ func main() {
 	err = app.Run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "informer-ui:", err)
+		os.Exit(1)
+	}
+}
+
+// serveTools answers the mcp sub commands, reporting whether one of them ran.
+//
+// The two are mutually exclusive on the first argument, and both have to be
+// checked here rather than anywhere later: this process is a child of the agent
+// command line, and everything main does afterwards - a window, a database, a
+// line of logging on stdout - would break the protocol it is holding.
+func serveTools(args []string) bool {
+	if dir, ok := diagnose.ServeArgs(args); ok {
+		exitOnServeError(diagnose.ServeStdio(context.Background(), dir, version))
+
+		return true
+	}
+
+	if dir, ok := compose.ServeArgs(args); ok {
+		exitOnServeError(compose.ServeStdio(context.Background(), dir, version))
+
+		return true
+	}
+
+	return false
+}
+
+// exitOnServeError reports a tool server that could not run. There is no window
+// to show it in, so stderr - which the agent command line reads - is the only
+// place the reason can surface.
+func exitOnServeError(err error) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "informer-ui: mcp:", err)
 		os.Exit(1)
 	}
 }

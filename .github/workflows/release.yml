@@ -40,7 +40,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27.0'
           cache-dependency-path: |
             go.sum
             cmd/informer-ui/go.sum
@@ -113,7 +113,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27.0'
           cache-dependency-path: |
             go.sum
             cmd/informer-ui/go.sum
@@ -174,7 +174,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27.0'
           cache-dependency-path: |
             go.sum
             cmd/informer-ui/go.sum
@@ -280,7 +280,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27.0'
           cache-dependency-path: go.sum
 
       - name: Install C compiler (Linux)
