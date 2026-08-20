@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+//nolint:gosmopolitan //the fixtures and assertions quote the shipped chinese text.
 package service_test
 
 import (

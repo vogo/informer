@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+// Every case here asserts on the chinese text informer ships - the tool answers
+// an agent reads and the prompt it is given - so the whole file quotes it.
+//
+//nolint:gosmopolitan //the assertions quote the shipped chinese text.
 package diagnose_test
 
 import (

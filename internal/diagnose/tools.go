@@ -494,6 +494,8 @@ func renderSource(session *Session) string {
 
 // decodeArgs reads a tool's arguments, treating an absent object as an empty
 // one: a model that calls a tool with no arguments at all means the defaults.
+//
+//nolint:gosmopolitan //informer is a chinese product; the agent answers its user.
 func decodeArgs(arguments json.RawMessage, into any) error {
 	trimmed := strings.TrimSpace(string(arguments))
 	if trimmed == "" || trimmed == "null" {

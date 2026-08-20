@@ -69,6 +69,8 @@ func TestMain(m *testing.M) {
 // is not reproducible - but the contract around it: the run concludes, the
 // source is untouched, and a proposal is offered only when informer's own
 // re-parse produced articles.
+//
+//nolint:gosmopolitan //informer is a chinese product; the fixtures speak the user's language.
 func TestDiagnoseSourceEndToEnd(t *testing.T) {
 	if os.Getenv(agentE2EEnv) == "" {
 		t.Skipf("set %s=1 to run the real agent end to end", agentE2EEnv)
