@@ -42,7 +42,7 @@ const (
 	// candidate, reads the result and tries again, so the configured fetch
 	// timeout - five minutes by default - would cut it off halfway. The floor is
 	// lower than a diagnosis's because a person is sitting in front of this one,
-	// but a configured budget above it is still honoured.
+	// but a configured budget above it is still honored.
 	ComposeTurnTimeoutSeconds = 600
 
 	// composeMaxTurns bounds one conversation.

@@ -31,7 +31,7 @@ import (
 // turn where it finally proposes one.
 //
 // The order below is written as a procedure rather than as a preference. "Prefer
-// feed" is advice an agent can honour by thinking about it for a moment; "try
+// feed" is advice an agent can honor by thinking about it for a moment; "try
 // feed, and only after these six probes fail may you go on" is something it
 // either did or did not do.
 //

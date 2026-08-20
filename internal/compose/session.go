@@ -41,7 +41,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/mcp"
@@ -227,8 +226,5 @@ func WriteMCPConfig(dir, command string, args ...string) (string, error) {
 // fetch_content's bytes and on a trial that really parsed - and that half of the
 // rule is stated in the prompt, which is the only place it can be.
 func AllowedTools() string {
-	return strings.Join([]string{
-		agent.DefaultAllowedTools,
-		mcp.QualifiedNames(ServerName, toolNames...),
-	}, ",")
+	return agent.DefaultAllowedTools + "," + mcp.QualifiedNames(ServerName, toolNames...)
 }

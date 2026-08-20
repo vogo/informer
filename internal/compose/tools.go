@@ -148,10 +148,10 @@ func proposeSchema() map[string]any {
 // proposeArgs is what one propose_config call carries: a whole configuration,
 // flattened next to the two fields only this tool asks for.
 type proposeArgs struct {
+	parsecfg.Changes
+
 	Title  string `json:"title"`
 	Reason string `json:"reason"`
-
-	parsecfg.Changes
 }
 
 // proposeHandler answers one propose_config call.

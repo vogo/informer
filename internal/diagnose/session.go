@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/feed"
@@ -158,8 +157,5 @@ func WriteMCPConfig(dir, command string, args ...string) (string, error) {
 // itself receives, headers, proxy and all. The prompt states that division;
 // this is only the half of it the command line can enforce.
 func AllowedTools() string {
-	return strings.Join([]string{
-		agent.DefaultAllowedTools,
-		mcp.QualifiedNames(ServerName, toolNames...),
-	}, ",")
+	return agent.DefaultAllowedTools + "," + mcp.QualifiedNames(ServerName, toolNames...)
 }

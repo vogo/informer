@@ -44,6 +44,13 @@ const (
 	titleExp  = "$2"
 	urlExp    = "$1"
 	firstPost = "第一篇文章"
+
+	// noArticles is the refusal a configuration that parses nothing earns, and
+	// the phrase the tool answers with.
+	noArticles = "解析出 0 条"
+
+	// dirFlag names the run directory on the tool server command line.
+	dirFlag = "--dir"
 )
 
 // listingServer answers a two article html listing.
@@ -113,7 +120,8 @@ func proposalOf(t *testing.T, dir string) *compose.Proposal {
 }
 
 // The tools are the contract: look, try, and hand over. Nothing here reaches the
-// database, and the one tool that writes writes a file the parent re-checks.
+// database, and the one tool that records a proposal writes a file the parent
+// re-checks before anyone sees a button.
 func TestToolsOfferNoWayToSave(t *testing.T) {
 	t.Parallel()
 
@@ -255,9 +263,9 @@ func TestProposeConfigRefusesAndRecordsNothing(t *testing.T) {
 			refusal: "这套配置解析失败了",
 		},
 		{
-			name:      "解析出 0 条",
+			name:      noArticles,
 			arguments: `{"title":"空的","url":` + quote(emptyFeed.URL) + `,"parse_type":"feed"}`,
-			refusal:   "解析出 0 条",
+			refusal:   noArticles,
 		},
 		{
 			name: "全部指向同一个地址",
@@ -374,7 +382,7 @@ func TestOpeningPromptCarriesWhatTheUserSaid(t *testing.T) {
 
 	require.Contains(t, opening, "用户想新建一个订阅")
 	require.Contains(t, opening, "我想订阅阮一峰的博客")
-	require.Equal(t, compose.TurnPrompt(" 换一个地址试试 "), "换一个地址试试")
+	require.Equal(t, "换一个地址试试", compose.TurnPrompt(" 换一个地址试试 "))
 }
 
 // ServeArgs is what every executable entry uses to decide whether it was
@@ -385,7 +393,7 @@ func TestServeArgsRecognisesOnlyItsOwnInvocation(t *testing.T) {
 
 	runDir := t.TempDir()
 
-	dir, ok := compose.ServeArgs([]string{compose.ServeCommand, "--dir", runDir})
+	dir, ok := compose.ServeArgs([]string{compose.ServeCommand, dirFlag, runDir})
 	require.True(t, ok)
 	require.Equal(t, runDir, dir)
 
@@ -393,8 +401,8 @@ func TestServeArgsRecognisesOnlyItsOwnInvocation(t *testing.T) {
 		nil,
 		{},
 		{compose.ServeCommand},
-		{compose.ServeCommand, "--dir"},
-		{"mcp-diagnose", "--dir", runDir},
+		{compose.ServeCommand, dirFlag},
+		{"mcp-diagnose", dirFlag, runDir},
 		{"feed", "list"},
 	} {
 		_, found := compose.ServeArgs(args)
@@ -489,7 +497,12 @@ func TestServeStdioKeepsStdoutForTheProtocolAlone(t *testing.T) {
 
 // quote renders a json string literal.
 func quote(value string) string {
-	encoded, _ := json.Marshal(value)
+	// a string always marshals; the helper stays expression shaped so the
+	// fixtures below read as the json they are.
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
 
 	return string(encoded)
 }

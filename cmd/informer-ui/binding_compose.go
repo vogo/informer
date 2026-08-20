@@ -125,6 +125,8 @@ func (a *App) StartCompose() (string, error) {
 // ComposeLogEvent - every page the agent read, every candidate it tried - which
 // for a turn measured in minutes is the difference between a conversation and a
 // spinner.
+//
+//nolint:unparam //the reply is read by the window; no Go caller consumes it.
 func (a *App) ComposeChat(sessionID, message, runID string) (*ComposeReplyDTO, error) {
 	err := a.ready()
 	if err != nil {

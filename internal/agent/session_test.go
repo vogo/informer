@@ -97,7 +97,7 @@ func slicesIndex(args []string, want string) int {
 }
 
 // fakeSessionClaude writes a stand-in that records every turn it is invoked for.
-func fakeSessionClaude(t *testing.T, answer string, delay string) turnRecorder {
+func fakeSessionClaude(t *testing.T, answer, delay string) turnRecorder {
 	t.Helper()
 
 	if runtime.GOOS == windowsGOOS {
@@ -221,14 +221,10 @@ func TestSessionSerializesConcurrentTurns(t *testing.T) {
 	var wait sync.WaitGroup
 
 	for range 2 {
-		wait.Add(1)
-
-		go func() {
-			defer wait.Done()
-
+		wait.Go(func() {
 			_, err := session.Send(t.Context(), "hello", nil)
-			require.NoError(t, err) //nolint:testifylint //a goroutine cannot stop the test.
-		}()
+			require.NoError(t, err)
+		})
 	}
 
 	wait.Wait()

@@ -32,6 +32,13 @@ import (
 	"github.com/vogo/informer/internal/parsecfg"
 )
 
+// The rule the fixture page below answers to, and the group references that go
+// with it.
+const (
+	postRegex = `<a class="post" href="([^"]+)">([^<]+)</a>`
+	titleExp  = "$2"
+)
+
 // A chat reply is prose with a block appended. Braces in the prose above it -
 // a regex quantifier, a sentence about items[] - are exactly what made reading
 // the answer as "everything between the first { and the last }" unusable.
@@ -107,8 +114,8 @@ func TestTrialReportsRowsThatAllPointAtOneAddress(t *testing.T) {
 	wrapped := parsecfg.Trial(&feed.Source{
 		URL:       server.URL,
 		ParseType: feed.ParseTypeRegex,
-		Regex:     `<a class="post" href="([^"]+)">([^<]+)</a>`,
-		TitleExp:  "$2",
+		Regex:     postRegex,
+		TitleExp:  titleExp,
 		URLExp:    "/only.html",
 	})
 
@@ -124,8 +131,8 @@ func TestTrialReportsRowsThatAllPointAtOneAddress(t *testing.T) {
 	proper := parsecfg.Trial(&feed.Source{
 		URL:       server.URL,
 		ParseType: feed.ParseTypeRegex,
-		Regex:     `<a class="post" href="([^"]+)">([^<]+)</a>`,
-		TitleExp:  "$2",
+		Regex:     postRegex,
+		TitleExp:  titleExp,
 		URLExp:    "$1",
 	})
 

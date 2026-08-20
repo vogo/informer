@@ -5,6 +5,10 @@ linters:
     - cyclop
     - depguard
     - exhaustruct
+    # golangci-lint v2.13 deprecated exhaustruct and wsl and shipped the live
+    # versions under new names; the deprecated entries alone stop disabling
+    # anything, so both spellings are listed until the old ones are dropped.
+    - exhaustruct_v5
     - forcetypeassert
     - gochecknoglobals
     - gomodguard
@@ -16,6 +20,7 @@ linters:
     - varnamelen
     - wrapcheck
     - wsl
+    - wsl_v5
   settings:
     dupl:
       threshold: 100

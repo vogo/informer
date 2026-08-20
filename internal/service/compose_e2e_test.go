@@ -30,6 +30,31 @@ import (
 	"github.com/vogo/informer/internal/service"
 )
 
+// unconfiguredListing serves a plain html listing with no feed anywhere: three
+// posts wrapped in a nav bar and a footer, which is what the conversation has to
+// tell apart.
+//
+//nolint:gosmopolitan //informer is a chinese product; the fixtures speak the user's language.
+func unconfiguredListing(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<html><body>
+			<nav><a href="/about">关于</a><a href="/rss">订阅</a></nav>
+			<ul class="post-list">
+			<li class="post-item"><a class="post-link" href="/p/1001">Go 1.25 泛型改进实践</a></li>
+			<li class="post-item"><a class="post-link" href="/p/1002">用 eBPF 定位线上抖动</a></li>
+			<li class="post-item"><a class="post-link" href="/p/1003">SQLite 并发写入的真相</a></li>
+			</ul>
+			<footer><a href="/contact">联系我们</a></footer>
+			</body></html>`))
+	}))
+	t.Cleanup(server.Close)
+
+	return server
+}
+
 // TestComposeSourceEndToEnd drives the whole composing feature against a real
 // agent: a listing page nobody has configured yet, a person describing it in one
 // sentence, and a conversation that has to read the page, try a candidate and
@@ -48,20 +73,7 @@ func TestComposeSourceEndToEnd(t *testing.T) {
 		t.Skipf("set %s=1 to run the real agent end to end", agentE2EEnv)
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`<html><body>
-			<nav><a href="/about">关于</a><a href="/rss">订阅</a></nav>
-			<ul class="post-list">
-			<li class="post-item"><a class="post-link" href="/p/1001">Go 1.25 泛型改进实践</a></li>
-			<li class="post-item"><a class="post-link" href="/p/1002">用 eBPF 定位线上抖动</a></li>
-			<li class="post-item"><a class="post-link" href="/p/1003">SQLite 并发写入的真相</a></li>
-			</ul>
-			<footer><a href="/contact">联系我们</a></footer>
-			</body></html>`))
-	}))
-	defer server.Close()
-
+	server := unconfiguredListing(t)
 	svc := newService(t)
 
 	sink := runlog.FuncSink(func(entry runlog.Entry) {

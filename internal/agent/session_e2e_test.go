@@ -40,16 +40,18 @@ const agentE2EEnv = "INFORMER_AGENT_E2E"
 // honest way to check it is to ask it something only the first turn could
 // answer.
 func TestSessionContinuesARealConversation(t *testing.T) {
+	t.Parallel()
+
 	if os.Getenv(agentE2EEnv) == "" {
 		t.Skipf("set %s=1 to run the real agent conversation", agentE2EEnv)
 	}
 
 	session := agent.NewSession(&agent.Config{})
 
-	_, err := session.Send(t.Context(), "请记住这个数字：4271。只回答「好的」。", nil)
+	_, err := session.Send(t.Context(), "Remember this number: 4271. Reply with just OK.", nil)
 	require.NoError(t, err)
 
-	answer, err := session.Send(t.Context(), "我刚才让你记住的数字是多少？只回答数字本身。", nil)
+	answer, err := session.Send(t.Context(), "What number did I ask you to remember? Reply with the number alone.", nil)
 	require.NoError(t, err)
 
 	require.Contains(t, answer, "4271")
