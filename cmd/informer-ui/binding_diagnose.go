@@ -41,11 +41,12 @@ func diagnoseSinkFor(runID string) runlog.Sink {
 	return runLogSinkFor(DiagnoseLogEvent, runID)
 }
 
-// ErrDiagnoseRunning marks a diagnosis issued while another one of this process
-// is still in flight. One agent run at a time is deliberate: each one drives a
-// command line for minutes and spends real api budget, and two at once is far
-// more often a double click than an intention.
-var ErrDiagnoseRunning = errors.New("a diagnosis is already running, wait for it to finish")
+// ErrDiagnoseRunning marks a diagnosis issued while another agent run of this
+// process - a diagnosis or a turn of a composing conversation - is still in
+// flight. One at a time is deliberate: each drives a command line for minutes
+// and spends real api budget, and two at once is far more often a double click
+// than an intention.
+var ErrDiagnoseRunning = errors.New("an AI run is already in progress, wait for it to finish")
 
 // ErrNoFixToApply marks an apply call carrying no proposal.
 var ErrNoFixToApply = errors.New("there is no proposed fix to apply")
@@ -76,6 +77,10 @@ type DiagnoseVerificationDTO struct {
 
 	// Error is why the verification failed, empty when it succeeded.
 	Error string `json:"error"`
+
+	// Note says why nothing was verified, when nothing was. "not verified" and
+	// "verified and failed" have to look different to the person deciding.
+	Note string `json:"note"`
 }
 
 // DiagnoseReportDTO is what one diagnosis run tells the window.
@@ -126,11 +131,11 @@ func (a *App) DiagnoseSource(id int64, runID string) (*DiagnoseReportDTO, error)
 		return nil, err
 	}
 
-	if !a.diagnoseMu.TryLock() {
+	if !a.agentMu.TryLock() {
 		return nil, ErrDiagnoseRunning
 	}
 
-	defer a.diagnoseMu.Unlock()
+	defer a.agentMu.Unlock()
 
 	report, err := a.svc.DiagnoseSource(context.Background(), id, diagnoseSinkFor(runID))
 	if err != nil {
@@ -164,15 +169,16 @@ func (a *App) DiagnoseSource(id int64, runID string) (*DiagnoseReportDTO, error)
 }
 
 // toVerificationDTO maps informer's own check into the frontend shape.
-func toVerificationDTO(verification *service.DiagnoseVerification) *DiagnoseVerificationDTO {
+func toVerificationDTO(verification *service.ParseVerification) *DiagnoseVerificationDTO {
 	if verification == nil {
-		return &DiagnoseVerificationDTO{Samples: []*ArticleDTO{}}
+		return &DiagnoseVerificationDTO{Samples: []*ArticleDTO{}} //nolint:exhaustruct //nothing was verified.
 	}
 
 	dto := &DiagnoseVerificationDTO{
 		Ran:          verification.Ran,
 		ArticleCount: verification.ArticleCount,
 		Error:        verification.Error,
+		Note:         verification.Note,
 		Samples:      make([]*ArticleDTO, 0, len(verification.Samples)),
 	}
 

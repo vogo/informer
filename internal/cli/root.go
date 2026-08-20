@@ -24,6 +24,7 @@ import (
 
 	"github.com/vogo/logger"
 
+	"github.com/vogo/informer/internal/compose"
 	"github.com/vogo/informer/internal/diagnose"
 	"github.com/vogo/informer/internal/home"
 	"github.com/vogo/informer/internal/service"
@@ -40,10 +41,15 @@ import (
 // them, keeping this package free of presentation choices.
 func Run(args []string) error {
 	// tool server mode is answered before anything else: it is launched by the
-	// agent command line of a diagnosis, speaks json-rpc on stdout, and must
-	// not open the database the window already has open.
+	// agent command line of a diagnosis or of a composing conversation, speaks
+	// json-rpc on stdout, and must not open the database the window already has
+	// open.
 	if dir, ok := diagnose.ServeArgs(args[1:]); ok {
 		return diagnose.ServeStdio(context.Background(), dir, "cli")
+	}
+
+	if dir, ok := compose.ServeArgs(args[1:]); ok {
+		return compose.ServeStdio(context.Background(), dir, "cli")
 	}
 
 	exePath, _ := os.Executable()

@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/vogo/informer/internal/compose"
 	"github.com/vogo/informer/internal/diagnose"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/runlog"
@@ -43,22 +44,32 @@ import (
 //	INFORMER_AGENT_E2E=1 go test ./internal/service -run DiagnoseSourceEndToEnd -v
 const agentE2EEnv = "INFORMER_AGENT_E2E"
 
-// TestMain doubles this test binary as the diagnosis tool server.
+// TestMain doubles this test binary as the tool server of both agent features.
 //
-// A diagnosis launches os.Executable() to reach its tools, and under `go test`
-// that executable is this binary. Answering the sub command here is what lets
-// the end to end test exercise the real wiring instead of a stand in.
+// A diagnosis and a composing conversation each launch os.Executable() to reach
+// their tools, and under `go test` that executable is this binary. Answering
+// both sub commands here is what lets the end to end tests exercise the real
+// wiring instead of a stand in. There is one TestMain per package, so this is
+// the only place either can be answered.
 func TestMain(m *testing.M) {
 	if dir, ok := diagnose.ServeArgs(os.Args[1:]); ok {
-		err := diagnose.ServeStdio(context.Background(), dir, "test")
-		if err != nil {
-			os.Exit(1)
-		}
+		os.Exit(serveExitCode(diagnose.ServeStdio(context.Background(), dir, "test")))
+	}
 
-		os.Exit(0)
+	if dir, ok := compose.ServeArgs(os.Args[1:]); ok {
+		os.Exit(serveExitCode(compose.ServeStdio(context.Background(), dir, "test")))
 	}
 
 	os.Exit(m.Run())
+}
+
+// serveExitCode turns a tool server outcome into a process exit code.
+func serveExitCode(err error) int {
+	if err != nil {
+		return 1
+	}
+
+	return 0
 }
 
 // TestDiagnoseSourceEndToEnd drives the whole feature against a real agent: a

@@ -25,7 +25,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/mcp"
 )
 
 // SessionFileName is the document one diagnosis run is described by. It lives in
@@ -123,15 +125,10 @@ func ReadSession(dir string) (*Session, error) {
 
 // MCPServerConfig is the document the agent command line loads to reach this
 // server: one stdio server, launched from the given executable.
-type MCPServerConfig struct {
-	MCPServers map[string]MCPServerEntry `json:"mcpServers"`
-}
+type MCPServerConfig = mcp.ServerConfig
 
 // MCPServerEntry describes one stdio server.
-type MCPServerEntry struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-}
+type MCPServerEntry = mcp.ServerEntry
 
 // WriteMCPConfig stores the mcp server document of a run and returns its path.
 //
@@ -144,36 +141,25 @@ func WriteMCPConfig(dir, command string, args ...string) (string, error) {
 		return "", fmt.Errorf("create diagnose dir: %w", err)
 	}
 
-	encoded, err := json.MarshalIndent(MCPServerConfig{
-		MCPServers: map[string]MCPServerEntry{
-			ServerName: {Command: command, Args: args},
-		},
-	}, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("encode mcp config: %w", err)
-	}
-
 	path := filepath.Join(dir, MCPConfigFileName)
 
-	err = os.WriteFile(path, encoded, 0o600)
-	if err != nil {
-		return "", fmt.Errorf("write mcp config: %w", err)
-	}
-
-	return path, nil
+	return path, mcp.WriteConfig(path, ServerName, command, args...)
 }
 
 // AllowedTools is the tool set a diagnosis run may use, in the form the agent
 // command line expects.
 //
-// Only the three server tools are listed. A diagnosis that could search the web
-// would spend its time reading documentation about the site instead of the bytes
-// informer received, and reading those bytes is the entire job.
+// It is the three server tools plus the two read only web tools. The web tools
+// are there to explore with - find where a feed moved to, check whether the site
+// announced a redesign, read the documentation of an api - because a diagnosis
+// that can only stare at one document has no way to form a hypothesis about a
+// page that changed. What they are not there for is judging: the verdict has to
+// rest on the bytes fetch_content returned, since those are the bytes informer
+// itself receives, headers, proxy and all. The prompt states that division;
+// this is only the half of it the command line can enforce.
 func AllowedTools() string {
-	names := make([]string, 0, len(toolNames))
-	for _, name := range toolNames {
-		names = append(names, "mcp__"+ServerName+"__"+name)
-	}
-
-	return strings.Join(names, ",")
+	return strings.Join([]string{
+		agent.DefaultAllowedTools,
+		mcp.QualifiedNames(ServerName, toolNames...),
+	}, ",")
 }

@@ -22,6 +22,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/vogo/informer/internal/parsecfg"
 )
 
 // ErrNoReport marks an answer that carries no json report at all - the agent
@@ -81,8 +83,10 @@ const promptTemplate = `你是 informer 的订阅诊断助手。informer 是一�
 - 你没有保存配置的能力，也不需要有。你只负责给出结论和建议的改动，informer 会自己复核，
   再由用户确认是否应用。
 - 不要编造。如果页面需要登录、站点已经关闭、或者你确实修不好，如实说明并给出建议。
-- 除了上面三个工具，不要用其它方式访问这个页面：informer 的抓取带着订阅自己的请求头和代理，
-  换一种抓法看到的内容不一样，据此做的判断是错的。
+- WebSearch / WebFetch 只能用来探索：找这个站点的 feed 地址、确认它是不是改版了、查接口文档。
+  但**任何结论都必须以 %s 取到的字节为准，任何候选配置都必须用 %s 试跑验证过**。
+  informer 抓取时带着订阅自己的请求头和代理，WebFetch 拿到的内容和它不一样，
+  「页面格式变了」这类判断如果建立在别的抓法上，就是错的。
 `
 
 // outputContract is appended to the instruction and is the only part of the
@@ -113,6 +117,8 @@ func BuildPrompt(session *Session) string {
 		toolTryParse,
 		toolTryParse,
 		strings.Join(RepairableFields(), "、"),
+		toolFetchContent,
+		toolTryParse,
 	)
 
 	return instruction + fmt.Sprintf(outputContract, toolTryParse)
@@ -124,9 +130,9 @@ func BuildPrompt(session *Session) string {
 // or prefixes a sentence still answered the question: the shape is recovered
 // rather than the whole run thrown away over punctuation.
 func ParseReport(raw string) (*Report, error) {
-	document := extractJSONObject(stripCodeFence(raw))
+	document := parsecfg.ExtractJSONObject(parsecfg.StripCodeFence(raw))
 	if document == "" {
-		return nil, fmt.Errorf("%w: %s", ErrNoReport, truncate(raw, maxQuotedRunes))
+		return nil, fmt.Errorf("%w: %s", ErrNoReport, parsecfg.Truncate(raw, maxQuotedRunes))
 	}
 
 	var report Report
@@ -151,53 +157,3 @@ func ParseReport(raw string) (*Report, error) {
 
 // maxQuotedRunes bounds the answer text quoted back into an error.
 const maxQuotedRunes = 400
-
-// stripCodeFence removes the ``` wrapper a model may put around its json.
-func stripCodeFence(raw string) string {
-	text := strings.TrimSpace(raw)
-	if !strings.HasPrefix(text, "```") {
-		return text
-	}
-
-	newline := strings.IndexByte(text, '\n')
-	if newline < 0 {
-		return ""
-	}
-
-	text = text[newline+1:]
-
-	if closing := strings.LastIndex(text, "```"); closing >= 0 {
-		text = text[:closing]
-	}
-
-	return strings.TrimSpace(text)
-}
-
-// extractJSONObject returns the outermost json object inside the text, so a
-// stray sentence before or after the answer does not cost the whole diagnosis.
-func extractJSONObject(text string) string {
-	start := strings.IndexByte(text, '{')
-	if start < 0 {
-		return ""
-	}
-
-	end := strings.LastIndexByte(text, '}')
-	if end <= start {
-		return ""
-	}
-
-	return text[start : end+1]
-}
-
-// truncate shortens text to at most limit runes, cutting on rune boundaries so a
-// chinese answer is never sliced into invalid utf-8.
-func truncate(text string, limit int) string {
-	trimmed := strings.TrimSpace(text)
-
-	runes := []rune(trimmed)
-	if len(runes) <= limit {
-		return trimmed
-	}
-
-	return string(runes[:limit]) + "..."
-}

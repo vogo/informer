@@ -57,11 +57,13 @@ type App struct {
 	// just as for a manual one. It is written only under informMu.
 	informRunning atomic.Bool
 
-	// diagnoseMu serializes the AI diagnoses of this process. One at a time is
-	// deliberate: each run drives an agent command line for minutes and spends
-	// real api budget, and two at once is far more often a double click than an
-	// intention.
-	diagnoseMu sync.Mutex
+	// agentMu serializes the agent runs of this process: an AI diagnosis and a
+	// turn of an AI composing conversation both take it. One at a time is
+	// deliberate: each drives an agent command line for minutes and spends real
+	// api budget, and two at once is far more often a double click than an
+	// intention. The two features share the gate rather than holding one each,
+	// because two command lines running at once is exactly what it is for.
+	agentMu sync.Mutex
 
 	// sched runs the configured daily push while the window is open; nil when
 	// startup failed or before the window exists.

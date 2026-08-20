@@ -26,6 +26,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/vogo/informer/internal/feed"
 	"gorm.io/gorm"
@@ -53,6 +54,16 @@ const (
 type Service struct {
 	db      *gorm.DB
 	homeDir string
+
+	// composeMu guards the composing conversation registry alone. It is never
+	// held across an agent run: a turn takes minutes, and closing the window
+	// must not have to wait for one.
+	composeMu sync.Mutex
+
+	// compose is the one live composing conversation, if any. The modal that
+	// drives it is singular, so allowing a second would only mean leaking the
+	// first one's run directory.
+	compose *ComposeSession
 }
 
 // New opens the feed database inside homeDir and returns the service bound to it.

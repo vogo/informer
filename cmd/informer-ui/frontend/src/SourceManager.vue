@@ -48,6 +48,7 @@ import {
   type SourceImportResultDTO,
 } from './bindings'
 import CategoryPanel from './CategoryPanel.vue'
+import SourceCompose from './SourceCompose.vue'
 import SourceDiagnose from './SourceDiagnose.vue'
 import {errorText} from './errors'
 import {compact, requireValue} from './nulls'
@@ -187,7 +188,24 @@ function emptyForm(): SourceForm {
   }
 }
 
-const modalTitle = computed(() => (form.id === 0 ? '新增订阅' : `编辑订阅 #${form.id}`))
+// aiMode swaps the create modal's body for the composing chat. The form stays
+// mounted-but-hidden and is never reset by the switch: a user who tried the AI
+// and went back should find what they had already typed.
+const aiMode = ref(false)
+const aiBusy = ref(false)
+const composePanel = ref<InstanceType<typeof SourceCompose> | null>(null)
+
+const modalTitle = computed(() => {
+  if (form.id !== 0) {
+    return `编辑订阅 #${form.id}`
+  }
+
+  return aiMode.value ? 'AI 定义配置' : '新增订阅'
+})
+
+// the chat needs room for a transcript, a configuration card and a log panel;
+// 640px is a form's width, not a conversation's.
+const modalWidth = computed(() => (aiMode.value ? '820px' : '640px'))
 const isAgentType = computed(() => form.parseType === 'agent')
 const showRegexFields = computed(() => form.parseType === 'regex' || form.parseType === '')
 const showJsonFields = computed(() => form.parseType === 'json' || form.parseType === '')
@@ -209,10 +227,13 @@ function onCreateCategoryOption(label: string) {
   return {label: name, value: name}
 }
 
-// resolveCategoryId turns the form value into a real category id before save:
+// resolveCategoryId turns a select value into a real category id before save:
 // pick existing, create a new one from a typed name, or leave 0 for「未分类」.
-async function resolveCategoryId(): Promise<number> {
-  const raw = form.categoryId
+//
+// It takes the value rather than reading the form, because the composing chat
+// carries its own category select and must resolve it the same way - creating a
+// category by typing its name is one behaviour, not two.
+async function resolveCategoryId(raw: number | string | null = form.categoryId): Promise<number> {
   if (raw == null || raw === '' || raw === 0) {
     return 0
   }
@@ -432,8 +453,28 @@ function categoryName(id: number): string {
 
 function openCreate() {
   Object.assign(form, emptyForm(), {categoryId: selectedCategoryId.value})
+  aiMode.value = false
   showModal.value = true
 }
+
+// onComposeCreated closes the modal on the subscription the chat just created,
+// and reloads: the list behind it still shows the world before it existed.
+async function onComposeCreated() {
+  aiMode.value = false
+  showModal.value = false
+  await refreshAll()
+}
+
+// the conversation is ended whenever the modal closes, whichever way it closed.
+// SourceCompose also does this on unmount; both paths exist because a modal that
+// is merely hidden is not always unmounted.
+watch(showModal, open => {
+  if (!open) {
+    composePanel.value?.close()
+    aiMode.value = false
+    aiBusy.value = false
+  }
+})
 
 function openEdit(row: SourceDTO) {
   Object.assign(form, emptyForm(), {
@@ -457,6 +498,9 @@ function openEdit(row: SourceDTO) {
     categoryId: row.categoryId,
     enabled: row.enabled
   })
+  // editing a failing source is what「AI 诊断修复」is for; this entry point is
+  // only about a subscription that does not exist yet.
+  aiMode.value = false
   showModal.value = true
 }
 
@@ -803,10 +847,27 @@ async function onFixApplied() {
       v-model:show="showModal"
       preset="card"
       :title="modalTitle"
-      style="width: 640px"
+      :style="{width: modalWidth}"
       :mask-closable="false"
+      :closable="!aiBusy"
     >
-      <n-form :model="form" label-placement="left" label-width="auto">
+      <template v-if="form.id === 0" #header-extra>
+        <n-button v-if="!aiMode" size="tiny" tertiary @click="aiMode = true">AI 定义配置</n-button>
+        <n-button v-else size="tiny" tertiary :disabled="aiBusy" @click="aiMode = false">返回表单</n-button>
+      </template>
+
+      <SourceCompose
+        v-if="aiMode"
+        ref="composePanel"
+        :category-options="categoryOptions"
+        :default-category-id="form.categoryId"
+        :create-category-option="onCreateCategoryOption"
+        :resolve-category="resolveCategoryId"
+        @created="onComposeCreated"
+        @busy="aiBusy = $event"
+      />
+
+      <n-form v-else :model="form" label-placement="left" label-width="auto">
         <n-form-item label="标题">
           <n-input v-model:value="form.title" placeholder="订阅名称，例如：阮一峰 blog" />
         </n-form-item>
@@ -900,8 +961,12 @@ async function onFixApplied() {
 
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showModal = false">取消</n-button>
-          <n-button :loading="saving" type="primary" @click="save">保存</n-button>
+          <n-button :disabled="aiBusy" @click="showModal = false">
+            {{ aiMode ? '关闭' : '取消' }}
+          </n-button>
+          <!-- in AI mode the save button belongs to a proposal card, not to the
+               modal: there is nothing here to save until one arrives. -->
+          <n-button v-if="!aiMode" :loading="saving" type="primary" @click="save">保存</n-button>
         </n-space>
       </template>
     </n-modal>

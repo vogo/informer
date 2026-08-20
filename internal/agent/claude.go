@@ -151,12 +151,32 @@ func drainStderr(reader io.Reader, kept *strings.Builder, observer Observer) {
 // --strict-mcp-config is passed whether or not a server is configured, so the
 // run reaches exactly the servers informer named and never a server the user
 // happens to have configured for their own interactive sessions.
+//
+// A conversation is named on its first turn and resumed on every later one. The
+// two flags are mutually exclusive: naming a session that is being resumed is
+// refused by the command line unless the session is also forked, and forking is
+// exactly what a continued conversation must not do.
+//
+// Everything here is passed again on every turn. The transcript remembers what
+// was said, not how the process was invoked, so a resumed turn that dropped
+// --mcp-config would be a turn whose tools quietly vanished.
 func claudeArgs(cfg *Config, prompt string) []string {
 	args := []string{
 		"--print", prompt,
 		"--output-format", "stream-json",
 		"--verbose",
 		"--strict-mcp-config",
+	}
+
+	switch {
+	case cfg.SessionID != "" && cfg.ResumeSession:
+		args = append(args, "--resume", cfg.SessionID)
+	case cfg.SessionID != "":
+		args = append(args, "--session-id", cfg.SessionID)
+	}
+
+	if cfg.AppendSystemPrompt != "" {
+		args = append(args, "--append-system-prompt", cfg.AppendSystemPrompt)
 	}
 
 	if cfg.MCPConfigPath != "" {

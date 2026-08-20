@@ -19,7 +19,7 @@ package service
 
 // This file tests from inside the package on purpose.
 //
-// buildDiagnoseReport and verifyDiagnose are unexported, and they are where the
+// buildDiagnoseReport and verifyCandidate are unexported, and they are where the
 // whole diagnosis feature's safety net lives: they decide whether informer
 // offers a one click fix at all. Reaching them through DiagnoseSource would mean
 // driving a real agent, which no ordinary test run may do, so they are exercised
@@ -114,7 +114,7 @@ func TestVerifyDiagnoseAcceptsAProposalThatParses(t *testing.T) {
 	svc := internalService(t)
 	source := staleSource(postsPage(t, 2))
 
-	verification := svc.verifyDiagnose(
+	verification := svc.verifyCandidate(
 		(&diagnose.Changes{Regex: strPtr(freshRegex)}).Apply(source), nil)
 
 	require.True(t, verification.Ran)
@@ -128,7 +128,7 @@ func TestVerifyDiagnoseRejectsAProposalThatStillFails(t *testing.T) {
 	svc := internalService(t)
 	source := staleSource(postsPage(t, 2))
 
-	verification := svc.verifyDiagnose(
+	verification := svc.verifyCandidate(
 		(&diagnose.Changes{Regex: strPtr(`<a class="nope" href="([^"]+)">([^<]+)</a>`)}).Apply(source), nil)
 
 	require.True(t, verification.Ran)
@@ -142,7 +142,7 @@ func TestVerifyDiagnoseRefusesAnInvalidCandidate(t *testing.T) {
 	svc := internalService(t)
 	source := staleSource(postsPage(t, 2))
 
-	verification := svc.verifyDiagnose(
+	verification := svc.verifyCandidate(
 		(&diagnose.Changes{URL: strPtr(""), CURL: strPtr("")}).Apply(source), nil)
 
 	require.True(t, verification.Ran)
@@ -154,14 +154,14 @@ func TestVerifyDiagnoseRefusesAnInvalidCandidate(t *testing.T) {
 // that the titles are articles at all, not reading the whole feed.
 func TestVerifyDiagnoseQuotesOnlyASampleOfALongResult(t *testing.T) {
 	svc := internalService(t)
-	source := staleSource(postsPage(t, diagnoseSampleArticles+5))
+	source := staleSource(postsPage(t, verifySampleArticles+5))
 
-	verification := svc.verifyDiagnose(
+	verification := svc.verifyCandidate(
 		(&diagnose.Changes{Regex: strPtr(freshRegex)}).Apply(source), nil)
 
 	require.Empty(t, verification.Error)
-	require.Equal(t, diagnoseSampleArticles+5, verification.ArticleCount)
-	require.Len(t, verification.Samples, diagnoseSampleArticles)
+	require.Equal(t, verifySampleArticles+5, verification.ArticleCount)
+	require.Len(t, verification.Samples, verifySampleArticles)
 }
 
 func TestBuildDiagnoseReportOffersAVerifiedFix(t *testing.T) {
@@ -309,14 +309,14 @@ func TestBuildDiagnoseReportTreatsAnEchoAsNoProposal(t *testing.T) {
 	require.Contains(t, strings.Join(problems, "\n"), "没有给出可用的配置改动")
 }
 
-// diagnoseObserver is allowed to be handed no sink at all, which is what an
+// agentObserver is allowed to be handed no sink at all, which is what an
 // unwatched run passes.
 func TestDiagnoseObserverToleratesNoSink(t *testing.T) {
-	require.Nil(t, diagnoseObserver(nil))
+	require.Nil(t, agentObserver(nil))
 
 	var seen []string
 
-	observer := diagnoseObserver(runlog.FuncSink(func(entry runlog.Entry) {
+	observer := agentObserver(runlog.FuncSink(func(entry runlog.Entry) {
 		seen = append(seen, entry.Level+":"+entry.Text)
 	}))
 	require.NotNil(t, observer)
