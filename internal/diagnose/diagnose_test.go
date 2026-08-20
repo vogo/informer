@@ -441,9 +441,12 @@ func TestServeAnswersOverTheProtocol(t *testing.T) {
 func TestServeArgsRecognisesOnlyTheToolServerInvocation(t *testing.T) {
 	t.Parallel()
 
-	const runDir = "/tmp/run"
+	const (
+		runDir  = "/tmp/run"
+		dirFlag = "--dir"
+	)
 
-	dir, ok := diagnose.ServeArgs([]string{diagnose.ServeCommand, "--dir", runDir})
+	dir, ok := diagnose.ServeArgs([]string{diagnose.ServeCommand, dirFlag, runDir})
 	require.True(t, ok)
 	require.Equal(t, runDir, dir)
 
@@ -452,10 +455,10 @@ func TestServeArgsRecognisesOnlyTheToolServerInvocation(t *testing.T) {
 		{},
 		{"version"},
 		{diagnose.ServeCommand},
-		{diagnose.ServeCommand, "--dir"},
+		{diagnose.ServeCommand, dirFlag},
 		{diagnose.ServeCommand, "--home", runDir},
-		{"feed", "--dir", runDir},
-		{"--dir", runDir, diagnose.ServeCommand},
+		{"feed", dirFlag, runDir},
+		{dirFlag, runDir, diagnose.ServeCommand},
 	} {
 		_, found := diagnose.ServeArgs(args)
 		require.False(t, found, "must not be mistaken for tool server mode: %v", args)

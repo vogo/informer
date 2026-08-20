@@ -34,7 +34,7 @@ import (
 // brokenListing serves a page whose markup the stored regex below no longer
 // matches, which is the failure the diagnosis feature exists for.
 //
-//nolint:gosmopolitan //informer is a chinese product; the fixtures speak the user's language.
+//nolint:gosmopolitan //the fixtures quote the shipped chinese text.
 func brokenListing(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -87,7 +87,7 @@ func storedSource(t *testing.T, app *App, id int64) *SourceDTO {
 
 // brokenRequest is a subscription whose regex stopped matching brokenListing.
 //
-//nolint:gosmopolitan //informer is a chinese product; the fixtures speak the user's language.
+//nolint:gosmopolitan //the fixtures quote the shipped chinese text.
 func brokenRequest(server *httptest.Server) *SaveSourceRequest {
 	return &SaveSourceRequest{
 		Title:     "测试站",
@@ -215,13 +215,13 @@ func TestVerificationDTOAlwaysCarriesASampleList(t *testing.T) {
 		Ran:          true,
 		ArticleCount: 42,
 		Samples: []*feed.Article{
-			{Title: "第一篇", URL: "https://example.com/1"},
-			{Title: "第二篇", URL: "https://example.com/2"},
+			{Title: "first post", URL: "https://example.com/1"},
+			{Title: "second post", URL: "https://example.com/2"},
 		},
 	})
 	assert.Equal(t, 42, filled.ArticleCount, "the count is the whole result, not the sample size")
 	require.Len(t, filled.Samples, 2)
-	assert.Equal(t, "第一篇", filled.Samples[0].Title)
+	assert.Equal(t, "first post", filled.Samples[0].Title)
 	assert.Equal(t, "https://example.com/2", filled.Samples[1].URL)
 }
 

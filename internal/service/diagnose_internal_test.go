@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-//nolint:gosmopolitan //informer is a chinese product; the fixtures quote the shipped text.
 package service
 
 // This file tests from inside the package on purpose.
@@ -79,9 +78,9 @@ func postsPage(t *testing.T, posts int) *httptest.Server {
 	for i := 1; i <= posts; i++ {
 		body.WriteString(`<li><a class="post" href="/p/`)
 		body.WriteRune(rune('0' + i%10))
-		body.WriteString(`.html">第 `)
+		body.WriteString(`.html">Post `)
 		body.WriteRune(rune('0' + i%10))
-		body.WriteString(` 篇</a></li>`)
+		body.WriteString(`</a></li>`)
 	}
 
 	body.WriteString("</ul>")
@@ -102,7 +101,7 @@ func postsPage(t *testing.T, posts int) *httptest.Server {
 func staleSource(server *httptest.Server) *feed.Source {
 	return &feed.Source{
 		ID:        7,
-		Title:     "测试站",
+		Title:     "a blog",
 		URL:       server.URL,
 		ParseType: feed.ParseTypeRegex,
 		Regex:     staleRegex,
@@ -122,7 +121,7 @@ func TestVerifyDiagnoseAcceptsAProposalThatParses(t *testing.T) {
 	require.Empty(t, verification.Error)
 	require.Equal(t, 2, verification.ArticleCount)
 	require.Len(t, verification.Samples, 2)
-	require.Contains(t, verification.Samples[0].Title, "篇")
+	require.Contains(t, verification.Samples[0].Title, "Post")
 }
 
 func TestVerifyDiagnoseRejectsAProposalThatStillFails(t *testing.T) {
@@ -171,14 +170,14 @@ func TestBuildDiagnoseReportOffersAVerifiedFix(t *testing.T) {
 
 	result := svc.buildDiagnoseReport(source, &diagnose.Report{
 		Fixed:     true,
-		Diagnosis: "页面改版了",
+		Diagnosis: "the markup changed",
 		Changes:   &diagnose.Changes{Regex: strPtr(freshRegex)},
 	}, nil)
 
 	require.True(t, result.Fixed)
 	require.True(t, result.AgentClaimedFixed)
 	require.Equal(t, source.ID, result.SourceID)
-	require.Equal(t, "页面改版了", result.Diagnosis)
+	require.Equal(t, "the markup changed", result.Diagnosis)
 
 	require.NotNil(t, result.Changes)
 	require.Len(t, result.Diff, 1)
@@ -192,6 +191,8 @@ func TestBuildDiagnoseReportOffersAVerifiedFix(t *testing.T) {
 // The case the whole design exists for: the agent says it fixed the source and
 // informer's own re-parse disagrees. The agent's claim is recorded, the verdict
 // is not, and no fix is offered.
+//
+//nolint:gosmopolitan //asserts on the chinese line informer records.
 func TestBuildDiagnoseReportRefusesAFixItsOwnRecheckFails(t *testing.T) {
 	svc := internalService(t)
 	source := staleSource(postsPage(t, 3))
@@ -206,7 +207,7 @@ func TestBuildDiagnoseReportRefusesAFixItsOwnRecheckFails(t *testing.T) {
 
 	result := svc.buildDiagnoseReport(source, &diagnose.Report{
 		Fixed:     true,
-		Diagnosis: "我改好了",
+		Diagnosis: "I fixed it",
 		Changes:   &diagnose.Changes{Regex: strPtr(`<a class="nope" href="([^"]+)">([^<]+)</a>`)},
 	}, sink)
 
@@ -225,6 +226,8 @@ const emptyAtom = `<?xml version="1.0" encoding="utf-8"?>
 // A proposal that parses without error but yields nothing is the usual
 // half-fixed state, and it must not be offered as a fix either: switching this
 // source to the site's new feed "works", and subscribes the user to silence.
+//
+//nolint:gosmopolitan //asserts on the chinese line informer records.
 func TestBuildDiagnoseReportRefusesAFixThatParsesNothing(t *testing.T) {
 	svc := internalService(t)
 	source := staleSource(postsPage(t, 3))
@@ -245,7 +248,7 @@ func TestBuildDiagnoseReportRefusesAFixThatParsesNothing(t *testing.T) {
 
 	result := svc.buildDiagnoseReport(source, &diagnose.Report{
 		Fixed:     true,
-		Diagnosis: "站点现在提供 feed 了",
+		Diagnosis: "the site publishes a feed now",
 		Changes: &diagnose.Changes{
 			ParseType: strPtr(feed.ParseTypeFeed),
 			URL:       strPtr(feedServer.URL),
@@ -267,19 +270,21 @@ func TestBuildDiagnoseReportKeepsAnUnfixableAnswer(t *testing.T) {
 	source := staleSource(postsPage(t, 3))
 
 	result := svc.buildDiagnoseReport(source, &diagnose.Report{
-		Diagnosis: "站点已关闭",
-		Advice:    "建议删除这个订阅",
+		Diagnosis: "the site is gone",
+		Advice:    "delete this subscription",
 	}, nil)
 
 	require.False(t, result.Fixed)
 	require.Nil(t, result.Changes)
 	require.Empty(t, result.Diff)
-	require.Equal(t, "建议删除这个订阅", result.Advice)
+	require.Equal(t, "delete this subscription", result.Advice)
 	require.False(t, result.Verification.Ran, "nothing was proposed, so nothing was re-parsed")
 }
 
 // An agent that echoes the stored configuration back has proposed nothing, and
 // must not be presented as having found a fix.
+//
+//nolint:gosmopolitan //asserts on the chinese line informer records.
 func TestBuildDiagnoseReportTreatsAnEchoAsNoProposal(t *testing.T) {
 	svc := internalService(t)
 	source := staleSource(postsPage(t, 3))
@@ -294,7 +299,7 @@ func TestBuildDiagnoseReportTreatsAnEchoAsNoProposal(t *testing.T) {
 
 	result := svc.buildDiagnoseReport(source, &diagnose.Report{
 		Fixed:     true,
-		Diagnosis: "看起来没问题",
+		Diagnosis: "looks fine to me",
 		Changes:   &diagnose.Changes{Regex: strPtr(staleRegex), TitleExp: strPtr(uselessName)},
 	}, sink)
 
@@ -316,9 +321,9 @@ func TestDiagnoseObserverToleratesNoSink(t *testing.T) {
 	}))
 	require.NotNil(t, observer)
 
-	observer.Note(runlog.LevelWarn, "  搜索中  ")
+	observer.Note(runlog.LevelWarn, "  searching  ")
 
-	require.Equal(t, []string{"warn:搜索中"}, seen, "the note is trimmed before it is recorded")
+	require.Equal(t, []string{"warn:searching"}, seen, "the note is trimmed before it is recorded")
 }
 
 // strPtr is the pointer-taking helper the Changes shape needs; a nil field and a
