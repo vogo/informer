@@ -174,6 +174,11 @@ const (
 	// the error bound because a note is read in a scrollable panel, not in a
 	// single line of error text.
 	maxNoteRunes = 2000
+
+	// maxToolResultRunes bounds a tool answer quoted into a note. A fetched page
+	// runs to hundreds of kilobytes, and only its opening tells the reader what
+	// came back, so this bound is much tighter than the general note bound.
+	maxToolResultRunes = 128
 )
 
 // truncate shortens output quoted into an error so a runaway answer cannot
