@@ -34,6 +34,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/updater"
 	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 
+	"github.com/vogo/informer/internal/diagnose"
 	"github.com/vogo/informer/internal/httpx"
 	"github.com/vogo/informer/internal/logbuf"
 )
@@ -69,6 +70,19 @@ var version = "dev" //nolint:gochecknoglobals //build time injection point.
 var assets embed.FS //nolint:gochecknoglobals //wails asset server entry.
 
 func main() {
+	// tool server mode answers before anything else: a diagnosis launches this
+	// very binary to reach its tools, the conversation runs on stdin/stdout,
+	// and no window or database may come near it.
+	if dir, ok := diagnose.ServeArgs(os.Args[1:]); ok {
+		serveErr := diagnose.ServeStdio(context.Background(), dir, version)
+		if serveErr != nil {
+			fmt.Fprintln(os.Stderr, "informer-ui: mcp:", serveErr)
+			os.Exit(1)
+		}
+
+		return
+	}
+
 	// the version sub command answers before any window or database exists,
 	// so packaging smoke tests can verify the injected version headless.
 	// It also runs before application.New, which may divert into updater

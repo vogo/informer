@@ -48,6 +48,7 @@ import {
   type SourceImportResultDTO,
 } from './bindings'
 import CategoryPanel from './CategoryPanel.vue'
+import SourceDiagnose from './SourceDiagnose.vue'
 import {errorText} from './errors'
 import {compact, requireValue} from './nulls'
 
@@ -110,6 +111,14 @@ const exporting = ref(false)
 const importing = ref(false)
 const showImportResult = ref(false)
 const importResult = ref<SourceImportResultDTO | null>(null)
+
+const showDiagnose = ref(false)
+const diagnoseRow = ref<SourceDTO | null>(null)
+
+// diagnoseKey remounts the panel on every request, which is what makes it start
+// a fresh run: the drawer keeps its content alive between opens, so without this
+// a second click would show the previous diagnosis.
+const diagnoseKey = ref(0)
 
 const showPreview = ref(false)
 const previewLoading = ref(false)
@@ -643,6 +652,26 @@ async function copyPreviewLogs() {
 function openArticle(url: string) {
   void Browser.OpenURL(url)
 }
+
+// openDiagnose starts an AI diagnosis of one failing subscription. The run is
+// kicked off on open rather than behind a second click: the card's button is
+// already the deliberate action, and a diagnosis takes minutes.
+function openDiagnose(row: SourceDTO) {
+  diagnoseRow.value = row
+  diagnoseKey.value += 1
+  showDiagnose.value = true
+}
+
+// onFixApplied refreshes the list so the repaired subscription stops showing the
+// configuration and the failure it was just repaired out of.
+async function onFixApplied() {
+  await refreshAll()
+
+  const stored = sources.value.find(s => s.id === diagnoseRow.value?.id)
+  if (stored) {
+    diagnoseRow.value = stored
+  }
+}
 </script>
 
 <template>
@@ -739,6 +768,15 @@ function openArticle(url: string) {
               <template #footer>
                 <n-space :size="8">
                   <n-button size="tiny" @click="openPreview(row)">测试抓取</n-button>
+                  <!-- offered only where it has something to work with: a
+                       diagnosis of a source that never failed has no failure to
+                       explain. -->
+                  <n-tooltip v-if="row.status === 2">
+                    <template #trigger>
+                      <n-button size="tiny" type="warning" @click="openDiagnose(row)">AI 诊断修复</n-button>
+                    </template>
+                    让 AI 读取页面原文，找出解析失败的原因并尝试修好配置
+                  </n-tooltip>
                   <n-button size="tiny" tertiary @click="openEdit(row)">编辑</n-button>
                   <n-popconfirm @positive-click="remove(row)">
                     <template #trigger>
@@ -897,6 +935,20 @@ function openArticle(url: string) {
         </n-space>
       </template>
     </n-modal>
+
+    <n-drawer v-model:show="showDiagnose" :width="720">
+      <n-drawer-content
+        :title="diagnoseRow ? `AI 诊断修复：${diagnoseRow.title || diagnoseRow.url}` : 'AI 诊断修复'"
+        closable
+      >
+        <SourceDiagnose
+          v-if="diagnoseRow"
+          :key="diagnoseKey"
+          :source="diagnoseRow"
+          @applied="onFixApplied"
+        />
+      </n-drawer-content>
+    </n-drawer>
 
     <n-drawer v-model:show="showPreview" :width="640">
       <n-drawer-content

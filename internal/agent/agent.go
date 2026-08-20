@@ -124,6 +124,15 @@ type Config struct {
 	// from the top level http_proxy of informer.json at run time, never stored
 	// inside the agent section.
 	HTTPProxy string `json:"-"`
+
+	// MCPConfigPath points at the mcp server document the run should load. It is
+	// written by the caller for the lifetime of one run and never configured, so
+	// it carries no json tag: a stored path would outlive the server it names.
+	//
+	// The run always passes --strict-mcp-config, so this is the complete set of
+	// servers a run can reach; an empty value means no mcp server at all, which
+	// is what every fetching source wants.
+	MCPConfigPath string `json:"-"`
 }
 
 // DefaultConfig is the agent section a data directory without one starts from.
@@ -185,6 +194,7 @@ func (c *Config) Normalized() *Config {
 	normalized.Model = strings.TrimSpace(normalized.Model)
 	normalized.Command = strings.TrimSpace(normalized.Command)
 	normalized.HTTPProxy = strings.TrimSpace(normalized.HTTPProxy)
+	normalized.MCPConfigPath = strings.TrimSpace(normalized.MCPConfigPath)
 
 	normalized.AllowedTools = strings.TrimSpace(normalized.AllowedTools)
 	if normalized.AllowedTools == "" {
@@ -230,34 +240,16 @@ func runnerOf(provider string) (runner, error) {
 // observer, when not nil, is told what the run is doing as it happens: the whole
 // prompt that went out, every search and page the agent reached for, and the
 // answer that came back. A run watched this way is one a user can debug.
-//
-//nolint:gosmopolitan //the notes are read by a chinese user in a chinese window.
 func Run(ctx context.Context, cfg *Config, userPrompt string, maxItems int, observer Observer) (*Result, error) {
 	instruction := strings.TrimSpace(userPrompt)
 	if instruction == "" {
 		return nil, ErrEmptyPrompt
 	}
 
-	config := cfg.Normalized()
-
-	run, err := runnerOf(config.Provider)
+	raw, err := RunRaw(ctx, cfg, BuildPrompt(instruction, maxItems), observer)
 	if err != nil {
 		return nil, err
 	}
-
-	runCtx, cancel := context.WithTimeout(ctx, time.Duration(config.TimeoutSeconds)*time.Second)
-	defer cancel()
-
-	prompt := BuildPrompt(instruction, maxItems)
-
-	notef(observer, NoteInfo, "提示词（%d 字符）：\n%s", len([]rune(prompt)), truncateTo(prompt, maxNoteRunes))
-
-	raw, err := run(runCtx, config, prompt, observer)
-	if err != nil {
-		return nil, err
-	}
-
-	notef(observer, NoteInfo, "原始返回（%d 字符）：\n%s", len([]rune(raw)), truncateTo(raw, maxNoteRunes))
 
 	items, err := ParseItems(raw)
 	if err != nil {
@@ -265,4 +257,44 @@ func Run(ctx context.Context, cfg *Config, userPrompt string, maxItems int, obse
 	}
 
 	return &Result{Items: items, Raw: raw}, nil
+}
+
+// RunRaw hands the prompt to the agent exactly as written and returns its answer
+// text unparsed.
+//
+// It is the half of Run that has nothing to do with articles: a caller that
+// asked the agent for something else - a diagnosis of a broken source, say -
+// appends its own output contract and reads its own shape out of the answer.
+// Run itself is now this function plus the article contract.
+//
+// The run is bounded by the configured timeout whatever deadline ctx carries,
+// and observer, when not nil, is told what the run is doing as it happens.
+//
+//nolint:gosmopolitan //the notes are read by a chinese user in a chinese window.
+func RunRaw(ctx context.Context, cfg *Config, prompt string, observer Observer) (string, error) {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return "", ErrEmptyPrompt
+	}
+
+	config := cfg.Normalized()
+
+	run, err := runnerOf(config.Provider)
+	if err != nil {
+		return "", err
+	}
+
+	runCtx, cancel := context.WithTimeout(ctx, time.Duration(config.TimeoutSeconds)*time.Second)
+	defer cancel()
+
+	notef(observer, NoteInfo, "提示词（%d 字符）：\n%s", len([]rune(prompt)), truncateTo(prompt, maxNoteRunes))
+
+	raw, err := run(runCtx, config, prompt, observer)
+	if err != nil {
+		return "", err
+	}
+
+	notef(observer, NoteInfo, "原始返回（%d 字符）：\n%s", len([]rune(raw)), truncateTo(raw, maxNoteRunes))
+
+	return raw, nil
 }

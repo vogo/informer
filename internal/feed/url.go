@@ -91,6 +91,20 @@ func GetHostPrefix(link string) string {
 	return link
 }
 
+// FetchSourceContent returns the document a source parses, fetched exactly the
+// way a real parse fetches it: through the source's own curl line when it has
+// one, otherwise over plain http through the configured proxy.
+//
+// It exists so a diagnosis reads the same bytes the failing parse read. An agent
+// that fetches the page itself sees a different user agent, no custom headers and
+// no proxy, and "the page format changed" is precisely the question those
+// differences answer wrongly.
+//
+// It performs a network read and nothing else; no record is created or modified.
+func FetchSourceContent(source *Source, sink runlog.Sink) ([]byte, error) {
+	return readURLData(source, sink)
+}
+
 // readURLData fetches the document a source parses, through the shell command it
 // carries or through plain http, and records what the exchange looked like.
 //

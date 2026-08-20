@@ -18,11 +18,13 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
 	"github.com/vogo/logger"
 
+	"github.com/vogo/informer/internal/diagnose"
 	"github.com/vogo/informer/internal/home"
 	"github.com/vogo/informer/internal/service"
 )
@@ -37,6 +39,13 @@ import (
 // turned into process exits here; each entry point decides how to report
 // them, keeping this package free of presentation choices.
 func Run(args []string) error {
+	// tool server mode is answered before anything else: it is launched by the
+	// agent command line of a diagnosis, speaks json-rpc on stdout, and must
+	// not open the database the window already has open.
+	if dir, ok := diagnose.ServeArgs(args[1:]); ok {
+		return diagnose.ServeStdio(context.Background(), dir, "cli")
+	}
+
 	exePath, _ := os.Executable()
 	exeDir := filepath.Dir(exePath)
 
