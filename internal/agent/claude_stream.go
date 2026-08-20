@@ -80,7 +80,7 @@ type claudeBlock struct {
 	Input json.RawMessage `json:"input"`
 
 	// Content is what a tool answered. It is either a string or a list of
-	// blocks depending on the tool, so it stays raw and is only measured.
+	// blocks depending on the tool, so it stays raw until it is narrated.
 	Content json.RawMessage `json:"content"`
 }
 
@@ -163,9 +163,46 @@ func narrateBlocks(event *claudeEvent, observer Observer) {
 		case blockToolUse:
 			notef(observer, NoteInfo, "调用 %s %s", block.Name, truncateTo(compactJSON(block.Input), maxNoteRunes))
 		case blockToolResult:
-			notef(observer, NoteInfo, "工具返回 %d 字符", len(block.Content))
+			notef(observer, NoteInfo, "工具返回：%s", truncateTo(toolResultText(block.Content), maxToolResultRunes))
 		}
 	}
+}
+
+// toolResultText renders what a tool answered as readable text. The command line
+// hands back either a plain string or a list of content blocks depending on the
+// tool, so both shapes are unwrapped; anything else is narrated as it arrived.
+func toolResultText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	var text string
+
+	err := json.Unmarshal(raw, &text)
+	if err == nil {
+		return text
+	}
+
+	var blocks []claudeBlock
+
+	err = json.Unmarshal(raw, &blocks)
+	if err != nil {
+		return compactJSON(raw)
+	}
+
+	parts := make([]string, 0, len(blocks))
+
+	for _, block := range blocks {
+		if trimmed := strings.TrimSpace(block.Text); trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+
+	if len(parts) == 0 {
+		return compactJSON(raw)
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 // compactJSON renders a tool input on one line, falling back to the raw bytes

@@ -69,7 +69,7 @@ func TestReadClaudeStreamNarratesTheRunAndReturnsTheAnswer(t *testing.T) {
 	require.Contains(t, document, "WebSearch, WebFetch")
 	require.Contains(t, document, "我先搜索一下。")
 	require.Contains(t, document, `调用 WebSearch {"query":"go 1.24 release"}`)
-	require.Contains(t, document, "工具返回")
+	require.Contains(t, document, "工具返回：a result body")
 
 	// the unknown event type and the line that is not json at all are skipped,
 	// not narrated and not fatal: a newer command line must not break a run.
@@ -102,7 +102,8 @@ func TestReadClaudeStreamSurvivesAHugeLine(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "done", answer)
-	require.Contains(t, watcher.joined(), "工具返回")
+	require.Contains(t, watcher.joined(), "工具返回：")
+	require.Contains(t, watcher.joined(), strings.Repeat("x", maxToolResultRunes)+"...")
 }
 
 func TestReadClaudeStreamReportsAnErrorResult(t *testing.T) {
@@ -148,4 +149,21 @@ func TestCompactJSONRendersAToolInputOnOneLine(t *testing.T) {
 	require.JSONEq(t, `{"url":"https://a.com"}`, compactJSON([]byte("{\n  \"url\": \"https://a.com\"\n}")))
 	require.Empty(t, compactJSON(nil))
 	require.Equal(t, "not json", compactJSON([]byte("not json")))
+}
+
+//nolint:gosmopolitan //asserting on the shipped chinese narration.
+func TestReadClaudeStreamNarratesABlockListToolResult(t *testing.T) {
+	t.Parallel()
+
+	stream := `{"type":"user","message":{"content":[{"type":"tool_result",` +
+		`"content":[{"type":"text","text":"first part"},{"type":"text","text":"second part"}]}]}}` + "\n" +
+		`{"type":"result","subtype":"success","is_error":false,"result":"done"}`
+
+	watcher := &notes{levels: nil, texts: nil}
+
+	answer, err := readClaudeStream(strings.NewReader(stream), watcher)
+
+	require.NoError(t, err)
+	require.Equal(t, "done", answer)
+	require.Contains(t, watcher.joined(), "工具返回：first part\nsecond part")
 }
