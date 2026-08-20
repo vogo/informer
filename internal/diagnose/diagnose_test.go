@@ -24,6 +24,7 @@ package diagnose_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -32,6 +33,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/vogo/logger"
 
 	"github.com/vogo/informer/internal/diagnose"
 	"github.com/vogo/informer/internal/feed"
@@ -430,4 +432,281 @@ func TestServeAnswersOverTheProtocol(t *testing.T) {
 
 	_, err := os.Stat(filepath.Join(dir, "feed.db"))
 	require.True(t, os.IsNotExist(err), "the tool server must never open a database")
+}
+
+// ServeArgs is what every executable entry uses to decide whether it was
+// launched by a person or by the agent command line of a diagnosis. Getting it
+// wrong either way is severe: a false positive opens no window, a false negative
+// opens one in the middle of a json-rpc stream.
+func TestServeArgsRecognisesOnlyTheToolServerInvocation(t *testing.T) {
+	t.Parallel()
+
+	const runDir = "/tmp/run"
+
+	dir, ok := diagnose.ServeArgs([]string{diagnose.ServeCommand, "--dir", runDir})
+	require.True(t, ok)
+	require.Equal(t, runDir, dir)
+
+	for _, args := range [][]string{
+		nil,
+		{},
+		{"version"},
+		{diagnose.ServeCommand},
+		{diagnose.ServeCommand, "--dir"},
+		{diagnose.ServeCommand, "--home", runDir},
+		{"feed", "--dir", runDir},
+		{"--dir", runDir, diagnose.ServeCommand},
+	} {
+		_, found := diagnose.ServeArgs(args)
+		require.False(t, found, "must not be mistaken for tool server mode: %v", args)
+	}
+}
+
+// ServeStdio is the child process entry. What it has to get right beyond Serve
+// is that stdout carries the protocol alone: informer logs a line for every
+// fetch, and one of them landing in the stream is a parse error on the other
+// side.
+//
+// It swaps the process wide os.Stdin, os.Stdout and logger output, so unlike
+// every other case here it must not run alongside the others.
+//
+//nolint:paralleltest //swaps process wide stdio.
+func TestServeStdioKeepsStdoutForTheProtocolAlone(t *testing.T) {
+	dir := t.TempDir()
+
+	require.NoError(t, diagnose.WriteSession(dir, &diagnose.Session{
+		SourceID: 5,
+		Source:   &feed.Source{ID: 5, Title: blogName},
+	}))
+
+	stdinRead, stdinWrite, err := os.Pipe()
+	require.NoError(t, err)
+
+	stdoutRead, stdoutWrite, err := os.Pipe()
+	require.NoError(t, err)
+
+	realIn, realOut := os.Stdin, os.Stdout
+
+	os.Stdin, os.Stdout = stdinRead, stdoutWrite
+
+	t.Cleanup(func() {
+		os.Stdin, os.Stdout = realIn, realOut
+	})
+
+	go func() {
+		_, _ = stdinWrite.WriteString(`{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n")
+
+		// a line the global logger emits while the session is open; it must not
+		// reach the pipe stdout now points at.
+		logger.Info("a fetch happened")
+
+		_ = stdinWrite.Close()
+	}()
+
+	collected := make(chan string, 1)
+
+	go func() {
+		out, _ := io.ReadAll(stdoutRead)
+		collected <- string(out)
+	}()
+
+	require.NoError(t, diagnose.ServeStdio(context.Background(), dir, "test"))
+	require.NoError(t, stdoutWrite.Close())
+
+	answered := <-collected
+
+	for line := range strings.SplitSeq(strings.TrimSpace(answered), "\n") {
+		var frame map[string]any
+
+		require.NoError(t, json.Unmarshal([]byte(line), &frame),
+			"every line on stdout has to be a protocol frame, got %q", line)
+	}
+
+	require.Contains(t, answered, `"id":1`)
+	require.NotContains(t, answered, "a fetch happened")
+}
+
+// An unreadable run directory has to be reported rather than served empty: a
+// tool server answering about a source it never loaded would diagnose nothing.
+func TestServeRefusesADirectoryWithoutASession(t *testing.T) {
+	t.Parallel()
+
+	err := diagnose.Serve(context.Background(), t.TempDir(), "test",
+		strings.NewReader(""), io.Discard)
+	require.ErrorIs(t, err, diagnose.ErrNoSession)
+}
+
+// A run directory that cannot be created or written is reported, not ignored: a
+// session the child cannot read is a diagnosis that cannot start.
+func TestSessionAndConfigWritesReportAnUnusablePath(t *testing.T) {
+	t.Parallel()
+
+	// a path under a regular file can never become a directory.
+	blocked := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(blocked, []byte("x"), 0o600))
+
+	under := filepath.Join(blocked, "run")
+
+	require.Error(t, diagnose.WriteSession(under, &diagnose.Session{Source: &feed.Source{}}))
+
+	_, err := diagnose.WriteMCPConfig(under, "/bin/informer", diagnose.ServeCommand)
+	require.Error(t, err)
+
+	require.Error(t, diagnose.WriteSession(t.TempDir(), nil), "there is no session to write")
+}
+
+// A session document that exists but describes nothing is refused too: the
+// tools would otherwise dereference a source that was never there.
+func TestReadSessionRefusesADocumentWithoutASource(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, diagnose.SessionFileName),
+		[]byte(`{"source_id":1}`), 0o600))
+
+	_, err := diagnose.ReadSession(dir)
+	require.ErrorIs(t, err, diagnose.ErrNoSession)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, diagnose.SessionFileName),
+		[]byte(`not json`), 0o600))
+
+	_, err = diagnose.ReadSession(dir)
+	require.ErrorIs(t, err, diagnose.ErrNoSession)
+}
+
+// An agent source would start another agent from inside the one already
+// running. The nesting is refused rather than run.
+func TestTryParseRefusesToNestAnotherAgent(t *testing.T) {
+	t.Parallel()
+
+	byName := toolsByName(diagnose.Tools(&diagnose.Session{
+		Source: &feed.Source{ID: 2, Title: someBlog, ParseType: feed.ParseTypeAgent, AgentPrompt: "找文章"},
+	}))
+
+	answer, err := byName["try_parse"](context.Background(), json.RawMessage(`{"agent_prompt":"换个说法"}`))
+	require.NoError(t, err)
+	require.Contains(t, answer, "不支持试跑")
+	require.NotContains(t, answer, "解析成功")
+}
+
+// Bad arguments are a tool level failure the model can correct, so they come
+// back as an error the server turns into an isError result.
+func TestToolsReportUnusableArguments(t *testing.T) {
+	t.Parallel()
+
+	byName := toolsByName(diagnose.Tools(&diagnose.Session{Source: &feed.Source{}}))
+
+	_, err := byName["try_parse"](context.Background(), json.RawMessage(`{"regex":123}`))
+	require.Error(t, err)
+
+	_, err = byName["fetch_content"](context.Background(), json.RawMessage(`["not an object"]`))
+	require.Error(t, err)
+}
+
+// A source that cannot be reached fails the same way every time; the failure is
+// remembered so a retry loop does not hammer a dead host.
+func TestFetchContentRemembersAFailure(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	unreachable := server.URL
+	server.Close()
+
+	byName := toolsByName(diagnose.Tools(&diagnose.Session{
+		Source: &feed.Source{URL: unreachable, ParseType: feed.ParseTypeRegex},
+	}))
+
+	_, first := byName["fetch_content"](context.Background(), nil)
+	require.Error(t, first)
+
+	_, second := byName["fetch_content"](context.Background(), nil)
+	require.Error(t, second)
+	require.Equal(t, first.Error(), second.Error())
+}
+
+// An empty document is stated as such rather than returned as an empty window,
+// which would read as "the page has nothing in it here".
+func TestFetchContentReportsAnEmptyDocument(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// no charset, so the body is handed back as the zero bytes it is rather
+		// than failing in the decoder.
+		w.Header().Set("Content-Type", "text/html")
+	}))
+	defer server.Close()
+
+	byName := toolsByName(diagnose.Tools(&diagnose.Session{
+		Source: &feed.Source{URL: server.URL, ParseType: feed.ParseTypeRegex},
+	}))
+
+	_, err := byName["fetch_content"](context.Background(), nil)
+	require.ErrorIs(t, err, diagnose.ErrNoContent)
+}
+
+// The window bounds: an oversized request is clamped, and an offset past the end
+// says so instead of answering with nothing.
+func TestFetchContentBoundsTheWindow(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(strings.Repeat("x", 120)))
+	}))
+	defer server.Close()
+
+	byName := toolsByName(diagnose.Tools(&diagnose.Session{
+		Source: &feed.Source{URL: server.URL, ParseType: feed.ParseTypeRegex},
+	}))
+
+	whole, err := byName["fetch_content"](context.Background(),
+		json.RawMessage(`{"offset":-5,"length":100000}`))
+	require.NoError(t, err)
+	require.Contains(t, whole, "[0, 120)")
+	require.NotContains(t, whole, "继续读", "the whole document was returned")
+
+	past, err := byName["fetch_content"](context.Background(), json.RawMessage(`{"offset":500}`))
+	require.NoError(t, err)
+	require.Contains(t, past, "越过结尾")
+}
+
+// A candidate address is fetched plainly, which is what lets the agent test the
+// guess that the site moved.
+func TestFetchContentFollowsACandidateAddress(t *testing.T) {
+	t.Parallel()
+
+	moved := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("新的地址上的内容"))
+	}))
+	defer moved.Close()
+
+	byName := toolsByName(diagnose.Tools(&diagnose.Session{
+		Source: &feed.Source{URL: "http://127.0.0.1:1/gone", ParseType: feed.ParseTypeRegex},
+	}))
+
+	answer, err := byName["fetch_content"](context.Background(),
+		json.RawMessage(`{"url":"`+moved.URL+`","refresh":true}`))
+	require.NoError(t, err)
+	require.Contains(t, answer, "新的地址上的内容")
+}
+
+// A model that answers with prose around its json still answered, and a fence
+// with nothing usable in it did not.
+func TestParseReportRecoversAWrappedAnswer(t *testing.T) {
+	t.Parallel()
+
+	report, err := diagnose.ParseReport("```\n" +
+		`{"fixed":false,"diagnosis":"需要登录","advice":"换一个地址"}` + "\n```")
+	require.NoError(t, err)
+	require.Equal(t, "需要登录", report.Diagnosis)
+
+	for _, answer := range []string{"```", "```json\n没有 json\n```", "", "{", "}{"} {
+		_, err = diagnose.ParseReport(answer)
+		require.ErrorIs(t, err, diagnose.ErrNoReport, "answer: %q", answer)
+	}
+
+	_, err = diagnose.ParseReport(`{"fixed": "not a bool"}`)
+	require.Error(t, err, "a json document of the wrong shape is a parse failure")
 }

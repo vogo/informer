@@ -239,3 +239,101 @@ func TestMalformedLineDoesNotEndTheSession(t *testing.T) {
 
 	require.Contains(t, answers[1], "result")
 }
+
+// A frame past the accepted size is a broken peer, not a large request, and it
+// ends the session rather than being buffered without bound.
+func TestOversizedFrameEndsTheSession(t *testing.T) {
+	t.Parallel()
+
+	server, err := mcp.NewServer("informer-test", "v0", echoTool())
+	require.NoError(t, err)
+
+	var out strings.Builder
+
+	// 5MB on one line, past the 4MB bound.
+	huge := `{"jsonrpc":"2.0","id":1,"method":"ping","pad":"` + strings.Repeat("x", 5<<20) + `"}`
+
+	err = server.Serve(context.Background(), strings.NewReader(huge+"\n"), &out)
+	require.Error(t, err)
+	require.Empty(t, out.String(), "a frame that was never read is never answered")
+}
+
+// A canceled context ends the loop even while the peer is still holding the
+// stream open, which is what stops a killed run from leaking a child.
+func TestCanceledContextEndsTheSession(t *testing.T) {
+	t.Parallel()
+
+	server, err := mcp.NewServer("informer-test", "v0", echoTool())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var out strings.Builder
+
+	err = server.Serve(ctx, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`+"\n"), &out)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// A request with an id but no method is a malformed frame, answered as one.
+func TestFrameWithoutAMethodIsRefused(t *testing.T) {
+	t.Parallel()
+
+	answers := exchange(t, []mcp.Tool{echoTool()}, `{"jsonrpc":"2.0","id":9}`)
+
+	require.Len(t, answers, 1)
+
+	failure, ok := answers[0]["error"].(map[string]any)
+	require.True(t, ok)
+	require.InDelta(t, -32600, failure["code"], 0)
+}
+
+// tools/call with arguments that are not an object at all is a protocol level
+// mistake, unlike a tool that ran and failed.
+func TestMalformedCallParamsAreAProtocolError(t *testing.T) {
+	t.Parallel()
+
+	answers := exchange(t, []mcp.Tool{echoTool()},
+		`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":"not an object"}`,
+		`{"jsonrpc":"2.0","id":11,"method":"tools/call"}`)
+
+	require.Len(t, answers, 2)
+
+	for _, answer := range answers {
+		failure, ok := answer["error"].(map[string]any)
+		require.True(t, ok)
+		require.InDelta(t, -32602, failure["code"], 0)
+	}
+}
+
+// A tool called with no arguments at all is legal: it means the defaults.
+func TestToolCallWithoutArgumentsIsLegal(t *testing.T) {
+	t.Parallel()
+
+	answers := exchange(t, []mcp.Tool{echoTool()},
+		`{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"echo"}}`)
+
+	require.Len(t, answers, 1)
+
+	result, ok := answers[0]["result"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, false, result["isError"])
+}
+
+// A stream whose last line carries no trailing newline is still a complete
+// frame; a peer that closes right after writing must not lose its last request.
+func TestFinalFrameWithoutATrailingNewlineIsAnswered(t *testing.T) {
+	t.Parallel()
+
+	server, err := mcp.NewServer("informer-test", "v0", echoTool())
+	require.NoError(t, err)
+
+	var out strings.Builder
+
+	// no trailing newline: the reader has to treat EOF as the end of the frame.
+	err = server.Serve(context.Background(),
+		strings.NewReader(`{"jsonrpc":"2.0","id":13,"method":"ping"}`), &out)
+	require.NoError(t, err)
+
+	require.Contains(t, out.String(), `"id":13`)
+}
