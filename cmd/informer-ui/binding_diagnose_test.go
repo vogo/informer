@@ -34,7 +34,7 @@ import (
 // brokenListing serves a page whose markup the stored regex below no longer
 // matches, which is the failure the diagnosis feature exists for.
 //
-//nolint:gosmopolitan //informer is a chinese product; the fixtures speak the user's language.
+//nolint:gosmopolitan //the fixtures quote the shipped chinese text.
 func brokenListing(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -87,7 +87,7 @@ func storedSource(t *testing.T, app *App, id int64) *SourceDTO {
 
 // brokenRequest is a subscription whose regex stopped matching brokenListing.
 //
-//nolint:gosmopolitan //informer is a chinese product; the fixtures speak the user's language.
+//nolint:gosmopolitan //the fixtures quote the shipped chinese text.
 func brokenRequest(server *httptest.Server) *SaveSourceRequest {
 	return &SaveSourceRequest{
 		Title:     "测试站",
@@ -191,4 +191,63 @@ func TestDiagnoseAndPreviewReportOnDifferentEvents(t *testing.T) {
 	t.Parallel()
 
 	assert.NotEqual(t, PreviewLogEvent, DiagnoseLogEvent)
+}
+
+// toVerificationDTO is reached only after a real agent run, so it is exercised
+// here directly: the samples the page shows above the apply button come through
+// it, and an absent verification must not become a null the page dereferences.
+func TestVerificationDTOAlwaysCarriesASampleList(t *testing.T) {
+	t.Parallel()
+
+	absent := toVerificationDTO(nil)
+	require.NotNil(t, absent)
+	assert.False(t, absent.Ran)
+	assert.NotNil(t, absent.Samples, "the page iterates this without a nil check")
+	assert.Empty(t, absent.Samples)
+
+	empty := toVerificationDTO(&service.DiagnoseVerification{Ran: true, Error: "no match"})
+	assert.True(t, empty.Ran)
+	assert.Equal(t, "no match", empty.Error)
+	assert.NotNil(t, empty.Samples)
+	assert.Empty(t, empty.Samples)
+
+	filled := toVerificationDTO(&service.DiagnoseVerification{
+		Ran:          true,
+		ArticleCount: 42,
+		Samples: []*feed.Article{
+			{Title: "first post", URL: "https://example.com/1"},
+			{Title: "second post", URL: "https://example.com/2"},
+		},
+	})
+	assert.Equal(t, 42, filled.ArticleCount, "the count is the whole result, not the sample size")
+	require.Len(t, filled.Samples, 2)
+	assert.Equal(t, "first post", filled.Samples[0].Title)
+	assert.Equal(t, "https://example.com/2", filled.Samples[1].URL)
+}
+
+// Two diagnoses at once would drive two agent command lines and spend twice the
+// budget, which is far more often a double click than an intention.
+func TestDiagnoseSourceRefusesASecondConcurrentRun(t *testing.T) {
+	t.Parallel()
+
+	app := noAgentApp(t)
+
+	app.diagnoseMu.Lock()
+	defer app.diagnoseMu.Unlock()
+
+	_, err := app.DiagnoseSource(1, "")
+	require.ErrorIs(t, err, ErrDiagnoseRunning)
+}
+
+// Every diagnosis binding refuses to touch data when startup failed, exactly
+// like the rest of the desktop contract.
+func TestDiagnoseBindingsRefuseABrokenStartup(t *testing.T) {
+	t.Parallel()
+
+	broken := &App{initErr: assert.AnError}
+
+	_, err := broken.DiagnoseSource(1, "")
+	require.ErrorIs(t, err, ErrNotReady)
+
+	require.ErrorIs(t, broken.ApplySourceFix(1, `{"regex":"x"}`, ""), ErrNotReady)
 }
