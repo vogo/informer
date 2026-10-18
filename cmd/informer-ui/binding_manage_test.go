@@ -287,6 +287,35 @@ func TestListSourcesFiltersByEnabledStateAndCombination(t *testing.T) {
 	assert.Equal(t, []string{titleExplicitFeed}, titlesOf(combined))
 }
 
+func TestListSourcesFiltersByKeyword(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	techID := seedFilterSources(t, app)
+
+	byTitle, err := app.ListSources(&SourceQueryRequest{Keyword: "legacy"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titleLegacyJSON}, titlesOf(byTitle))
+
+	byURL, err := app.ListSources(&SourceQueryRequest{Keyword: "b.example.com"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titleExplicitFeed}, titlesOf(byURL))
+
+	// the keyword narrows the category instead of replacing it.
+	combined, err := app.ListSources(&SourceQueryRequest{CategoryID: techID, Keyword: "example.com"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titleLegacyJSON, titleExplicitFeed}, titlesOf(combined))
+
+	// a blank keyword is the same as leaving the box empty.
+	blank, err := app.ListSources(&SourceQueryRequest{Keyword: "   "})
+	require.NoError(t, err)
+	assert.Len(t, blank, 3)
+
+	unfiltered, err := app.ListSources(&SourceQueryRequest{})
+	require.NoError(t, err)
+	assert.Len(t, unfiltered, 3)
+}
+
 func TestListSourcesRejectsUnknownFilterValues(t *testing.T) {
 	t.Parallel()
 

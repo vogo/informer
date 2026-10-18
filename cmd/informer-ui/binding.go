@@ -20,6 +20,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/feed"
@@ -146,6 +147,10 @@ type SourceQueryRequest struct {
 
 	// EnabledState is EnabledStateOn or EnabledStateOff.
 	EnabledState string `json:"enabledState"`
+
+	// Keyword matches the subscription title or URL as a substring. Empty means
+	// this dimension is unused. Surrounding whitespace is ignored.
+	Keyword string `json:"keyword"`
 }
 
 // SupportedParseTypes returns the parse types a subscription can be filtered by,
@@ -204,6 +209,7 @@ func toSourceQuery(req *SourceQueryRequest) (service.SourceQuery, error) {
 		CategoryID:  req.CategoryID,
 		ParseType:   req.ParseType,
 		FetchStatus: req.FetchStatus,
+		Keyword:     strings.TrimSpace(req.Keyword),
 	}
 
 	switch req.EnabledState {
