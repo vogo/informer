@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, onMounted, reactive, ref} from 'vue'
+import {computed, onMounted, onUnmounted, reactive, ref, watch} from 'vue'
 import {
   NAlert,
   NButton,
@@ -29,11 +29,14 @@ import {compact, requireValue} from './nulls'
 
 const props = defineProps<{
   selectedId: number
-  // the three filter dimensions the page owns; this panel only renders them and
+  // the filter dimensions the page owns; this panel only renders them and
   // reports a pick, so the query snapshot never lives in two places.
   parseType: string
   fetchStatus: string
   enabledState: string
+  // keyword is the applied name or URL substring. The input keeps a draft and
+  // reports a value only after a pause, Enter, or a clear.
+  keyword: string
   // parseTypeOptions are the parse types the backend supports, in its own order.
   // A type added there shows up here without touching this file.
   parseTypeOptions: string[]
@@ -43,7 +46,8 @@ const emit = defineEmits<{
   (e: 'update:parseType', value: string): void
   (e: 'update:fetchStatus', value: string): void
   (e: 'update:enabledState', value: string): void
-  // clearFilters resets the category and all three dimensions at once.
+  (e: 'update:keyword', value: string): void
+  // clearFilters resets the category, the keyword and every other dimension at once.
   (e: 'clearFilters'): void
   // changed fires whenever the tree or a subscription assignment moved, so the
   // subscription list next to it reloads instead of showing a stale category.
@@ -105,8 +109,76 @@ const filterGroups = computed(() => [
 // the clear entry stays out of the way until something is actually filtered,
 // the category tree included: clearing returns the page to its default view.
 const hasActiveFilter = computed(
-  () => props.selectedId !== 0 || props.parseType !== '' || props.fetchStatus !== '' || props.enabledState !== ''
+  () =>
+    props.selectedId !== 0 ||
+    props.parseType !== '' ||
+    props.fetchStatus !== '' ||
+    props.enabledState !== '' ||
+    props.keyword !== ''
 )
+
+// keywordDraft is what the box shows. The applied keyword stays with the page
+// until a pause, Enter or a clear, so keystrokes do not each reload the list.
+const keywordDraft = ref(props.keyword)
+let keywordTimer: ReturnType<typeof setTimeout> | null = null
+
+const keywordDelayMs = 1000
+
+watch(
+  () => props.keyword,
+  value => {
+    cancelKeywordTimer()
+    keywordDraft.value = value
+  }
+)
+
+onUnmounted(cancelKeywordTimer)
+
+function cancelKeywordTimer() {
+  if (keywordTimer !== null) {
+    clearTimeout(keywordTimer)
+    keywordTimer = null
+  }
+}
+
+function onKeywordInput(value: string | null) {
+  const text = value ?? ''
+  keywordDraft.value = text
+
+  // emptying the box is itself the search: waiting out the pause would leave
+  // the previous matches on screen after the user had already cleared them.
+  if (text.trim() === '') {
+    commitKeyword()
+    return
+  }
+
+  cancelKeywordTimer()
+  keywordTimer = setTimeout(() => {
+    keywordTimer = null
+    commitKeyword()
+  }, keywordDelayMs)
+}
+
+function commitKeyword() {
+  cancelKeywordTimer()
+
+  const next = keywordDraft.value.trim()
+  if (next === props.keyword) {
+    return
+  }
+
+  emit('update:keyword', next)
+}
+
+// clearAllFilters drops a draft that has not been applied yet. The page only
+// knows the keyword it already searched, so a pending pause would otherwise
+// put that draft back after the list had been reset.
+function clearAllFilters() {
+  cancelKeywordTimer()
+  keywordDraft.value = ''
+  emit('clearFilters')
+}
+
 const editorTitle = computed(() => (form.id === 0 ? '新增分类' : `编辑分类 #${form.id}`))
 
 // the deleted category is never a valid destination for its own subscriptions.
@@ -301,10 +373,20 @@ async function confirmReassignDelete() {
     <div class="filters">
       <div class="filter-header">
         <n-text strong>过滤</n-text>
-        <n-button v-if="hasActiveFilter" size="tiny" text type="primary" @click="emit('clearFilters')">
+        <n-button v-if="hasActiveFilter" size="tiny" text type="primary" @click="clearAllFilters">
           清除过滤
         </n-button>
       </div>
+
+      <n-input
+        :value="keywordDraft"
+        size="small"
+        clearable
+        placeholder="搜索名称或 URL"
+        style="width: 100%; margin-top: 8px"
+        @update:value="onKeywordInput"
+        @keyup.enter="commitKeyword"
+      />
 
       <div v-for="group in filterGroups" :key="group.key" class="filter-group">
         <n-text depth="3" class="filter-title">{{ group.title }}</n-text>

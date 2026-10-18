@@ -56,7 +56,7 @@ async function loadFilters() {
     // article, so it asks for the unfiltered set on purpose.
     const [categories, sources] = await Promise.all([
       ListCategories(),
-      ListSources({categoryId: 0, parseType: '', fetchStatus: '', enabledState: ''})
+      ListSources({categoryId: 0, parseType: '', fetchStatus: '', enabledState: '', keyword: ''})
     ])
 
     categoryOptions.value = [

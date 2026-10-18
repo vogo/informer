@@ -87,7 +87,7 @@ const categoryPanel = ref<InstanceType<typeof CategoryPanel> | null>(null)
 // the filter snapshot of this session: the sidebar picks the values, the list is
 // always the answer to the whole snapshot rather than to one dimension at a time.
 // Nothing is persisted, so reopening the page starts on "everything" again.
-const filters = reactive({parseType: '', fetchStatus: '', enabledState: ''})
+const filters = reactive({parseType: '', fetchStatus: '', enabledState: '', keyword: ''})
 
 // the type options come from the backend, so a parse type added there needs no
 // change here to be offered and queried.
@@ -270,7 +270,11 @@ const selectedCategoryName = computed(
   () => categories.value.find(c => c.id === selectedCategoryId.value)?.name ?? '全部订阅'
 )
 const hasActiveFilter = computed(
-  () => filters.parseType !== '' || filters.fetchStatus !== '' || filters.enabledState !== ''
+  () =>
+    filters.parseType !== '' ||
+    filters.fetchStatus !== '' ||
+    filters.enabledState !== '' ||
+    filters.keyword !== ''
 )
 const emptyDescription = computed(() => {
   if (hasActiveFilter.value) {
@@ -393,7 +397,8 @@ async function loadSources() {
       categoryId: selectedCategoryId.value,
       parseType: filters.parseType,
       fetchStatus: filters.fetchStatus,
-      enabledState: filters.enabledState
+      enabledState: filters.enabledState,
+      keyword: filters.keyword
     })
 
     // a newer snapshot is already in flight; this answer describes a filter the
@@ -432,13 +437,19 @@ async function onFilterChanged(key: 'parseType' | 'fetchStatus' | 'enabledState'
   await loadSources()
 }
 
+async function onKeywordChanged(value: string) {
+  filters.keyword = value
+  await loadSources()
+}
+
 // clearFilters returns the page to its default view: every category, every type,
-// every fetch state, enabled and disabled alike.
+// every fetch state, enabled and disabled alike, and no name or URL substring.
 async function clearFilters() {
   selectedCategoryId.value = 0
   filters.parseType = ''
   filters.fetchStatus = ''
   filters.enabledState = ''
+  filters.keyword = ''
   await loadSources()
 }
 
@@ -727,11 +738,13 @@ async function onFixApplied() {
         :parse-type="filters.parseType"
         :fetch-status="filters.fetchStatus"
         :enabled-state="filters.enabledState"
+        :keyword="filters.keyword"
         :parse-type-options="parseTypeFilterOptions"
         @update:selected-id="onCategorySelected"
         @update:parse-type="v => onFilterChanged('parseType', v)"
         @update:fetch-status="v => onFilterChanged('fetchStatus', v)"
         @update:enabled-state="v => onFilterChanged('enabledState', v)"
+        @update:keyword="onKeywordChanged"
         @clear-filters="clearFilters"
         @changed="onCategoryTreeChanged"
       />

@@ -288,6 +288,33 @@ func TestAllSourcesCombinesEveryFilterWithAnd(t *testing.T) {
 	assert.Empty(t, none)
 }
 
+func TestSourceKeywordMatchesLiteralWildcards(t *testing.T) {
+	const (
+		titlePercent    = "100%"
+		titleUnderscore = "under_score"
+	)
+
+	svc := newService(t)
+
+	storeSource(t, svc, &feed.Source{Title: titlePercent, URL: "https://percent.example/a"}, nil)
+	storeSource(t, svc, &feed.Source{Title: "100x", URL: "https://plain.example/b"}, nil)
+	storeSource(t, svc, &feed.Source{Title: titleUnderscore, URL: "https://plain.example/c"}, nil)
+
+	// a bare percent sign is a character in a title, not "match everything".
+	percent, err := svc.AllSources(service.SourceQuery{Keyword: "%"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titlePercent}, titlesOf(percent))
+
+	underscore, err := svc.AllSources(service.SourceQuery{Keyword: "_"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{titleUnderscore}, titlesOf(underscore))
+
+	// an unescaped underscore would match both "100%" and "100x".
+	prefixed, err := svc.AllSources(service.SourceQuery{Keyword: "100_"})
+	require.NoError(t, err)
+	assert.Empty(t, prefixed)
+}
+
 func TestLegalParseTypesIsTheFilterVocabulary(t *testing.T) {
 	svc := newService(t)
 

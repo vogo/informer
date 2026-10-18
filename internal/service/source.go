@@ -51,7 +51,8 @@ type SourceQuery struct {
 	// Enabled restricts the result to enabled or disabled sources when it is not nil.
 	Enabled *bool `json:"enabled"`
 
-	// Keyword matches the title or the url when it is not empty.
+	// Keyword matches the title or the url as a substring when it is not empty.
+	// Characters that are wildcards in LIKE are matched literally.
 	Keyword string `json:"keyword"`
 
 	// ParseType restricts the result to one resolved parse type when it is not
@@ -262,8 +263,8 @@ func (s *Service) sourceQuery(query SourceQuery) (*gorm.DB, error) {
 	}
 
 	if query.Keyword != "" {
-		like := "%" + query.Keyword + "%"
-		db = db.Where("title LIKE ? OR url LIKE ?", like, like)
+		like := "%" + escapeLike(query.Keyword) + "%"
+		db = db.Where("title LIKE ? ESCAPE '\\' OR url LIKE ? ESCAPE '\\'", like, like)
 	}
 
 	if query.ParseType != "" {
@@ -285,6 +286,24 @@ func (s *Service) sourceQuery(query SourceQuery) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+// escapeLike quotes the LIKE wildcards so a keyword stays a literal substring.
+// The query that uses the result must name '\' as the escape character.
+func escapeLike(keyword string) string {
+	var b strings.Builder
+
+	b.Grow(len(keyword))
+
+	for _, r := range keyword {
+		if r == '\\' || r == '%' || r == '_' {
+			b.WriteRune('\\')
+		}
+
+		b.WriteRune(r)
+	}
+
+	return b.String()
 }
 
 // sourceCondition is one SQL fragment and the arguments it binds.
