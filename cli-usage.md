@@ -52,7 +52,7 @@ cat > ~/.informer/informer.json <<'EOF'
 EOF
 ```
 
-各项含义与取值约束见 [README 配置文件](README.md#三配置文件)。也可以装好桌面版后在「设置」Tab 里填写保存，写的是同一个文件。
+各项含义与取值约束见 [README 配置](README.md#配置)。也可以装好桌面版后在「设置」Tab 里填写保存，写的是同一个文件。
 
 ### 2. 添加订阅
 
@@ -179,5 +179,5 @@ crontab 不会加载 shell 的 profile，需要在命令里显式写环境变量
 - Agent 只被允许使用只读的联网工具（默认 `WebSearch,WebFetch`），并且整次运行有超时上限，
   超时会被杀掉并把原因记到订阅的抓取状态里，不会拖住整轮抓取。
 
-Agent 的接口地址、密钥与模型是全局配置，写在 `informer.json` 的 `agent` 节（密钥除外），详见 [README 配置文件](README.md#三配置文件)。
+Agent 的接口地址、密钥与模型是全局配置，写在 `informer.json` 的 `agent` 节（密钥除外），详见 [README 配置](README.md#配置)。
 前置条件：本机已安装对应命令行 Agent（例如 `claude --version` 能正常输出）。
