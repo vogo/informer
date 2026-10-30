@@ -71,9 +71,9 @@ type FileConfigView struct {
 	// Agent is the editable agent section, nil when the file defines none.
 	Agent *agent.Config `json:"agent"`
 
-	// Webhook is the bot delivery address stored in informer.json. It is a plain
-	// endpoint rather than a secret, so the settings page shows it in full.
-	Webhook string `json:"webhook"`
+	// Webhooks are the bot delivery targets stored in informer.json. They are plain
+	// endpoints rather than secrets, so the settings page shows them in full.
+	Webhooks []WebhookView `json:"webhooks"`
 
 	// HTTPProxy is the optional HTTP(S) proxy stored in informer.json.
 	HTTPProxy string `json:"http_proxy"`
@@ -138,7 +138,7 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 		return nil, err
 	}
 
-	view.Webhook, err = s.readWebhook()
+	view.Webhooks, err = s.ReadWebhooks()
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,8 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 	}
 
 	for _, key := range doc.Keys() {
-		if key != feedSectionKey && key != scheduleSectionKey && key != agentSectionKey && key != webhookKey && key != httpProxyKey {
+		if key != feedSectionKey && key != scheduleSectionKey && key != agentSectionKey &&
+			key != webhooksKey && key != legacyWebhookKey && key != httpProxyKey {
 			view.PreservedKeys = append(view.PreservedKeys, key)
 		}
 	}
@@ -210,6 +211,16 @@ func (s *Service) SaveFeedConfig(config *feed.Config) error {
 // replaced, so a field written by another build - or by hand - survives the save, and
 // a second writer running at the same time cannot lose the update it just made.
 func (s *Service) saveConfigSection(key string, section any) error {
+	return s.updateConfig(func(doc *configstore.Doc) error {
+		return doc.Set(key, section)
+	})
+}
+
+// updateConfig rewrites informer.json with the changes one caller makes to the loaded
+// document. It is the single write path of the file: a save never starts from a stale
+// snapshot, and a reader - a crontab run for example - sees either the old or the new
+// file, never a partial one.
+func (s *Service) updateConfig(mutate func(doc *configstore.Doc) error) error {
 	path := s.ConfigFilePath()
 
 	return configstore.WithLock(path, configstore.DefaultLockTimeout, func() error {
@@ -218,9 +229,9 @@ func (s *Service) saveConfigSection(key string, section any) error {
 			return err
 		}
 
-		setErr := doc.Set(key, section)
-		if setErr != nil {
-			return setErr
+		mutateErr := mutate(doc)
+		if mutateErr != nil {
+			return mutateErr
 		}
 
 		data, err := doc.Bytes()

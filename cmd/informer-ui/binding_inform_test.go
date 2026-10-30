@@ -62,6 +62,14 @@ func newBotServer(t *testing.T) *httptest.Server {
 	return server
 }
 
+// saveOneWebhook points every run at one enabled target, the shape most of the
+// trigger tests need.
+func saveOneWebhook(t *testing.T, app *App, address string) {
+	t.Helper()
+
+	require.NoError(t, app.SaveWebhooks([]WebhookDTO{{URL: address, Enabled: true}}))
+}
+
 func TestTriggerNowReportsAMissingConfigFile(t *testing.T) {
 	t.Parallel()
 
@@ -85,7 +93,7 @@ func TestTriggerNowWritesTheDailyFileAndDelivers(t *testing.T) {
 	app := newTestApp(t)
 
 	require.NoError(t, app.SaveConfig(validFeedDTO()))
-	require.NoError(t, app.SaveWebhook(server.URL+"/feishu.cn/ok"))
+	saveOneWebhook(t, app, server.URL+"/feishu.cn/ok")
 
 	result, err := app.TriggerNow()
 	require.NoError(t, err)
@@ -107,7 +115,7 @@ func TestTriggerNowReportsADeliveryFailureAfterWriting(t *testing.T) {
 	app := newTestApp(t)
 
 	require.NoError(t, app.SaveConfig(validFeedDTO()))
-	require.NoError(t, app.SaveWebhook(server.URL+"/feishu.cn/fail"))
+	saveOneWebhook(t, app, server.URL+"/feishu.cn/fail")
 
 	// the bot refuses the message, but the daily file was already written and the
 	// page must hear about both facts at once.
@@ -166,7 +174,7 @@ func TestTriggerNowRefusesWhileARunIsInFlight(t *testing.T) {
 
 	app := newTestApp(t)
 	require.NoError(t, app.SaveConfig(validFeedDTO()))
-	require.NoError(t, app.SaveWebhook(server.URL+blockedBotPath))
+	saveOneWebhook(t, app, server.URL+blockedBotPath)
 
 	type outcome struct {
 		result *InformResultDTO
@@ -227,7 +235,7 @@ func TestInformRunningReportsARunInFlight(t *testing.T) {
 
 	app := newTestApp(t)
 	require.NoError(t, app.SaveConfig(validFeedDTO()))
-	require.NoError(t, app.SaveWebhook(server.URL+blockedBotPath))
+	saveOneWebhook(t, app, server.URL+blockedBotPath)
 
 	assert.False(t, app.InformRunning(), "an idle app reports no run")
 

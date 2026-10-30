@@ -27,7 +27,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/inform"
 	"github.com/vogo/informer/internal/service"
+)
+
+const (
+	testWebhookURL        = "https://example.com/hook"
+	developmentTargetName = "development"
 )
 
 // validFeedConfig is a feed section every validation rule accepts.
@@ -153,79 +159,146 @@ func TestSaveFeedConfigSurvivesConcurrentWriters(t *testing.T) {
 	assert.Equal(t, 150, view.Feed.FeedExpireDays)
 }
 
-func TestSaveWebhookWritesToInformerJSON(t *testing.T) {
+func TestSaveWebhooksWritesToInformerJSON(t *testing.T) {
 	svc := newService(t)
 
 	view, err := svc.ReadFileConfigView()
 	require.NoError(t, err)
-	assert.Empty(t, view.Webhook)
+	assert.Empty(t, view.Webhooks)
 
-	const webhook = "https://oapi.dingtalk.com/robot/send?access_token=plain-bot-token"
+	const (
+		dingURL = "https://oapi.dingtalk.com/robot/send?access_token=plain-bot-token"
+		larkURL = "https://open.feishu.cn/open-apis/bot/v2/hook/plain-bot-token"
+	)
 
-	require.NoError(t, svc.SaveWebhook(webhook))
+	disabled := false
+
+	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{
+		{Name: " " + developmentTargetName + " ", URL: " " + dingURL + " "},
+		{URL: larkURL, Enabled: &disabled},
+	}))
 
 	view, err = svc.ReadFileConfigView()
 	require.NoError(t, err)
 	assert.True(t, view.Exists)
-	assert.Equal(t, webhook, view.Webhook)
+	require.Len(t, view.Webhooks, 2)
+	assert.Equal(t, developmentTargetName, view.Webhooks[0].Name)
+	assert.Equal(t, dingURL, view.Webhooks[0].URL)
+	assert.True(t, view.Webhooks[0].Enabled)
+	assert.Equal(t, "open.feishu.cn", view.Webhooks[1].Name, "an unnamed target is labeled by its host")
+	assert.Equal(t, larkURL, view.Webhooks[1].URL)
+	assert.False(t, view.Webhooks[1].Enabled)
 
 	raw := readConfigFile(t, svc)
-	assert.Equal(t, webhook, raw["webhook"])
+	assert.Len(t, raw["webhooks"], 2)
+	assert.NotContains(t, raw, "webhook", "the legacy key is dropped by a save")
 	assert.NotContains(t, raw, "id")
 
-	// the stored webhook is what an argument free inform run delivers to.
-	assert.Equal(t, webhook, svc.ResolveWebhook(""))
-	assert.Equal(t, webhook, svc.ResolveWebhook("   "))
+	// a paused target keeps its address in the file but takes no part in a run.
+	targets := svc.ResolveTargets("")
+	require.Len(t, targets, 1)
+	assert.Equal(t, developmentTargetName, targets[0].Name)
+	assert.Equal(t, dingURL, targets[0].URL)
 
-	// an explicit command line address still wins, so crontab keeps its behavior.
-	assert.Equal(t, "https://example.com/hook", svc.ResolveWebhook("https://example.com/hook"))
-
-	// the credential file is not created for a plain bot address.
+	// the credential file is not created for plain bot addresses.
 	_, err = os.Stat(svc.SecretsFilePath())
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
-func TestSaveWebhookMigratesALegacySecretEntry(t *testing.T) {
+func TestResolveTargetsPrefersTheCommandLineAddress(t *testing.T) {
+	svc := newService(t)
+
+	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{{URL: "https://open.feishu.cn/hook/stored"}}))
+
+	// an explicit address replaces the stored list for this run, so crontab keeps
+	// its behavior; a blank argument falls back to the file.
+	targets := svc.ResolveTargets("  https://example.com/hook ")
+	require.Len(t, targets, 1)
+	assert.Equal(t, testWebhookURL, targets[0].URL)
+	assert.Equal(t, "example.com", targets[0].Name)
+
+	assert.Len(t, svc.ResolveTargets("   "), 1)
+}
+
+func TestSaveWebhooksRefusesABlankOrRepeatedAddress(t *testing.T) {
+	svc := newService(t)
+
+	require.ErrorIs(t, svc.SaveWebhooks([]inform.Webhook{{Name: "empty"}}), service.ErrInvalidArgument)
+	require.ErrorIs(t, svc.SaveWebhooks([]inform.Webhook{
+		{URL: testWebhookURL},
+		{URL: testWebhookURL},
+	}), service.ErrInvalidArgument)
+
+	// a refused save never rewrote the file.
+	view, err := svc.ReadWebhooks()
+	require.NoError(t, err)
+	assert.Empty(t, view)
+}
+
+func TestSaveWebhooksMigratesALegacySecretEntry(t *testing.T) {
 	svc := newService(t)
 
 	require.NoError(t, os.WriteFile(svc.SecretsFilePath(), []byte(`{"webhook":"https://legacy.example/hook","agent_api_key":"sk-keep"}`), 0o600))
 
-	assert.Equal(t, "https://legacy.example/hook", svc.ResolveWebhook(""))
+	targets := svc.ResolveTargets("")
+	require.Len(t, targets, 1)
+	assert.Equal(t, "https://legacy.example/hook", targets[0].URL)
 
-	require.NoError(t, svc.SaveWebhook("https://example.com/new"))
+	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{{URL: "https://example.com/new"}}))
 
-	assert.Equal(t, "https://example.com/new", svc.ResolveWebhook(""))
-	assert.Equal(t, "https://example.com/new", readConfigFile(t, svc)["webhook"])
+	view, err := svc.ReadWebhooks()
+	require.NoError(t, err)
+	require.Len(t, view, 1)
+	assert.Equal(t, "https://example.com/new", view[0].URL)
 
-	raw, err := os.ReadFile(svc.SecretsFilePath())
+	raw := readConfigFile(t, svc)
+	assert.NotContains(t, raw, "webhook")
+	assert.Len(t, raw["webhooks"], 1)
+
+	secretsRaw, err := os.ReadFile(svc.SecretsFilePath())
 	require.NoError(t, err)
 
 	var secrets map[string]any
-	require.NoError(t, json.Unmarshal(raw, &secrets))
+	require.NoError(t, json.Unmarshal(secretsRaw, &secrets))
 	assert.NotContains(t, secrets, "webhook")
 	assert.Equal(t, "sk-keep", secrets["agent_api_key"])
 }
 
-func TestSaveWebhookClearsTheStoredValue(t *testing.T) {
+func TestSaveWebhooksClearsTheStoredList(t *testing.T) {
 	svc := newService(t)
 
-	require.NoError(t, svc.SaveWebhook("https://example.com/hook"))
-	require.NoError(t, svc.SaveWebhook(""))
+	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{{URL: testWebhookURL}}))
+	require.NoError(t, svc.SaveWebhooks(nil))
 
-	view, err := svc.ReadFileConfigView()
+	view, err := svc.ReadWebhooks()
 	require.NoError(t, err)
-	assert.Empty(t, view.Webhook)
-	assert.Empty(t, svc.ResolveWebhook(""))
-	assert.NotContains(t, readConfigFile(t, svc), "webhook")
+	assert.Empty(t, view)
+	assert.Empty(t, svc.ResolveTargets(""))
+
+	raw := readConfigFile(t, svc)
+	assert.Empty(t, raw["webhooks"])
+	assert.NotContains(t, raw, "webhook")
 }
 
-func TestResolveWebhookIgnoresABrokenConfigFile(t *testing.T) {
+func TestResolveTargetsReadsALegacySingleWebhook(t *testing.T) {
+	svc := newService(t)
+
+	require.NoError(t, os.WriteFile(svc.ConfigFilePath(), []byte(`{"webhook":"https://legacy.example/hook"}`), 0o644)) //nolint:gosec //fixture on purpose.
+
+	// an installation that has not saved since the move still delivers.
+	targets := svc.ResolveTargets("")
+	require.Len(t, targets, 1)
+	assert.Equal(t, "https://legacy.example/hook", targets[0].URL)
+	assert.Equal(t, "legacy.example", targets[0].Name)
+}
+
+func TestResolveTargetsIgnoresABrokenConfigFile(t *testing.T) {
 	svc := newService(t)
 
 	require.NoError(t, os.WriteFile(svc.ConfigFilePath(), []byte("not json"), 0o644)) //nolint:gosec //broken fixture on purpose.
 
 	// the daily report must still be generated; only the delivery is skipped.
-	assert.Empty(t, svc.ResolveWebhook(""))
+	assert.Empty(t, svc.ResolveTargets(""))
 
 	_, err := svc.ReadFileConfigView()
 	require.Error(t, err)

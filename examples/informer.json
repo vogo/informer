@@ -17,6 +17,16 @@
     "enabled": false,
     "time": "10:00"
   },
-  "webhook": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx",
+  "webhooks": [
+    {
+      "name": "研发群",
+      "url": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"
+    },
+    {
+      "name": "飞书群",
+      "url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxx",
+      "enabled": false
+    }
+  ],
   "http_proxy": ""
 }

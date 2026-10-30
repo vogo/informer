@@ -29,9 +29,15 @@ import (
 
 	"github.com/vogo/informer/internal/ding"
 	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/inform"
 	"github.com/vogo/informer/internal/lark"
 	"github.com/vogo/informer/internal/service"
 	"github.com/vogo/informer/internal/soup"
+)
+
+const (
+	primaryTargetName = "primary"
+	backupTargetName  = "backup"
 )
 
 // allArticles reads every stored article, ordered by id.
@@ -167,6 +173,70 @@ func TestTriggerInformLeavesInformedAtEmptyOnFailure(t *testing.T) {
 
 	for _, article := range articles {
 		assert.Nil(t, article.InformedAt, "a failed delivery must not be recorded as informed")
+	}
+}
+
+// TestTriggerInformDeliversToEveryEnabledTarget covers the broadcast rule: one run
+// reaches every enabled target, a paused one takes no part, and a single refusing
+// bot leaves the run - and the inform time - intact.
+func TestTriggerInformDeliversToEveryEnabledTarget(t *testing.T) {
+	server := newContentServer(t)
+	svc := newService(t)
+
+	require.NoError(t, svc.CreateSource(feedSource(server)))
+
+	disabled := false
+
+	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{
+		{Name: primaryTargetName, URL: server.URL + "/feishu.cn/ok"},
+		{Name: backupTargetName, URL: server.URL + "/feishu.cn/fail"},
+		{Name: "paused", URL: server.URL + "/feishu.cn/ok?paused=1", Enabled: &disabled},
+	}))
+
+	result, err := svc.TriggerInform("")
+	require.NoError(t, err, "one bot accepting the message is enough")
+	require.NotNil(t, result)
+	require.True(t, result.Notified)
+	require.Len(t, result.Deliveries, 2, "a paused target takes no part in the run")
+
+	deliveries := map[string]inform.Delivery{}
+	for _, delivery := range result.Deliveries {
+		deliveries[delivery.Name] = delivery
+	}
+
+	assert.True(t, deliveries[primaryTargetName].Success)
+	assert.False(t, deliveries[backupTargetName].Success)
+	assert.NotEmpty(t, deliveries[backupTargetName].Error)
+
+	for _, article := range allArticles(t, svc) {
+		require.NotNil(t, article.InformedAt, "a run with one accepting bot records the inform time")
+	}
+}
+
+// TestTriggerInformFailsWhenEveryTargetFails is the other half of the rule: only a
+// total failure is an error, and it leaves every article unrecorded.
+func TestTriggerInformFailsWhenEveryTargetFails(t *testing.T) {
+	server := newContentServer(t)
+	svc := newService(t)
+
+	require.NoError(t, svc.CreateSource(feedSource(server)))
+	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{
+		{Name: primaryTargetName, URL: server.URL + "/feishu.cn/fail"},
+		{Name: backupTargetName, URL: server.URL + "/feishu.cn/missing"},
+	}))
+
+	result, err := svc.TriggerInform("")
+	require.ErrorContains(t, err, "every bot")
+	require.NotNil(t, result)
+	assert.False(t, result.Notified)
+	require.Len(t, result.Deliveries, 2)
+
+	for _, delivery := range result.Deliveries {
+		assert.False(t, delivery.Success)
+	}
+
+	for _, article := range allArticles(t, svc) {
+		assert.Nil(t, article.InformedAt, "a total failure must not be recorded as informed")
 	}
 }
 

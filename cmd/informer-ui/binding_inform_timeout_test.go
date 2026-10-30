@@ -103,7 +103,7 @@ func assertFrozenTriggerReleasesTheGuard(t *testing.T, frozenPath, healthyPath s
 	app := newTestApp(t)
 
 	require.NoError(t, app.SaveConfig(validFeedDTO()))
-	require.NoError(t, app.SaveWebhook(server.URL+frozenPath))
+	saveOneWebhook(t, app, server.URL+frozenPath)
 
 	restore := shortenDeliveryDeadlines(server.URL)
 	defer restore()
@@ -123,7 +123,7 @@ func assertFrozenTriggerReleasesTheGuard(t *testing.T, frozenPath, healthyPath s
 	// the frozen run must have released the guard on its way out: with a
 	// healthy webhook the very next push runs at once instead of failing with
 	// ErrInformRunning until a restart.
-	require.NoError(t, app.SaveWebhook(server.URL+healthyPath))
+	saveOneWebhook(t, app, server.URL+healthyPath)
 
 	next, err := app.TriggerNow()
 	require.NotErrorIs(t, err, ErrInformRunning, "a failed run must free the guard")

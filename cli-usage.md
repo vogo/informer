@@ -74,7 +74,19 @@ EOF
 - 钉钉：`https://oapi.dingtalk.com/robot/send?access_token=xxxxx`
 - 飞书：`https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxx`
 
-地址可以在命令行显式传入，也可以保存到 `informer.json` 的顶层 `webhook` 字段后不带参数运行。
+地址可以保存到 `informer.json` 的顶层 `webhooks` 数组，多个目标一次全量推送：
+
+```json
+{
+  "webhooks": [
+    {"name": "研发群", "url": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"},
+    {"name": "飞书群", "url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxx", "enabled": false}
+  ]
+}
+```
+
+`url` 必填，`name` 可选（缺省显示域名），`enabled` 缺省为 `true`。旧版本保存的单个
+`webhook` 字段仍会被读取，下次在桌面版设置页保存时自动迁移。
 
 ### 4. 执行一次推送
 
@@ -82,8 +94,11 @@ EOF
 ./informer "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"
 ```
 
-命令行传入的地址优先；不传时使用 `informer.json` 里保存的 webhook。两处都没有地址时，
-只生成内容并写入日报文件，不推送。
+命令行传入的地址会替换本次运行的目标列表，只推这一个；不传时推送给 `webhooks` 里所有启用的目标。
+两处都没有地址时，只生成内容并写入日报文件，不推送。
+
+部分目标失败不影响其他目标：只要至少一个目标接受，本次运行就算成功，文章照常记录通知时间；
+全部失败才返回错误。通知时间是文章级字段，失败的目标不会被单独补推。
 
 ### 5. 配置定时任务
 

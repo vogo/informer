@@ -80,8 +80,22 @@ cp -a ~/.informer /data/informer-home
 
 | 配置项 | 含义 | 取值 |
 | --- | --- | --- |
-| `webhook` | 钉钉或飞书机器人地址 | URL；留空或不写表示只写日报、不推送 |
+| `webhooks` | 推送目标列表，每次运行全量推给所有启用的目标 | 数组，每项 `{"name": "研发群", "url": "https://...", "enabled": true}`；`url` 必填，`name` 可选（缺省显示域名），`enabled` 缺省为 `true`；不写或空数组表示只写日报、不推送 |
 | `http_proxy` | HTTP(S) 代理 | 如 `http://127.0.0.1:7890`；留空或不写表示不使用代理 |
+
+```json
+{
+  "webhooks": [
+    {"name": "研发群", "url": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx"},
+    {"name": "飞书群", "url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxx", "enabled": false}
+  ]
+}
+```
+
+同一份消息一次并发发给所有启用的目标，部分目标失败不影响其他目标：只要至少一个目标接受，
+文章照常记录通知时间；全部失败才算本次推送失败。通知时间是文章级字段，失败的目标不会被单独补推。
+旧版本的单个 `webhook` 字段（无论在 `informer.json` 还是 `informer.secret.json`）仍会被读取，
+下一次在设置页保存时自动迁移到 `webhooks`。
 
 桌面版定时（命令行忽略这一节，定时仍用 crontab）：
 

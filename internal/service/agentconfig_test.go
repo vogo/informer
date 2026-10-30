@@ -134,7 +134,7 @@ func TestAgentAPIKeyIsStoredInTheCredentialFile(t *testing.T) {
 func TestAgentAPIKeySurvivesWebhookSaves(t *testing.T) {
 	svc := newService(t)
 
-	require.NoError(t, svc.SaveWebhook("https://open.feishu.cn/hook/x"))
+	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{{URL: "https://open.feishu.cn/hook/x"}}))
 	require.NoError(t, svc.SaveAgentAPIKey(testAgentAPIKey))
 
 	view, err := svc.ReadSecretsView()
@@ -143,17 +143,18 @@ func TestAgentAPIKeySurvivesWebhookSaves(t *testing.T) {
 
 	configView, err := svc.ReadFileConfigView()
 	require.NoError(t, err)
-	assert.Equal(t, "https://open.feishu.cn/hook/x", configView.Webhook)
+	require.Len(t, configView.Webhooks, 1)
+	assert.Equal(t, "https://open.feishu.cn/hook/x", configView.Webhooks[0].URL)
 
-	require.NoError(t, svc.SaveWebhook(""))
+	require.NoError(t, svc.SaveWebhooks(nil))
 
 	view, err = svc.ReadSecretsView()
 	require.NoError(t, err)
-	assert.True(t, view.AgentAPIKeyConfigured, "clearing the webhook leaves the api key in place")
+	assert.True(t, view.AgentAPIKeyConfigured, "clearing the webhooks leaves the api key in place")
 
 	configView, err = svc.ReadFileConfigView()
 	require.NoError(t, err)
-	assert.Empty(t, configView.Webhook)
+	assert.Empty(t, configView.Webhooks)
 }
 
 func TestEffectiveAgentConfigCombinesFileSectionKeyAndHomeDir(t *testing.T) {

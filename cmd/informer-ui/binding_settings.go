@@ -22,6 +22,7 @@ import (
 
 	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/inform"
 	"github.com/vogo/informer/internal/service"
 )
 
@@ -49,6 +50,19 @@ type AgentConfigDTO struct {
 type ScheduleDTO struct {
 	Enabled bool   `json:"enabled"`
 	Time    string `json:"time"`
+}
+
+// WebhookDTO is one bot delivery target of informer.json.
+type WebhookDTO struct {
+	// Name labels the target; the backend fills it from the address host when the
+	// file leaves the name empty, so the page always shows something readable.
+	Name string `json:"name"`
+
+	// URL is the bot webhook address.
+	URL string `json:"url"`
+
+	// Enabled tells whether the target takes part in every run.
+	Enabled bool `json:"enabled"`
 }
 
 // ConfigViewDTO is the whole settings page state of informer.json.
@@ -81,9 +95,9 @@ type ConfigViewDTO struct {
 	// AgentProviders are the providers the agent section accepts, in order.
 	AgentProviders []string `json:"agentProviders"`
 
-	// Webhook is the bot delivery address stored in informer.json. It is a plain
-	// endpoint rather than a secret, so the settings page shows it in full.
-	Webhook string `json:"webhook"`
+	// Webhooks are the bot delivery targets stored in informer.json. They are plain
+	// endpoints rather than secrets, so the settings page shows them in full.
+	Webhooks []WebhookDTO `json:"webhooks"`
 
 	// HTTPProxy is the optional HTTP(S) proxy stored in informer.json.
 	HTTPProxy string `json:"httpProxy"`
@@ -149,7 +163,7 @@ func (a *App) ReadConfig() (*ConfigViewDTO, error) {
 		Agent:            agentDefaults,
 		AgentDefaults:    agentDefaults,
 		AgentProviders:   agent.LegalProviders(),
-		Webhook:          view.Webhook,
+		Webhooks:         toWebhookDTOs(view.Webhooks),
 		HTTPProxy:        view.HTTPProxy,
 		PreservedKeys:    view.PreservedKeys,
 	}
@@ -214,16 +228,30 @@ func (a *App) ReadSecrets() (*SecretsViewDTO, error) {
 	}, nil
 }
 
-// SaveWebhook stores the bot webhook in informer.json.
-// An empty value clears it. A webhook left in the legacy credential file is removed
-// on save so the address is not kept in two places.
-func (a *App) SaveWebhook(webhook string) error {
+// SaveWebhooks replaces the bot delivery targets of informer.json.
+// An empty list keeps the daily file only. A webhook left by an earlier build - in
+// informer.json or in the legacy credential file - is removed on save so an address
+// is not kept in two places.
+func (a *App) SaveWebhooks(req []WebhookDTO) error {
 	err := a.ready()
 	if err != nil {
 		return err
 	}
 
-	return a.svc.SaveWebhook(webhook)
+	webhooks := make([]inform.Webhook, 0, len(req))
+
+	for _, entry := range req {
+		webhook := inform.Webhook{Name: entry.Name, URL: entry.URL}
+
+		if !entry.Enabled {
+			disabled := false
+			webhook.Enabled = &disabled
+		}
+
+		webhooks = append(webhooks, webhook)
+	}
+
+	return a.svc.SaveWebhooks(webhooks)
 }
 
 // SaveHTTPProxy stores the HTTP(S) proxy in informer.json and applies it to URL
@@ -359,4 +387,18 @@ func toScheduleDTO(schedule *service.Schedule) *ScheduleDTO {
 		Enabled: schedule.Enabled,
 		Time:    schedule.Time,
 	}
+}
+
+func toWebhookDTOs(webhooks []service.WebhookView) []WebhookDTO {
+	dtos := make([]WebhookDTO, 0, len(webhooks))
+
+	for _, webhook := range webhooks {
+		dtos = append(dtos, WebhookDTO{
+			Name:    webhook.Name,
+			URL:     webhook.URL,
+			Enabled: webhook.Enabled,
+		})
+	}
+
+	return dtos
 }

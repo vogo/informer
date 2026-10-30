@@ -27,14 +27,15 @@ import (
 )
 
 // TriggerInform runs one full inform cycle: fetch, deduplicate, score, apply the
-// same site limit, build the message, store the daily file and deliver it to the bot
-// at urlAddr. It is the single entry point of the scheduled CLI notification.
+// same site limit, build the message, store the daily file and deliver it to every
+// configured bot. It is the single entry point of the scheduled CLI notification.
 //
-// An empty urlAddr falls back to the webhook stored in informer.json, so a run
-// started without an argument still delivers what the desktop app configured.
+// An empty urlAddr falls back to the targets stored in informer.json, so a run
+// started without an argument still delivers what the desktop app configured; an
+// explicit address replaces the stored list for this run only.
 //
-// The inform timestamp of the selected articles is written only after the
-// notification step actually succeeded, so a failed delivery leaves InformedAt empty.
+// The inform timestamp of the selected articles is written only after at least one
+// bot accepted the message, so a run that reached nobody leaves InformedAt empty.
 func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 	s.ApplyHTTPProxy()
 
@@ -45,7 +46,7 @@ func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 
 	result, err := inform.Run(&inform.Options{
 		HomeDir:     s.homeDir,
-		URLAddr:     s.ResolveWebhook(urlAddr),
+		Targets:     s.ResolveTargets(urlAddr),
 		FeedConfig:  s.EffectiveFeedConfig(fileConfig),
 		AgentConfig: s.EffectiveAgentConfig(fileConfig),
 	})
@@ -59,10 +60,16 @@ func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 }
 
 // recordInformed stamps the delivery time on the articles of a completed run.
-// A run without a bot webhook still counts as delivered: the daily file was written
-// and nothing failed. A run whose notification failed never reaches this point.
+// A run without a target still counts as delivered: the daily file was written and
+// nothing failed. A run where at least one bot accepted the message counts too, even
+// if another one failed - the timestamp is per article, not per target, so a failed
+// target is not retried on its own later.
 func (s *Service) recordInformed(result *inform.Result) {
 	if result == nil || len(result.Articles) == 0 {
+		return
+	}
+
+	if len(result.Deliveries) > 0 && !result.Notified {
 		return
 	}
 
