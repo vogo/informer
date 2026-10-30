@@ -45,10 +45,11 @@ func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 	}
 
 	result, err := inform.Run(&inform.Options{
-		HomeDir:     s.homeDir,
-		Targets:     s.ResolveTargets(urlAddr),
-		FeedConfig:  s.EffectiveFeedConfig(fileConfig),
-		AgentConfig: s.EffectiveAgentConfig(fileConfig),
+		HomeDir:          s.homeDir,
+		Targets:          s.ResolveTargets(urlAddr),
+		FeedConfig:       s.EffectiveFeedConfig(fileConfig),
+		AgentConfig:      s.EffectiveAgentConfig(fileConfig),
+		ResultProcessing: fileConfig.ResultProcessing,
 	})
 	if err != nil {
 		return result, err
@@ -65,7 +66,7 @@ func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 // if another one failed - the timestamp is per article, not per target, so a failed
 // target is not retried on its own later.
 func (s *Service) recordInformed(result *inform.Result) {
-	if result == nil || len(result.Articles) == 0 {
+	if result == nil || result.Skipped || len(result.Articles) == 0 {
 		return
 	}
 

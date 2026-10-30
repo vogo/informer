@@ -187,7 +187,9 @@ func claudeArgs(cfg *Config, prompt string) []string {
 		args = append(args, "--model", cfg.Model)
 	}
 
-	if cfg.AllowedTools != "" {
+	if cfg.DisableTools {
+		args = append(args, "--tools", "")
+	} else if cfg.AllowedTools != "" {
 		args = append(args, "--tools", cfg.AllowedTools, "--allowedTools", cfg.AllowedTools)
 	}
 

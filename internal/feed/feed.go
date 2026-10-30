@@ -18,6 +18,7 @@
 package feed
 
 import (
+	"fmt"
 	"io"
 	"math"
 	"time"
@@ -108,25 +109,36 @@ func updateExistsScore(nowTime, dayIntervalWeight int64) {
 const articleChoseSizeMultiple = 4
 
 func sortAndChoseArticles(config *Config) []*Article {
+	articles, err := SelectArticles(config)
+	if err != nil {
+		logger.Warnf("select candidate articles: %v", err)
+	}
+
+	return articles
+}
+
+// SelectArticles reads existing candidates without fetching or updating any record.
+func SelectArticles(config *Config) ([]*Article, error) {
+	if config == nil {
+		return []*Article{}, nil
+	}
 	var articleList []*Article
 
-	feedDataDB.Model(&Article{}).
+	result := feedDataDB.Model(&Article{}).
 		Where("informed=?", false).
 		Order("score desc").
 		Order("id desc").
 		Limit(config.MaxInformFeedSize * articleChoseSizeMultiple).
 		Find(&articleList)
 
-	informArticles := choseArticle(articleList, config)
-	for _, a := range informArticles {
-		feedDataDB.Model(a).Update("informed", true)
+	if result.Error != nil {
+		return nil, fmt.Errorf("select articles: %w", result.Error)
 	}
 
-	return informArticles
+	return choseArticle(articleList, config), nil
 }
 
 func choseArticle(list []*Article, config *Config) []*Article {
-	//nolint:prealloc //ignore this
 	var articles []*Article
 
 	previousArticleHost := ""

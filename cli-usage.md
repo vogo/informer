@@ -196,3 +196,9 @@ crontab 不会加载 shell 的 profile，需要在命令里显式写环境变量
 
 Agent 的接口地址、密钥与模型是全局配置，写在 `informer.json` 的 `agent` 节（密钥除外），详见 [README 配置](README.md#配置)。
 前置条件：本机已安装对应命令行 Agent（例如 `claude --version` 能正常输出）。
+
+## AI 最终结果处理
+
+命令行推送读取与桌面版相同的 `informer.json`。配置 `result_processing.enabled=true` 并填写 `result_processing.prompt` 后，先统一筛选候选、生成导读，再写日报和推送；默认关闭。模型与凭据沿用 `agent` 设置。
+
+全部过滤视为正常跳过；模型失败或输出不合法则返回错误，不发送原始内容。运行记录保存在数据主目录的 `runs/<日期>/processing-*.json`。配置范例和行为见 [README.md](README.md#ai-最终结果处理)。

@@ -90,6 +90,9 @@ const (
 // tag on purpose: a credential belongs in the separate secret file, never in the
 // shareable configuration document.
 type Config struct {
+	// DisableTools explicitly runs without tools; an empty AllowedTools normally restores defaults.
+	DisableTools bool `json:"-"`
+
 	// Provider selects the agent command line, one of the Provider constants.
 	Provider string `json:"provider"`
 

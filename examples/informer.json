@@ -13,6 +13,10 @@
     "timeout_seconds": 300,
     "command": ""
   },
+  "result_processing": {
+    "enabled": false,
+    "prompt": "分析今日候选文章，只保留具有明确技术价值、包含具体方法或事实的内容。过滤广告、重复资讯和泛泛观点。按重要性排序，生成简洁的中文导读。宁缺毋滥，没有符合条件的文章时跳过本次推送。"
+  },
   "schedule": {
     "enabled": false,
     "time": "10:00"

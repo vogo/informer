@@ -67,12 +67,12 @@ linters:
       - linters:
           - paralleltest
         path: internal/(ding|lark|soup)/.*_test\.go
-      # the manual push timeout tests swap the outbound clients of ding, lark
-      # and soup for a short deadline; they must not overlap the parallel
-      # trigger tests that exercise the production clients.
+      # The push timeout tests swap outbound clients; processing integration
+      # tests also use the process-wide feed database and Agent guards.
+      # Both must remain sequential.
       - linters:
           - paralleltest
-        path: binding_inform_timeout_test\.go
+        path: binding_(inform_timeout|processing)_test\.go
       - linters:
           - gosec
         text: Potential HTTP request made with variable url

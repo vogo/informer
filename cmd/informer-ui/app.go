@@ -205,6 +205,10 @@ func (a *App) runInform() (*inform.Result, error) {
 		a.informMu.Unlock()
 	}()
 
+	if !a.agentMu.TryLock() {
+		return nil, ErrDiagnoseRunning
+	}
+	defer a.agentMu.Unlock()
 	return a.svc.TriggerInform("")
 }
 

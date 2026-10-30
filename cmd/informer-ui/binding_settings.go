@@ -67,6 +67,8 @@ type WebhookDTO struct {
 
 // ConfigViewDTO is the whole settings page state of informer.json.
 type ConfigViewDTO struct {
+	ResultProcessing *ResultProcessingConfigDTO `json:"resultProcessing"`
+
 	// Path is where the file lives, so the user can also edit it by hand.
 	Path string `json:"path"`
 
@@ -154,6 +156,7 @@ func (a *App) ReadConfig() (*ConfigViewDTO, error) {
 	agentDefaults := toAgentConfigDTO(service.DefaultAgentConfig())
 
 	dto := &ConfigViewDTO{
+		ResultProcessing: &ResultProcessingConfigDTO{Enabled: view.ResultProcessing.Enabled, Prompt: view.ResultProcessing.Prompt},
 		Path:             view.Path,
 		Exists:           view.Exists,
 		Feed:             defaults,

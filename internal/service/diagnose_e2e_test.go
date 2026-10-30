@@ -31,6 +31,7 @@ import (
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/runlog"
 	"github.com/vogo/informer/internal/service"
+	"github.com/vogo/informer/internal/soup"
 )
 
 // agentE2EEnv opts into the one test that drives a real agent command line.
@@ -60,7 +61,15 @@ func TestMain(m *testing.M) {
 		os.Exit(serveExitCode(compose.ServeStdio(context.Background(), dir, "test")))
 	}
 
-	os.Exit(m.Run())
+	// Full report tests should never wait for the public daily-sentence service.
+	sentence := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"content":"test daily sentence"}`))
+	}))
+	restore := soup.SetURLForTest(sentence.URL)
+	code := m.Run()
+	restore()
+	sentence.Close()
+	os.Exit(code)
 }
 
 // serveExitCode turns a tool server outcome into a process exit code.

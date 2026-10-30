@@ -23,6 +23,7 @@ import (
 	"github.com/vogo/informer/internal/agent"
 	"github.com/vogo/informer/internal/configstore"
 	"github.com/vogo/informer/internal/feed"
+	"github.com/vogo/informer/internal/resultprocess"
 )
 
 // feedSectionKey is the top level key of the feed section inside informer.json.
@@ -55,6 +56,8 @@ func DefaultFeedConfig() *feed.Config {
 
 // FileConfigView is the informer.json state the settings page renders.
 type FileConfigView struct {
+	ResultProcessing *resultprocess.Config `json:"result_processing"`
+
 	// Path is the absolute location of the file, shown so the user can find it.
 	Path string `json:"path"`
 
@@ -104,7 +107,11 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 		return nil, err
 	}
 
-	view := &FileConfigView{Path: path, Exists: doc.Exists(), PreservedKeys: []string{}}
+	view := &FileConfigView{Path: path, Exists: doc.Exists(), PreservedKeys: []string{}, ResultProcessing: &resultprocess.Config{}}
+	_, err = doc.Unmarshal(resultProcessingKey, view.ResultProcessing)
+	if err != nil {
+		return nil, err
+	}
 
 	var section feedSection
 
@@ -149,8 +156,7 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 	}
 
 	for _, key := range doc.Keys() {
-		if key != feedSectionKey && key != scheduleSectionKey && key != agentSectionKey &&
-			key != webhooksKey && key != legacyWebhookKey && key != httpProxyKey {
+		if !editableConfigKey(key) {
 			view.PreservedKeys = append(view.PreservedKeys, key)
 		}
 	}
@@ -270,4 +276,13 @@ func checkRange(name string, value, low, high int) error {
 	}
 
 	return nil
+}
+
+func editableConfigKey(key string) bool {
+	switch key {
+	case feedSectionKey, scheduleSectionKey, agentSectionKey, webhooksKey, legacyWebhookKey, httpProxyKey, resultProcessingKey:
+		return true
+	default:
+		return false
+	}
 }
