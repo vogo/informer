@@ -551,33 +551,41 @@ func TestScheduleBindingsRoundTrip(t *testing.T) {
 	assert.Equal(t, "21:45", view.Schedule.Time)
 }
 
-func TestWebhookBindingReturnsTheStoredAddress(t *testing.T) {
+func TestWebhookBindingReturnsTheStoredTargets(t *testing.T) {
 	t.Parallel()
 
 	app := newTestApp(t)
 
 	view, err := app.ReadConfig()
 	require.NoError(t, err)
-	assert.Empty(t, view.Webhook)
+	assert.Empty(t, view.Webhooks)
 
 	const webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/0000-plain-token"
 
-	require.NoError(t, app.SaveWebhook(webhook))
+	require.NoError(t, app.SaveWebhooks([]WebhookDTO{
+		{Name: "研发群", URL: webhook, Enabled: true},
+		{Name: "暂停群", URL: "https://oapi.dingtalk.com/robot/send?access_token=paused", Enabled: false},
+	}))
 
 	view, err = app.ReadConfig()
 	require.NoError(t, err)
-	assert.Equal(t, webhook, view.Webhook)
+	require.Len(t, view.Webhooks, 2)
+	assert.Equal(t, "研发群", view.Webhooks[0].Name)
+	assert.Equal(t, webhook, view.Webhooks[0].URL)
+	assert.True(t, view.Webhooks[0].Enabled)
+	assert.Equal(t, "暂停群", view.Webhooks[1].Name)
+	assert.False(t, view.Webhooks[1].Enabled)
 
 	secrets, err := app.ReadSecrets()
 	require.NoError(t, err)
 	_, err = os.Stat(secrets.Path)
 	require.ErrorIs(t, err, os.ErrNotExist)
 
-	require.NoError(t, app.SaveWebhook(""))
+	require.NoError(t, app.SaveWebhooks(nil))
 
 	view, err = app.ReadConfig()
 	require.NoError(t, err)
-	assert.Empty(t, view.Webhook)
+	assert.Empty(t, view.Webhooks)
 }
 
 func TestNewBindingsReportAStartupFailure(t *testing.T) {
@@ -601,7 +609,7 @@ func TestNewBindingsReportAStartupFailure(t *testing.T) {
 	_, err = app.RebuildHistoryIndex()
 	require.ErrorIs(t, err, ErrNotReady)
 
-	require.ErrorIs(t, app.SaveWebhook("x"), ErrNotReady)
+	require.ErrorIs(t, app.SaveWebhooks([]WebhookDTO{{URL: "https://example.com/hook"}}), ErrNotReady)
 
 	require.ErrorIs(t, app.SaveSchedule(&ScheduleDTO{Enabled: true, Time: "10:00"}), ErrNotReady)
 

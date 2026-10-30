@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/vogo/logger"
@@ -72,12 +73,41 @@ type Config struct {
 	// the agent with its defaults and the machine's own credentials.
 	Agent *agent.Config `json:"agent"`
 
-	// Webhook is the bot delivery address. It is a plain endpoint rather than a
-	// credential, so it lives in the shareable configuration file.
-	Webhook string `json:"webhook,omitempty"`
+	// Webhooks are the bot delivery targets of every run. They are plain endpoints
+	// rather than credentials, so they live in the shareable configuration file.
+	Webhooks []Webhook `json:"webhooks,omitempty"`
 
 	// HTTPProxy is the optional HTTP(S) proxy for URL fetches and agent runs.
 	HTTPProxy string `json:"http_proxy,omitempty"`
+}
+
+// Webhook is one bot delivery target of informer.json.
+type Webhook struct {
+	// Name labels the target in the per target delivery result. An empty name is
+	// rendered from the address host, so a target list stays readable when the
+	// user only pastes addresses.
+	Name string `json:"name,omitempty"`
+
+	// URL is the bot webhook address.
+	URL string `json:"url"`
+
+	// Enabled takes part in every run when it is true or absent. Only an explicit
+	// false pauses a target, which keeps hand written files short.
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// IsEnabled reports whether the target takes part in a run.
+func (w Webhook) IsEnabled() bool {
+	return w.Enabled == nil || *w.Enabled
+}
+
+// Target is one bot an inform run delivers to.
+type Target struct {
+	// Name labels the target in the per target delivery result.
+	Name string
+
+	// URL is the bot webhook address.
+	URL string
 }
 
 // Options describes one inform run. The feed database is expected to be
@@ -86,8 +116,9 @@ type Options struct {
 	// HomeDir is the active data directory holding informer.json and data/<year>.
 	HomeDir string
 
-	// URLAddr is the bot webhook; an empty value skips the notification step.
-	URLAddr string
+	// Targets are the bots the message is delivered to; no target skips the
+	// notification step and only writes the daily file.
+	Targets []Target
 
 	// FeedConfig is the effective feed configuration; a nil value skips feeds.
 	FeedConfig *feed.Config
@@ -108,13 +139,30 @@ type Result struct {
 	// ContentFilePath is the daily markdown file the content was written to.
 	ContentFilePath string
 
-	// Notified reports whether a bot actually accepted the message.
-	// It is false when no webhook was configured.
+	// Notified reports whether at least one bot accepted the message.
+	// It is false when no target was configured, and when every target failed.
 	Notified bool
+
+	// Deliveries is the outcome of every target, in the configured order, so a
+	// partial failure can be reported target by target.
+	Deliveries []Delivery
 }
 
-// Run builds the daily content, stores it and delivers it to the configured bot.
-// A notification failure is returned as an error after the content has been written,
+// Delivery is the outcome of delivering the message to one target.
+type Delivery struct {
+	// Name and URL identify the target the outcome belongs to.
+	Name string
+	URL  string
+
+	// Success reports whether the bot accepted the message.
+	Success bool
+
+	// Error is the failure reason, empty on success.
+	Error string
+}
+
+// Run builds the daily content, stores it and delivers it to every configured bot.
+// A total delivery failure is returned as an error after the content has been written,
 // so the caller can decide not to record a delivery that never happened.
 func Run(opts *Options) (*Result, error) {
 	today := time.Now()
@@ -155,37 +203,95 @@ func Run(opts *Options) (*Result, error) {
 		logger.Warnf("write today content to file failed: %v", err)
 	}
 
-	notified, err := notify(opts.URLAddr, content, weekday)
-	result.Notified = notified
+	result.Deliveries = deliverAll(opts.Targets, content, weekday)
+	result.Notified = anyDelivered(result.Deliveries)
 
-	if err != nil {
-		return result, err
+	// the message reaches every target in one run, so only a total failure is an
+	// error: one bot accepting it is enough for the articles to count as informed.
+	if len(result.Deliveries) > 0 && !result.Notified {
+		return result, deliveryFailure(result.Deliveries)
 	}
 
 	return result, nil
 }
 
-// notify delivers the content and reports whether a bot accepted it.
-func notify(urlAddr, content string, weekday time.Weekday) (bool, error) {
-	if urlAddr == "" {
-		return false, nil
+// deliverAll delivers the content to every target at once.
+//
+// The sends run concurrently because each one blocks for its own client deadline:
+// delivering to N bots one after another would let a single silent endpoint hold
+// the whole run - and the caller's run guard - for N timeouts.
+func deliverAll(targets []Target, content string, weekday time.Weekday) []Delivery {
+	if len(targets) == 0 {
+		return nil
 	}
+
+	deliveries := make([]Delivery, len(targets))
+
+	var wait sync.WaitGroup
+
+	for index, target := range targets {
+		wait.Add(1)
+
+		go func() {
+			defer wait.Done()
+
+			deliveries[index] = deliver(target, content, weekday)
+		}()
+	}
+
+	wait.Wait()
+
+	return deliveries
+}
+
+// deliver delivers the content to one target and records its own outcome.
+func deliver(target Target, content string, weekday time.Weekday) Delivery {
+	delivery := Delivery{Name: target.Name, URL: target.URL}
+
+	var err error
 
 	switch {
-	case strings.Contains(urlAddr, lark.Host):
-		if err := lark.Lark(urlAddr, content); err != nil {
-			return false, err
-		}
-
-		return true, nil
-	case strings.Contains(urlAddr, ding.Host):
-		if err := ding.Ding(urlAddr, content, "", weekday); err != nil {
-			return false, err
-		}
-
-		return true, nil
+	case strings.Contains(target.URL, lark.Host):
+		err = lark.Lark(target.URL, content)
+	case strings.Contains(target.URL, ding.Host):
+		err = ding.Ding(target.URL, content, "", weekday)
 	default:
-		// an unknown address is not a bot webhook, the same as before.
-		return false, nil
+		err = fmt.Errorf("unsupported bot address, only %s and %s are recognized", ding.Host, lark.Host)
 	}
+
+	if err != nil {
+		delivery.Error = err.Error()
+	} else {
+		delivery.Success = true
+	}
+
+	return delivery
+}
+
+// anyDelivered reports whether at least one target accepted the message.
+func anyDelivered(deliveries []Delivery) bool {
+	for _, delivery := range deliveries {
+		if delivery.Success {
+			return true
+		}
+	}
+
+	return false
+}
+
+// deliveryFailure summarizes the failure of every target in one error, so a run
+// that reached nobody still says why for each bot.
+func deliveryFailure(deliveries []Delivery) error {
+	details := make([]string, 0, len(deliveries))
+
+	for _, delivery := range deliveries {
+		name := delivery.Name
+		if name == "" {
+			name = delivery.URL
+		}
+
+		details = append(details, fmt.Sprintf("%s: %s", name, delivery.Error))
+	}
+
+	return fmt.Errorf("deliver the daily report failed for every bot: %s", strings.Join(details, "; "))
 }

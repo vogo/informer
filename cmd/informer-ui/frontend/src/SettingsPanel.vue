@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {onMounted, reactive, ref} from 'vue'
+import {computed, onMounted, reactive, ref} from 'vue'
 import {
   NAlert,
   NButton,
@@ -32,8 +32,9 @@ import {
   SaveConfig,
   SaveHTTPProxy,
   SaveSchedule,
-  SaveWebhook,
+  SaveWebhooks,
   type HistoryIndexDTO,
+  type WebhookDTO,
 } from './bindings'
 import {errorText} from './errors'
 import {requireValue} from './nulls'
@@ -81,10 +82,13 @@ const agentAPIKeyInput = ref('')
 const agentAPIKeySaving = ref(false)
 
 const secretsPath = ref('')
-const webhookConfigured = ref(false)
-const webhook = ref('')
-const webhookInput = ref('')
+// every run delivers to the whole list, so the page edits the list instead of one
+// address: rows are saved together, and a disabled row stays in the file.
+const webhooks = ref<WebhookDTO[]>([])
 const webhookSaving = ref(false)
+const enabledWebhookCount = computed(
+  () => webhooks.value.filter(row => row.enabled && row.url.trim() !== '').length
+)
 
 const httpProxyConfigured = ref(false)
 const httpProxy = ref('')
@@ -118,8 +122,11 @@ async function load() {
     Object.assign(schedule, config.schedule)
     Object.assign(agent, config.agent)
     agentProviderOptions.value = (config.agentProviders ?? []).map(value => ({label: value, value}))
-    webhook.value = config.webhook ?? ''
-    webhookConfigured.value = webhook.value.trim() !== ''
+    webhooks.value = (config.webhooks ?? []).map(row => ({
+      name: row.name ?? '',
+      url: row.url ?? '',
+      enabled: row.enabled ?? true
+    }))
     httpProxy.value = config.httpProxy ?? ''
     httpProxyConfigured.value = httpProxy.value.trim() !== ''
 
@@ -217,12 +224,28 @@ async function saveAgentAPIKey() {
   }
 }
 
-async function saveWebhook() {
+function addWebhook() {
+  webhooks.value.push({name: '', url: '', enabled: true})
+}
+
+function removeWebhook(index: number) {
+  webhooks.value.splice(index, 1)
+}
+
+// saveWebhooks replaces the whole list, so a removed row is gone from the file and
+// a paused row keeps its address for the next enable. An empty address is refused by
+// the backend rather than silently dropped here, so the page can point at the row.
+async function saveWebhooks() {
   webhookSaving.value = true
   try {
-    await SaveWebhook(webhookInput.value)
-    message.success(webhookInput.value.trim() === '' ? '已清除机器人地址' : '机器人地址已保存')
-    webhookInput.value = ''
+    await SaveWebhooks(
+      webhooks.value.map(row => ({
+        name: row.name,
+        url: row.url,
+        enabled: row.enabled
+      }))
+    )
+    message.success(webhooks.value.length === 0 ? '已清除机器人目标' : '机器人目标已保存')
     await load()
   } catch (e) {
     message.error(`保存失败：${errorText(e)}`)
@@ -423,57 +446,58 @@ async function rebuild() {
               推送与网络
               <n-tooltip :style="tipStyle">
                 <template #trigger><span class="hint">?</span></template>
-                机器人地址写入配置文件顶层 webhook 字段，命令行显式传入的地址仍然优先；
+                机器人目标写入配置文件顶层 webhooks 数组，每次运行全量推送给所有启用的目标，
+                命令行显式传入的地址会替换本次运行的目标列表；
+                某个目标失败不影响其他目标，只有全部失败才算本次推送失败，日报与文章的通知时间仍然照常记录。
                 代理写入顶层 http_proxy 字段，订阅抓取、机器人推送与 Agent 子进程都会走该代理，保存后立即生效，
-                与 Agent 的 base_url（API 网关）无关。两者留空保存表示清除。
+                与 Agent 的 base_url（API 网关）无关。
               </n-tooltip>
             </span>
           </template>
+          <template #header-extra>
+            <n-space :size="6" align="center">
+              <n-tag size="tiny" :type="enabledWebhookCount > 0 ? 'success' : 'default'" :bordered="false">
+                {{ enabledWebhookCount > 0 ? `${enabledWebhookCount} 个启用` : '未配置' }}
+              </n-tag>
+              <n-button size="tiny" quaternary @click="addWebhook">新增目标</n-button>
+              <n-button size="tiny" :loading="webhookSaving" type="primary" @click="saveWebhooks">保存</n-button>
+            </n-space>
+          </template>
 
-          <n-form label-placement="left" label-width="72" size="small" :show-feedback="false">
-            <n-grid :cols="1" :y-gap="8">
-              <n-gi>
-                <n-form-item>
-                  <template #label>
-                    <span class="label-line">
-                      机器人
-                      <n-tag size="tiny" :type="webhookConfigured ? 'success' : 'default'" :bordered="false">
-                        {{ webhookConfigured ? '已配置' : '未配置' }}
-                      </n-tag>
-                    </span>
-                  </template>
-                  <n-input-group>
-                    <n-input
-                      v-model:value="webhookInput"
-                      size="small"
-                      :placeholder="webhook || '粘贴钉钉 / 飞书机器人 webhook'"
-                    />
-                    <n-button size="small" :loading="webhookSaving" type="primary" @click="saveWebhook">保存</n-button>
-                  </n-input-group>
-                </n-form-item>
-              </n-gi>
-              <n-gi>
-                <n-form-item>
-                  <template #label>
-                    <span class="label-line">
-                      代理
-                      <n-tag size="tiny" :type="httpProxyConfigured ? 'success' : 'default'" :bordered="false">
-                        {{ httpProxyConfigured ? '已配置' : '未配置' }}
-                      </n-tag>
-                    </span>
-                  </template>
-                  <n-input-group>
-                    <n-input
-                      v-model:value="httpProxyInput"
-                      size="small"
-                      :placeholder="httpProxy || '例如 http://127.0.0.1:7890'"
-                    />
-                    <n-button size="small" :loading="httpProxySaving" type="primary" @click="saveHTTPProxy">保存</n-button>
-                  </n-input-group>
-                </n-form-item>
-              </n-gi>
-            </n-grid>
-          </n-form>
+          <n-space vertical :size="10">
+            <div class="webhook-list">
+              <div v-for="(row, index) in webhooks" :key="index" class="webhook-row">
+                <n-switch v-model:value="row.enabled" size="small" />
+                <n-input
+                  v-model:value="row.url"
+                  size="small"
+                  placeholder="粘贴钉钉 / 飞书机器人 webhook"
+                />
+                <n-input v-model:value="row.name" size="small" placeholder="备注（可选）" class="webhook-name" />
+                <n-button size="small" quaternary @click="removeWebhook(index)">删除</n-button>
+              </div>
+              <n-text v-if="webhooks.length === 0" depth="3" class="tiny">
+                未配置目标时只生成日报，不发送推送。
+              </n-text>
+            </div>
+
+            <div>
+              <span class="label-line">
+                代理
+                <n-tag size="tiny" :type="httpProxyConfigured ? 'success' : 'default'" :bordered="false">
+                  {{ httpProxyConfigured ? '已配置' : '未配置' }}
+                </n-tag>
+              </span>
+              <n-input-group style="margin-top: 6px">
+                <n-input
+                  v-model:value="httpProxyInput"
+                  size="small"
+                  :placeholder="httpProxy || '例如 http://127.0.0.1:7890；留空保存表示清除'"
+                />
+                <n-button size="small" :loading="httpProxySaving" type="primary" @click="saveHTTPProxy">保存代理</n-button>
+              </n-input-group>
+            </div>
+          </n-space>
         </n-card>
 
         <n-card
@@ -590,6 +614,24 @@ async function rebuild() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+/* 目标列表逐行排列：开关 / 地址 / 备注 / 删除，地址占满剩余宽度 */
+.webhook-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.webhook-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.webhook-name {
+  flex: none;
+  width: 160px;
 }
 
 .hint {

@@ -33,7 +33,7 @@ export {
   SaveConfig,
   SaveHTTPProxy,
   SaveSchedule,
-  SaveWebhook,
+  SaveWebhooks,
   SetSourceEnabled,
   StartCompose,
   StartupError,
@@ -61,6 +61,7 @@ export type {
   DailyMonthDTO,
   DailyYearDTO,
   DeleteCategoryResult,
+  DeliveryDTO,
   DiagnoseReportDTO,
   DiagnoseVerificationDTO,
   FeedConfigDTO,
@@ -77,4 +78,5 @@ export type {
   SourceQueryRequest,
   SystemLogEntryDTO,
   SystemLogPageDTO,
+  WebhookDTO,
 } from '../bindings/github.com/vogo/informer/cmd/informer-ui/models'

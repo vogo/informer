@@ -72,19 +72,29 @@ async function pollInformRunning() {
 }
 
 // triggerNow runs one full push - fetch every enabled subscription, build the
-// daily markdown, deliver it to the bot - and reloads the index, so the day the
-// run just wrote shows up right away. A pipeline failure arrives inside the
-// result, so a written daily file is still reported when the delivery failed.
+// daily markdown, deliver it to every enabled bot - and reloads the index, so
+// the day the run just wrote shows up right away. A pipeline failure arrives
+// inside the result, so a written daily file is still reported when the
+// delivery failed. One bot refusing the message does not fail the run, so the
+// page names the targets that were missed instead of calling the whole run off.
 async function triggerNow() {
   triggering.value = true
   try {
     const result = requireValue(await TriggerNow(), 'InformResultDTO')
+    const deliveries = result.deliveries ?? []
+    const failed = deliveries.filter(row => !row.success)
+
     if (!result.success) {
       message.warning(`推送未完成：${result.errorInfo}`)
-    } else if (result.notified) {
-      message.success(`已推送 ${result.articleCount} 篇文章到机器人`)
+    } else if (deliveries.length === 0) {
+      message.success('日报已生成，但未配置启用的机器人目标，未发送推送')
+    } else if (failed.length > 0) {
+      const missed = failed
+        .map(row => `${row.name || row.url}（${row.errorInfo}）`)
+        .join('、')
+      message.warning(`已推送 ${result.articleCount} 篇文章，${deliveries.length - failed.length} 个目标成功，${missed} 失败`)
     } else {
-      message.success('日报已生成，但未配置机器人地址，未发送推送')
+      message.success(`已推送 ${result.articleCount} 篇文章到 ${deliveries.length} 个机器人目标`)
     }
 
     await loadIndex()
@@ -166,7 +176,7 @@ function onContentClick(event: MouseEvent) {
             <template #trigger>
               <n-button size="tiny" tertiary>立即推送</n-button>
             </template>
-            将抓取所有启用的订阅、生成今日日报并发送到机器人，确认立即推送？
+            将抓取所有启用的订阅、生成今日日报并推送到所有启用的机器人目标，确认立即推送？
           </n-popconfirm>
         </div>
         <n-button size="tiny" tertiary :loading="indexLoading" @click="loadIndex">刷新</n-button>

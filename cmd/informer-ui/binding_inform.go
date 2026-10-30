@@ -31,9 +31,13 @@ type InformResultDTO struct {
 	// finished without an error.
 	Success bool `json:"success"`
 
-	// Notified reports whether a bot accepted the message. False together with
-	// Success means no webhook is configured, so only the daily file was written.
+	// Notified reports whether at least one bot accepted the message. False together
+	// with Success means no target is configured, so only the daily file was written.
 	Notified bool `json:"notified"`
+
+	// Deliveries is the outcome of every configured target, so a partial failure can
+	// be shown target by target.
+	Deliveries []DeliveryDTO `json:"deliveries"`
 
 	// ArticleCount is how many articles the run selected into the message.
 	ArticleCount int `json:"articleCount"`
@@ -46,8 +50,23 @@ type InformResultDTO struct {
 	ErrorInfo string `json:"errorInfo"`
 }
 
+// DeliveryDTO is the outcome of delivering one run to one target.
+type DeliveryDTO struct {
+	// Name identifies the target as the settings page labels it.
+	Name string `json:"name"`
+
+	// URL is the target address.
+	URL string `json:"url"`
+
+	// Success reports whether this target accepted the message.
+	Success bool `json:"success"`
+
+	// ErrorInfo carries the failure reason of this target, empty on success.
+	ErrorInfo string `json:"errorInfo"`
+}
+
 // TriggerNow runs one full inform cycle at once: fetch every enabled subscription,
-// build the daily message, store the markdown and deliver it to the configured bot.
+// build the daily message, store the markdown and deliver it to every configured bot.
 //
 // The binding fails only on a broken startup or a run already in flight; every
 // pipeline failure arrives inside the result, so the page can still show what the
@@ -82,6 +101,7 @@ func toInformResultDTO(result *inform.Result, err error) *InformResultDTO {
 
 	if result != nil {
 		dto.Notified = result.Notified
+		dto.Deliveries = toDeliveryDTOs(result.Deliveries)
 		dto.ArticleCount = len(result.Articles)
 		dto.ContentFilePath = result.ContentFilePath
 	}
@@ -95,4 +115,19 @@ func toInformResultDTO(result *inform.Result, err error) *InformResultDTO {
 	dto.Success = true
 
 	return dto
+}
+
+func toDeliveryDTOs(deliveries []inform.Delivery) []DeliveryDTO {
+	dtos := make([]DeliveryDTO, 0, len(deliveries))
+
+	for _, delivery := range deliveries {
+		dtos = append(dtos, DeliveryDTO{
+			Name:      delivery.Name,
+			URL:       delivery.URL,
+			Success:   delivery.Success,
+			ErrorInfo: delivery.Error,
+		})
+	}
+
+	return dtos
 }
