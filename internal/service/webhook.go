@@ -190,7 +190,8 @@ func (s *Service) storedWebhooks() ([]inform.Webhook, error) {
 	}
 
 	var legacy string
-	if _, err = doc.Unmarshal(legacyWebhookKey, &legacy); err == nil {
+	_, err = doc.Unmarshal(legacyWebhookKey, &legacy)
+	if err == nil {
 		if trimmed := strings.TrimSpace(legacy); trimmed != "" {
 			return []inform.Webhook{{URL: trimmed}}, nil
 		}

@@ -35,6 +35,11 @@ import (
 	"github.com/vogo/informer/internal/soup"
 )
 
+const (
+	primaryTargetName = "primary"
+	backupTargetName  = "backup"
+)
+
 // allArticles reads every stored article, ordered by id.
 func allArticles(t *testing.T, svc *service.Service) []*feed.Article {
 	t.Helper()
@@ -183,9 +188,9 @@ func TestTriggerInformDeliversToEveryEnabledTarget(t *testing.T) {
 	disabled := false
 
 	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{
-		{Name: "主群", URL: server.URL + "/feishu.cn/ok"},
-		{Name: "备份群", URL: server.URL + "/feishu.cn/fail"},
-		{Name: "暂停群", URL: server.URL + "/feishu.cn/ok?paused=1", Enabled: &disabled},
+		{Name: primaryTargetName, URL: server.URL + "/feishu.cn/ok"},
+		{Name: backupTargetName, URL: server.URL + "/feishu.cn/fail"},
+		{Name: "paused", URL: server.URL + "/feishu.cn/ok?paused=1", Enabled: &disabled},
 	}))
 
 	result, err := svc.TriggerInform("")
@@ -199,9 +204,9 @@ func TestTriggerInformDeliversToEveryEnabledTarget(t *testing.T) {
 		deliveries[delivery.Name] = delivery
 	}
 
-	assert.True(t, deliveries["主群"].Success)
-	assert.False(t, deliveries["备份群"].Success)
-	assert.NotEmpty(t, deliveries["备份群"].Error)
+	assert.True(t, deliveries[primaryTargetName].Success)
+	assert.False(t, deliveries[backupTargetName].Success)
+	assert.NotEmpty(t, deliveries[backupTargetName].Error)
 
 	for _, article := range allArticles(t, svc) {
 		require.NotNil(t, article.InformedAt, "a run with one accepting bot records the inform time")
@@ -216,8 +221,8 @@ func TestTriggerInformFailsWhenEveryTargetFails(t *testing.T) {
 
 	require.NoError(t, svc.CreateSource(feedSource(server)))
 	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{
-		{Name: "主群", URL: server.URL + "/feishu.cn/fail"},
-		{Name: "备份群", URL: server.URL + "/feishu.cn/missing"},
+		{Name: primaryTargetName, URL: server.URL + "/feishu.cn/fail"},
+		{Name: backupTargetName, URL: server.URL + "/feishu.cn/missing"},
 	}))
 
 	result, err := svc.TriggerInform("")

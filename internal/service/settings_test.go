@@ -31,6 +31,11 @@ import (
 	"github.com/vogo/informer/internal/service"
 )
 
+const (
+	testWebhookURL        = "https://example.com/hook"
+	developmentTargetName = "development"
+)
+
 // validFeedConfig is a feed section every validation rule accepts.
 func validFeedConfig() *feed.Config {
 	return &feed.Config{
@@ -169,7 +174,7 @@ func TestSaveWebhooksWritesToInformerJSON(t *testing.T) {
 	disabled := false
 
 	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{
-		{Name: " 研发群 ", URL: " " + dingURL + " "},
+		{Name: " " + developmentTargetName + " ", URL: " " + dingURL + " "},
 		{URL: larkURL, Enabled: &disabled},
 	}))
 
@@ -177,10 +182,10 @@ func TestSaveWebhooksWritesToInformerJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, view.Exists)
 	require.Len(t, view.Webhooks, 2)
-	assert.Equal(t, "研发群", view.Webhooks[0].Name)
+	assert.Equal(t, developmentTargetName, view.Webhooks[0].Name)
 	assert.Equal(t, dingURL, view.Webhooks[0].URL)
 	assert.True(t, view.Webhooks[0].Enabled)
-	assert.Equal(t, "open.feishu.cn", view.Webhooks[1].Name, "an unnamed target is labelled by its host")
+	assert.Equal(t, "open.feishu.cn", view.Webhooks[1].Name, "an unnamed target is labeled by its host")
 	assert.Equal(t, larkURL, view.Webhooks[1].URL)
 	assert.False(t, view.Webhooks[1].Enabled)
 
@@ -192,7 +197,7 @@ func TestSaveWebhooksWritesToInformerJSON(t *testing.T) {
 	// a paused target keeps its address in the file but takes no part in a run.
 	targets := svc.ResolveTargets("")
 	require.Len(t, targets, 1)
-	assert.Equal(t, "研发群", targets[0].Name)
+	assert.Equal(t, developmentTargetName, targets[0].Name)
 	assert.Equal(t, dingURL, targets[0].URL)
 
 	// the credential file is not created for plain bot addresses.
@@ -209,7 +214,7 @@ func TestResolveTargetsPrefersTheCommandLineAddress(t *testing.T) {
 	// its behavior; a blank argument falls back to the file.
 	targets := svc.ResolveTargets("  https://example.com/hook ")
 	require.Len(t, targets, 1)
-	assert.Equal(t, "https://example.com/hook", targets[0].URL)
+	assert.Equal(t, testWebhookURL, targets[0].URL)
 	assert.Equal(t, "example.com", targets[0].Name)
 
 	assert.Len(t, svc.ResolveTargets("   "), 1)
@@ -220,8 +225,8 @@ func TestSaveWebhooksRefusesABlankOrRepeatedAddress(t *testing.T) {
 
 	require.ErrorIs(t, svc.SaveWebhooks([]inform.Webhook{{Name: "empty"}}), service.ErrInvalidArgument)
 	require.ErrorIs(t, svc.SaveWebhooks([]inform.Webhook{
-		{URL: "https://example.com/hook"},
-		{URL: "https://example.com/hook"},
+		{URL: testWebhookURL},
+		{URL: testWebhookURL},
 	}), service.ErrInvalidArgument)
 
 	// a refused save never rewrote the file.
@@ -262,7 +267,7 @@ func TestSaveWebhooksMigratesALegacySecretEntry(t *testing.T) {
 func TestSaveWebhooksClearsTheStoredList(t *testing.T) {
 	svc := newService(t)
 
-	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{{URL: "https://example.com/hook"}}))
+	require.NoError(t, svc.SaveWebhooks([]inform.Webhook{{URL: testWebhookURL}}))
 	require.NoError(t, svc.SaveWebhooks(nil))
 
 	view, err := svc.ReadWebhooks()

@@ -19,6 +19,7 @@ package inform
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,6 +39,11 @@ import (
 
 // ConfigFileName is the informer configuration file inside the active data directory.
 const ConfigFileName = "informer.json"
+
+var (
+	errUnsupportedBot = errors.New("unsupported bot address")
+	errDeliveryFailed = errors.New("deliver the daily report failed for every bot")
+)
 
 const (
 	// DataDirName is the directory holding the generated daily markdown files.
@@ -230,13 +236,9 @@ func deliverAll(targets []Target, content string, weekday time.Weekday) []Delive
 	var wait sync.WaitGroup
 
 	for index, target := range targets {
-		wait.Add(1)
-
-		go func() {
-			defer wait.Done()
-
+		wait.Go(func() {
 			deliveries[index] = deliver(target, content, weekday)
-		}()
+		})
 	}
 
 	wait.Wait()
@@ -256,7 +258,7 @@ func deliver(target Target, content string, weekday time.Weekday) Delivery {
 	case strings.Contains(target.URL, ding.Host):
 		err = ding.Ding(target.URL, content, "", weekday)
 	default:
-		err = fmt.Errorf("unsupported bot address, only %s and %s are recognized", ding.Host, lark.Host)
+		err = fmt.Errorf("%w, only %s and %s are recognized", errUnsupportedBot, ding.Host, lark.Host)
 	}
 
 	if err != nil {
@@ -293,5 +295,5 @@ func deliveryFailure(deliveries []Delivery) error {
 		details = append(details, fmt.Sprintf("%s: %s", name, delivery.Error))
 	}
 
-	return fmt.Errorf("deliver the daily report failed for every bot: %s", strings.Join(details, "; "))
+	return fmt.Errorf("%w: %s", errDeliveryFailed, strings.Join(details, "; "))
 }

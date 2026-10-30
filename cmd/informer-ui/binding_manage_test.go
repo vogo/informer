@@ -560,20 +560,24 @@ func TestWebhookBindingReturnsTheStoredTargets(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, view.Webhooks)
 
-	const webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/0000-plain-token"
+	const (
+		webhook         = "https://open.feishu.cn/open-apis/bot/v2/hook/0000-plain-token"
+		developmentName = "development"
+		pausedName      = "paused"
+	)
 
 	require.NoError(t, app.SaveWebhooks([]WebhookDTO{
-		{Name: "研发群", URL: webhook, Enabled: true},
-		{Name: "暂停群", URL: "https://oapi.dingtalk.com/robot/send?access_token=paused", Enabled: false},
+		{Name: developmentName, URL: webhook, Enabled: true},
+		{Name: pausedName, URL: "https://oapi.dingtalk.com/robot/send?access_token=paused", Enabled: false},
 	}))
 
 	view, err = app.ReadConfig()
 	require.NoError(t, err)
 	require.Len(t, view.Webhooks, 2)
-	assert.Equal(t, "研发群", view.Webhooks[0].Name)
+	assert.Equal(t, developmentName, view.Webhooks[0].Name)
 	assert.Equal(t, webhook, view.Webhooks[0].URL)
 	assert.True(t, view.Webhooks[0].Enabled)
-	assert.Equal(t, "暂停群", view.Webhooks[1].Name)
+	assert.Equal(t, pausedName, view.Webhooks[1].Name)
 	assert.False(t, view.Webhooks[1].Enabled)
 
 	secrets, err := app.ReadSecrets()
