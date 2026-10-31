@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 
 	"github.com/vogo/informer/internal/home"
 	"github.com/vogo/informer/internal/inform"
@@ -72,6 +73,8 @@ type App struct {
 	// initErr carries a data directory or service startup failure into the
 	// running window so the UI can show it instead of a blank page.
 	initErr error
+
+	updateCancel context.CancelFunc
 }
 
 // newApp resolves the single active data directory and builds the service
@@ -137,6 +140,9 @@ func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error 
 //
 //nolint:unparam //Wails ServiceShutdown requires an error result.
 func (a *App) ServiceShutdown() error {
+	if a.updateCancel != nil {
+		a.updateCancel()
+	}
 	if a.sched != nil {
 		a.sched.Stop()
 	}
@@ -174,6 +180,17 @@ func (a *App) RestartToUpdate() error {
 		return ErrApplicationNotRunning
 	}
 
+	if app.Updater.State() != updater.StateReady {
+		return updater.ErrNotReady
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	err = checkUpdateLocation(self)
+	if err != nil {
+		return err
+	}
 	return app.Updater.Restart(context.Background())
 }
 

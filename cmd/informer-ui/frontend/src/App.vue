@@ -17,7 +17,7 @@ import {
   zhCN
 } from 'naive-ui'
 import {Events, Updater} from '@wailsio/runtime'
-import {HomeDir, RestartToUpdate, StartupError, Version} from './bindings'
+import {HomeDir, RestartToUpdate, StartupError, UpdateState, Version} from './bindings'
 import ArticleLibrary from './ArticleLibrary.vue'
 import DailyReport from './DailyReport.vue'
 import SettingsPanel from './SettingsPanel.vue'
@@ -41,18 +41,39 @@ const updateDetail = ref('')
 const restarting = ref(false)
 
 const unsubs: Array<() => void> = []
+let stateTimer: ReturnType<typeof setInterval> | undefined
+let stateRevision = 0
+let stateReadPending = false
+
+async function syncUpdateState() {
+  if (stateReadPending) return
+  stateReadPending = true
+  const revision = stateRevision
+  try {
+    const state = await UpdateState()
+    if (revision !== stateRevision) return
+    if (state === 'ready') {
+      if (updateBadge.value !== 'ready') updateDetail.value = ''
+      updateBadge.value = 'ready'
+    } else if (['downloading', 'verifying', 'installing'].includes(state)) {
+      if (updateBadge.value !== 'downloading') updateDetail.value = ''
+      updateBadge.value = 'downloading'
+    } else if (state === 'error' && updateBadge.value !== 'error') {
+      updateBadge.value = 'error'
+      updateDetail.value = '自动更新失败，下次启动或每日检查时重试；详情请查看日志'
+    }
+  } catch { /* The window may be shutting down. */ }
+  finally { stateReadPending = false }
+}
 
 onMounted(async () => {
-  version.value = await Version().catch(() => '')
-  homeDir.value = await HomeDir().catch(() => '')
-  startupError.value = await StartupError().catch(e => String(e))
-  ready.value = true
-
   unsubs.push(Events.On(Updater.Events.DownloadStarted, () => {
+    stateRevision++
     updateBadge.value = 'downloading'
     updateDetail.value = ''
   }))
   unsubs.push(Events.On(Updater.Events.DownloadProgress, (e: {data?: {written?: number; total?: number}}) => {
+    stateRevision++
     updateBadge.value = 'downloading'
     const p = e?.data
     if (p && p.total && p.total > 0 && typeof p.written === 'number') {
@@ -61,33 +82,46 @@ onMounted(async () => {
     }
   }))
   unsubs.push(Events.On(Updater.Events.UpdateReady, () => {
+    stateRevision++
     updateBadge.value = 'ready'
     updateDetail.value = ''
   }))
   unsubs.push(Events.On(Updater.Events.Error, (e: {data?: {message?: string; stage?: string}}) => {
+    stateRevision++
     updateBadge.value = 'error'
     updateDetail.value = e?.data?.message || '更新失败'
   }))
   unsubs.push(Events.On(Updater.Events.NoUpdate, () => {
     if (updateBadge.value !== 'ready') {
+      stateRevision++
       updateBadge.value = ''
       updateDetail.value = ''
     }
   }))
+  await syncUpdateState()
+  stateTimer = setInterval(() => { void syncUpdateState() }, 3000)
+  version.value = await Version().catch(() => '')
+  homeDir.value = await HomeDir().catch(() => '')
+  startupError.value = await StartupError().catch(e => String(e))
+  ready.value = true
 })
 
 onUnmounted(() => {
+  stateRevision++
+  if (stateTimer) clearInterval(stateTimer)
   for (const off of unsubs) {
     off()
   }
 })
 
 async function onRestartUpdate() {
+  if (restarting.value) return
   restarting.value = true
   try {
     await RestartToUpdate()
   } catch (e) {
-    updateBadge.value = 'error'
+    stateRevision++
+    updateBadge.value = 'ready'
     updateDetail.value = e instanceof Error ? e.message : String(e)
     restarting.value = false
   }
@@ -103,10 +137,30 @@ async function onRestartUpdate() {
             <n-space align="center" :size="12">
               <n-text strong style="font-size: 16px">Informer</n-text>
               <n-tag v-if="version" :bordered="false" size="small" type="info">{{ version }}</n-tag>
+              <n-tooltip v-if="updateBadge === 'ready'">
+                <template #trigger>
+                  <n-button circle size="small" type="success" :loading="restarting" :disabled="restarting"
+                    aria-label="新版本已下载，点击重启更新" @click="onRestartUpdate">
+                    <template #icon>
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4" />
+                      </svg>
+                    </template>
+                  </n-button>
+                </template>
+                {{ updateDetail || '新版本已下载，点击重启更新' }}
+              </n-tooltip>
+              <n-text v-else-if="updateBadge === 'downloading'" depth="3" style="font-size: 12px">
+                正在准备更新{{ updateDetail ? ` ${updateDetail}` : '…' }}
+              </n-text>
+              <n-tooltip v-else-if="updateBadge === 'error'">
+                <template #trigger><n-tag :bordered="false" size="small" type="error">更新失败</n-tag></template>
+                {{ updateDetail || '下次启动或每日检查时重试' }}
+              </n-tooltip>
               <n-tooltip v-if="homeDir">
                 <template #trigger>
                   <n-text depth="3" style="font-size: 12px">
-                    <n-ellipsis style="max-width: 420px">{{ homeDir }}</n-ellipsis>
+                    <n-ellipsis style="max-width: 280px">{{ homeDir }}</n-ellipsis>
                   </n-text>
                 </template>
                 数据目录：{{ homeDir }}
@@ -120,24 +174,7 @@ async function onRestartUpdate() {
                 </template>
                 查看本次运行的系统日志
               </n-tooltip>
-              <n-text v-if="updateBadge === 'downloading'" depth="3" style="font-size: 12px">
-                正在下载更新{{ updateDetail ? ` ${updateDetail}` : '…' }}
-              </n-text>
-              <n-button
-                v-else-if="updateBadge === 'ready'"
-                type="warning"
-                size="small"
-                :loading="restarting"
-                @click="onRestartUpdate"
-              >
-                重启生效新版本
-              </n-button>
-              <n-tooltip v-else-if="updateBadge === 'error'">
-                <template #trigger>
-                  <n-tag :bordered="false" size="small" type="error">更新失败</n-tag>
-                </template>
-                {{ updateDetail || '请稍后重试' }}
-              </n-tooltip>
+
             </n-space>
           </header>
 
