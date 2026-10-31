@@ -362,3 +362,38 @@ func TestTriggerInformSucceedsWhenTheDailySoupFreezes(t *testing.T) {
 	assert.Len(t, result.Articles, 2)
 	assert.FileExists(t, result.ContentFilePath)
 }
+
+// A second service must not redirect the first service's fetch or delivery writes.
+func TestTriggerInformKeepsServiceDatabasesIsolated(t *testing.T) {
+	server := newContentServer(t)
+	freezeDailySoup(t, server.URL+"/broken")
+	first := newService(t)
+	require.NoError(t, first.CreateSource(feedSource(server)))
+	second := newService(t)
+	require.NoError(t, second.CreateSource(jsonSource(server)))
+	beforeSecond := snapshotDB(t, second)
+
+	result, err := first.TriggerInform("")
+	require.NoError(t, err)
+	require.Len(t, result.Articles, 2)
+	assert.Contains(t, result.Content, "first article")
+	assert.NotContains(t, result.Content, "json one")
+	assert.Equal(t, beforeSecond, snapshotDB(t, second))
+	for _, article := range allArticles(t, first) {
+		assert.True(t, article.Informed)
+		assert.NotNil(t, article.InformedAt)
+	}
+	assert.Len(t, allArticles(t, first), 2)
+	beforeFirst := snapshotDB(t, first)
+
+	result, err = second.TriggerInform("")
+	require.NoError(t, err)
+	require.Len(t, result.Articles, 2)
+	assert.Contains(t, result.Content, "json one")
+	assert.NotContains(t, result.Content, "first article")
+	assert.Equal(t, beforeFirst, snapshotDB(t, first))
+	for _, article := range allArticles(t, second) {
+		assert.True(t, article.Informed)
+		assert.NotNil(t, article.InformedAt)
+	}
+}

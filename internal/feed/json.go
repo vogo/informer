@@ -68,19 +68,19 @@ func jsonEntry(titleValue, urlValue any, sink runlog.Sink) (jsonItem, bool) {
 	return jsonItem{title: title, link: link}, true
 }
 
-func jsonParseFeed(config *Config, source *Source, _ int64) {
+func (s *Store) jsonParseFeed(config *Config, source *Source, _ int64) {
 	articles, err := JsonParse(source, nil)
 	if err != nil {
 		logger.Infof("regex parse feed url error! url: %s, error: %v", source.URL, err)
 
-		updateSourceError(source, err)
+		s.updateSourceError(source, err)
 
 		return
 	}
 
-	updateSourceNormal(source)
+	s.updateSourceNormal(source)
 
-	saveParsedArticles(config, source, articles)
+	s.saveParsedArticles(config, source, articles)
 }
 
 //nolint:revive,gosmopolitan //historical exported name; the recorded lines speak the user's language.

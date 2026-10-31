@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,8 +122,13 @@ type Target struct {
 	URL string
 }
 
-// Options describes one inform run. The feed database is expected to be
-// initialized by the caller, so this package never opens it itself.
+// FeedProvider supplies recommended articles for a report. The caller binds it
+// to the active data directory; the report workflow never opens a database.
+type FeedProvider interface {
+	AddFeeds(buf io.StringWriter, config *feed.Config, agentConfig *agent.Config) []*feed.Article
+}
+
+// Options describes one inform run.
 type Options struct {
 	ResultProcessing *resultprocess.Config
 
@@ -182,7 +188,7 @@ type Delivery struct {
 // Run builds the daily content, stores it and delivers it to every configured bot.
 // A total delivery failure is returned as an error after the content has been written,
 // so the caller can decide not to record a delivery that never happened.
-func Run(opts *Options) (*Result, error) {
+func Run(opts *Options, feeds FeedProvider) (*Result, error) {
 	validationErr := resultprocess.Validate(opts.ResultProcessing)
 	if validationErr != nil {
 		return nil, validationErr
@@ -197,7 +203,7 @@ func Run(opts *Options) (*Result, error) {
 
 	todayContentFilePath := DailyFilePath(opts.HomeDir, today)
 
-	content, articles := initialContent(opts)
+	content, articles := initialContent(opts, feeds)
 
 	result := &Result{
 		Content:         content,
@@ -245,7 +251,7 @@ func Run(opts *Options) (*Result, error) {
 }
 
 // initialContent collects the date, daily sentence and selected feed articles.
-func initialContent(opts *Options) (string, []*feed.Article) {
+func initialContent(opts *Options, feeds FeedProvider) (string, []*feed.Article) {
 	buf := bytes.NewBuffer(nil)
 	buf.WriteString(date.GetDateInfo())
 
@@ -257,7 +263,7 @@ func initialContent(opts *Options) (string, []*feed.Article) {
 
 	var articles []*feed.Article
 	if opts.FeedConfig != nil {
-		articles = feed.AddFeeds(buf, opts.FeedConfig, opts.AgentConfig)
+		articles = feeds.AddFeeds(buf, opts.FeedConfig, opts.AgentConfig)
 	}
 
 	return buf.String(), articles
