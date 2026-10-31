@@ -34,21 +34,21 @@ import (
 // ErrAgentPromptEmpty marks an agent source that has no instruction to run.
 var ErrAgentPromptEmpty = errors.New("agent source has no prompt")
 
-func agentParseFeed(config *Config, source *Source, agentConfig *agent.Config, _ int64) {
+func (s *Store) agentParseFeed(config *Config, source *Source, agentConfig *agent.Config, _ int64) {
 	logger.Info("agent parse feed: ", source.Title)
 
 	articles, err := AgentParse(source, agentConfig, nil)
 	if err != nil {
 		logger.Infof("agent parse feed error! source: %s, error: %v", source.Title, err)
 
-		updateSourceError(source, err)
+		s.updateSourceError(source, err)
 
 		return
 	}
 
-	updateSourceNormal(source)
+	s.updateSourceNormal(source)
 
-	saveParsedArticles(config, source, articles)
+	s.saveParsedArticles(config, source, articles)
 }
 
 // AgentParse asks the configured agent for the articles of an agent source.

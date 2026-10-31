@@ -31,7 +31,6 @@ import (
 )
 
 // TestUpdateAndFilterFeeds fetches a local RSS fixture.
-// It shares the package level database handle, so it never runs in parallel.
 func TestUpdateAndFilterFeeds(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
@@ -59,7 +58,7 @@ func TestUpdateAndFilterFeeds(t *testing.T) {
 		Enabled:    true,
 	}).Error)
 
-	articles := feed.UpdateAndFilterFeeds(feedConfig, nil)
+	articles := feed.NewStore(db).UpdateAndFilterFeeds(feedConfig, nil)
 	require.Len(t, articles, 1)
 	assert.Equal(t, "Fixture article", articles[0].Title)
 	assert.Equal(t, "https://example.com/article", articles[0].URL)

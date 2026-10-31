@@ -80,24 +80,24 @@ func ParseGoFeed(source *Source, sink runlog.Sink) (*gofeed.Feed, error) {
 	return feed, nil
 }
 
-func addGoFeed(config *Config, source *Source, expireTime int64) {
+func (s *Store) addGoFeed(config *Config, source *Source, expireTime int64) {
 	logger.Info("parse feed: ", source.URL)
 
 	feed, err := ParseGoFeed(source, nil)
 	if err != nil {
 		logger.Warnf("parse feed url error! url: %s, error: %v", source.URL, err)
 
-		updateSourceError(source, err)
+		s.updateSourceError(source, err)
 
 		return
 	}
 
-	updateSourceNormal(source)
+	s.updateSourceNormal(source)
 
 	count := 0
 
 	for _, item := range feed.Items {
-		addGoFeedItem(source, expireTime, item)
+		s.addGoFeedItem(source, expireTime, item)
 
 		count++
 
@@ -111,13 +111,13 @@ func addGoFeed(config *Config, source *Source, expireTime int64) {
 	}
 }
 
-func addGoFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
+func (s *Store) addGoFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
 	article, ok := goFeedItemArticle(source, item)
 	if !ok {
 		return
 	}
 
-	if isFeedURLExists(article.URL) {
+	if s.isFeedURLExists(article.URL) {
 		return
 	}
 
@@ -127,7 +127,7 @@ func addGoFeedItem(source *Source, expireTime int64, item *gofeed.Item) {
 		return
 	}
 
-	saveNewArticle(article)
+	s.saveNewArticle(article)
 }
 
 // goFeedItemArticle converts a feed item into an article without touching the database.

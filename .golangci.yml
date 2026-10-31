@@ -63,13 +63,11 @@ linters:
       # These fixtures exercise Chinese category names and CLI output.
       - linters: [gosmopolitan]
         path: internal/(cli/feed|feed/db|service/crud)_test\.go$
-      # These tests mutate the shared database, stdout, or proxy configuration.
+      # These tests mutate stdout or process-wide HTTP configuration.
       - linters: [paralleltest]
         path: internal/(cli/.*_test|feed/(db|feed)_test|httpx/proxy_test)\.go$
-      # feed.InitFeedDB installs a package level database handle, so two services
-      # opening at the same time would race. Every test of the service package
-      # therefore has to stay sequential; this is a structural constraint of the
-      # feed package, not an omission in the tests.
+      # Service integration tests swap process-wide HTTP clients and Agent
+      # guards, so they remain sequential even though databases are instance bound.
       - linters:
           - paralleltest
         path: internal/service/.*_test\.go
@@ -80,7 +78,7 @@ linters:
           - paralleltest
         path: internal/(ding|lark|soup)/.*_test\.go
       # The push timeout tests swap outbound clients; processing integration
-      # tests also use the process-wide feed database and Agent guards.
+      # tests also use process-wide HTTP clients and Agent guards.
       # Both must remain sequential.
       - linters:
           - paralleltest
