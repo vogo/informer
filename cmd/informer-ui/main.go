@@ -33,6 +33,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
+	"golang.org/x/mod/semver"
 
 	"github.com/vogo/informer/internal/compose"
 	"github.com/vogo/informer/internal/diagnose"
@@ -71,6 +72,9 @@ var version = "dev" //nolint:gochecknoglobals //build time injection point.
 var assets embed.FS //nolint:gochecknoglobals //wails asset server entry.
 
 func main() {
+	// A helper must never initialize services or touch the live database.
+	updater.HandleHelperMode()
+
 	// tool server mode answers before anything else: a diagnosis and a composing
 	// conversation both launch this very binary to reach their tools, the
 	// exchange runs on stdin/stdout, and no window or database may come near it.
@@ -115,7 +119,7 @@ func main() {
 		},
 	})
 
-	err := initUpdater(app)
+	err := initUpdater(app, desktop)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "informer-ui: updater:", err)
 	}
@@ -170,8 +174,8 @@ func exitOnServeError(err error) {
 
 // initUpdater wires the official Wails updater against GitHub Releases.
 // Development builds (version "dev") skip network checks entirely.
-func initUpdater(app *application.App) error {
-	if version == "dev" || strings.TrimSpace(version) == "" {
+func initUpdater(app *application.App, desktop *App) error {
+	if !semver.IsValid(version) || semver.Prerelease(version) != "" {
 		return nil
 	}
 
@@ -189,22 +193,20 @@ func initUpdater(app *application.App) error {
 
 	err = app.Updater.Init(updater.Config{
 		CurrentVersion: current,
-		Providers:      []updater.Provider{gh},
+		Providers:      []updater.Provider{verifiedProvider{gh}},
 		Window:         updater.WindowNone,
-		CheckInterval:  24 * time.Hour,
 	})
 	if err != nil {
 		return err
 	}
 
-	// CheckInterval waits for the first tick; kick one check on startup so a
-	// freshly opened window still learns about a release published today.
-	go func() {
-		checkErr := app.Updater.CheckAndInstall(context.Background())
-		if checkErr != nil {
-			app.Logger.Error("update check", "error", checkErr)
-		}
-	}()
+	// Own the polling loop so a ready update is not discarded and downloaded
+	// again by beta.8's periodic loop. Shutdown cancels in-flight HTTP requests.
+	ctx, cancel := context.WithCancel(context.Background())
+	desktop.updateCancel = cancel
+	go runUpdateChecks(ctx, 24*time.Hour, app.Updater, func(err error) {
+		logger.Errorf("update check failed: %v", err)
+	})
 
 	return nil
 }
