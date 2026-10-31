@@ -27,6 +27,10 @@ import (
 // binding error: the daily file may already be written when the bot rejects the
 // message, and the page then shows both facts at once.
 type InformResultDTO struct {
+	Skipped              bool   `json:"skipped"`
+	SkipReason           string `json:"skipReason"`
+	ProcessingRecordPath string `json:"processingRecordPath"`
+
 	// Success reports whether the whole run - fetch, daily file and delivery -
 	// finished without an error.
 	Success bool `json:"success"`
@@ -100,6 +104,8 @@ func toInformResultDTO(result *inform.Result, err error) *InformResultDTO {
 	dto := &InformResultDTO{}
 
 	if result != nil {
+		dto.Skipped, dto.SkipReason = result.Skipped, result.SkipReason
+		dto.ProcessingRecordPath = result.ProcessingRecordPath
 		dto.Notified = result.Notified
 		dto.Deliveries = toDeliveryDTOs(result.Deliveries)
 		dto.ArticleCount = len(result.Articles)

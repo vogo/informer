@@ -135,6 +135,10 @@ func ValidateAgentConfig(config *agent.Config) error {
 // and the absolute path is remembered in informer.json, so a desktop app that started
 // without the user's shell PATH only has to discover the binary once.
 func (s *Service) EffectiveAgentConfig(fileConfig *inform.Config) *agent.Config {
+	return s.effectiveAgentConfig(fileConfig, true)
+}
+
+func (s *Service) effectiveAgentConfig(fileConfig *inform.Config, rememberCommand bool) *agent.Config {
 	config := DefaultAgentConfig()
 
 	if fileConfig != nil && fileConfig.Agent != nil {
@@ -154,7 +158,9 @@ func (s *Service) EffectiveAgentConfig(fileConfig *inform.Config) *agent.Config 
 		resolved.HTTPProxy = proxy
 	}
 
-	s.ensureAgentCommand(resolved)
+	if rememberCommand {
+		s.ensureAgentCommand(resolved)
+	}
 
 	return resolved
 }

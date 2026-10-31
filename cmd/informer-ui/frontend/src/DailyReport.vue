@@ -86,6 +86,8 @@ async function triggerNow() {
 
     if (!result.success) {
       message.warning(`推送未完成：${result.errorInfo}`)
+    } else if (result.skipped) {
+      message.info(`已跳过推送：${result.skipReason}`)
     } else if (deliveries.length === 0) {
       message.success('日报已生成，但未配置启用的机器人目标，未发送推送')
     } else if (failed.length > 0) {

@@ -19,6 +19,7 @@ package inform
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -30,10 +31,12 @@ import (
 	"github.com/vogo/logger"
 
 	"github.com/vogo/informer/internal/agent"
+	"github.com/vogo/informer/internal/configstore"
 	"github.com/vogo/informer/internal/date"
 	"github.com/vogo/informer/internal/ding"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/lark"
+	"github.com/vogo/informer/internal/resultprocess"
 	"github.com/vogo/informer/internal/soup"
 )
 
@@ -73,6 +76,8 @@ func DailyFilePath(homeDir string, day time.Time) string {
 
 // Config is the layout of informer.json.
 type Config struct {
+	ResultProcessing *resultprocess.Config `json:"result_processing,omitempty"`
+
 	Feed *feed.Config `json:"feed"`
 
 	// Agent is the shared configuration of every agent source. A nil value runs
@@ -119,6 +124,8 @@ type Target struct {
 // Options describes one inform run. The feed database is expected to be
 // initialised by the caller, so this package never opens it itself.
 type Options struct {
+	ResultProcessing *resultprocess.Config
+
 	// HomeDir is the active data directory holding informer.json and data/<year>.
 	HomeDir string
 
@@ -136,6 +143,11 @@ type Options struct {
 
 // Result is the outcome of one inform run.
 type Result struct {
+	// Skipped is a successful AI decision to send nothing.
+	Skipped              bool
+	SkipReason           string
+	ProcessingRecordPath string
+
 	// Content is the generated message body.
 	Content string
 
@@ -171,6 +183,10 @@ type Delivery struct {
 // A total delivery failure is returned as an error after the content has been written,
 // so the caller can decide not to record a delivery that never happened.
 func Run(opts *Options) (*Result, error) {
+	validationErr := resultprocess.Validate(opts.ResultProcessing)
+	if validationErr != nil {
+		return nil, validationErr
+	}
 	today := time.Now()
 
 	dataPath := DailyDirPath(opts.HomeDir, today)
@@ -189,15 +205,12 @@ func Run(opts *Options) (*Result, error) {
 		buf.WriteByte('\n')
 	}
 
-	weekday := today.Weekday()
-
 	var articles []*feed.Article
 	if opts.FeedConfig != nil {
 		articles = feed.AddFeeds(buf, opts.FeedConfig, opts.AgentConfig)
 	}
 
 	content := buf.String()
-	logger.Info(content)
 
 	result := &Result{
 		Content:         content,
@@ -205,11 +218,34 @@ func Run(opts *Options) (*Result, error) {
 		ContentFilePath: todayContentFilePath,
 	}
 
-	if err := os.WriteFile(todayContentFilePath, []byte(content), os.ModePerm); err != nil {
-		logger.Warnf("write today content to file failed: %v", err)
-	}
+	if opts.ResultProcessing != nil && opts.ResultProcessing.Enabled {
+		// Until processing succeeds there is no final content or selected article list.
+		result.Content, result.ContentFilePath, result.Articles = "", "", nil
+		report, recordPath, err := processFinal(context.Background(), opts, content, articles, today)
+		result.ProcessingRecordPath = recordPath
+		if err != nil {
+			return result, err
+		}
+		if report.Action == "skip" {
+			result.Skipped, result.SkipReason = true, report.Summary
+			logger.Infof("final processing skipped this run: %s", report.Summary)
 
-	result.Deliveries = deliverAll(opts.Targets, content, weekday)
+			return result, nil
+		}
+		content = report.Content
+		result.Content, result.Articles = content, report.Selected(articles)
+	}
+	logger.Info(content)
+	// A local-only run is delivered only if the final file was actually stored.
+	writeErr := configstore.WriteAtomic(todayContentFilePath, []byte(content), configstore.PermConfig)
+	if writeErr != nil {
+		result.ContentFilePath = ""
+
+		return result, fmt.Errorf("write daily report: %w", writeErr)
+	}
+	result.ContentFilePath = todayContentFilePath
+
+	result.Deliveries = deliverAll(opts.Targets, content, today.Weekday())
 	result.Notified = anyDelivered(result.Deliveries)
 
 	// the message reaches every target in one run, so only a total failure is an

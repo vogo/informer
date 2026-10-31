@@ -12,6 +12,7 @@ import {
   NInput,
   NInputGroup,
   NInputNumber,
+  NModal,
   NSpace,
   NSelect,
   NSpin,
@@ -32,12 +33,17 @@ import {
   SaveConfig,
   SaveHTTPProxy,
   SaveSchedule,
+  SaveResultProcessing,
+  PreviewResultProcessing,
+  type ProcessingPreviewDTO,
   SaveWebhooks,
   type HistoryIndexDTO,
   type WebhookDTO,
 } from './bindings'
 import {errorText} from './errors'
 import {requireValue} from './nulls'
+import {renderMarkdown} from './markdown'
+import {Browser} from '@wailsio/runtime'
 
 const message = useMessage()
 
@@ -100,6 +106,43 @@ const schedule = reactive({
   time: '10:00'
 })
 const scheduleSaving = ref(false)
+const resultProcessing = reactive({enabled: false, prompt: ''})
+const processingSaving = ref(false)
+const processingTesting = ref(false)
+const processingPreview = ref<ProcessingPreviewDTO | null>(null)
+const processingPreviewOpen = ref(false)
+const processingError = ref('')
+const processingPreviewPrompt = ref('')
+const processingExample = '分析今日候选文章，只保留具有明确技术价值、包含具体方法或事实的内容。过滤广告、重复资讯和泛泛观点。按重要性排序，生成简洁的中文导读。宁缺毋滥，没有符合条件的文章时跳过本次推送。'
+
+function openMarkdownLink(event: MouseEvent) {
+  const anchor = (event.target as HTMLElement | null)?.closest('a')
+  if (!anchor) return
+  event.preventDefault()
+  const href = anchor.getAttribute('href')
+  if (href) void Browser.OpenURL(href)
+}
+
+async function saveProcessing() {
+  processingSaving.value = true
+  try {
+    await SaveResultProcessing({...resultProcessing})
+    message.success('AI 最终结果处理配置已保存')
+  } catch (e) { message.error(errorText(e)) }
+  finally { processingSaving.value = false }
+}
+
+async function testProcessing() {
+  processingTesting.value = true
+  processingError.value = ''
+  processingPreview.value = null
+  processingPreviewPrompt.value = resultProcessing.prompt
+  processingPreviewOpen.value = true
+  try {
+    processingPreview.value = requireValue(await PreviewResultProcessing(processingPreviewPrompt.value), 'ProcessingPreviewDTO')
+  } catch (e) { processingError.value = errorText(e) }
+  finally { processingTesting.value = false }
+}
 
 const rebuilding = ref(false)
 const rebuildResult = ref<HistoryIndexDTO | null>(null)
@@ -121,6 +164,7 @@ async function load() {
     Object.assign(form, config.feed)
     Object.assign(schedule, config.schedule)
     Object.assign(agent, config.agent)
+    Object.assign(resultProcessing, config.resultProcessing ?? {enabled: false, prompt: ''})
     agentProviderOptions.value = (config.agentProviders ?? []).map(value => ({label: value, value}))
     webhooks.value = (config.webhooks ?? []).map(row => ({
       name: row.name ?? '',
@@ -356,6 +400,30 @@ async function rebuild() {
           </template>
         </n-card>
 
+        <n-card title="AI 最终结果处理" size="small" :header-style="cardHeaderStyle" :content-style="cardContentStyle">
+          <template #header-extra>
+            <n-space :size="6">
+              <n-button size="tiny" :disabled="!resultProcessing.prompt.trim() || processingTesting" @click="testProcessing">测试处理</n-button>
+              <n-button size="tiny" type="primary" :loading="processingSaving" :disabled="resultProcessing.enabled && !resultProcessing.prompt.trim()" @click="saveProcessing">保存</n-button>
+            </n-space>
+          </template>
+          <n-space vertical :size="10">
+            <n-space align="center">
+              <n-switch v-model:value="resultProcessing.enabled" size="small" />
+              <n-text>开启 AI 最终结果处理</n-text>
+            </n-space>
+            <n-input v-model:value="resultProcessing.prompt" type="textarea" :autosize="{minRows: 4, maxRows: 12}" :maxlength="20000" show-count placeholder="描述文章筛选标准、质量阈值，以及希望生成的分析和导读。" />
+            <n-space justify="space-between">
+              <n-text depth="3" class="tiny">{{ resultProcessing.enabled ? '开启后，处理结果将作为正式日报和推送内容。' : '当前关闭，推送使用原始日报。' }}</n-text>
+              <n-button size="tiny" quaternary :disabled="processingTesting" @click="resultProcessing.prompt = processingExample">填入示例</n-button>
+            </n-space>
+            <n-text depth="3" class="tiny">
+              沿用下方已保存的 Agent 设置。根据标题、来源和时间筛选，不读取正文；全部过滤则跳过推送，处理失败则停止本次推送。
+              测试使用文章库中尚未通知的候选，会调用模型，不保存表单、不抓取新文章、不发送推送。
+            </n-text>
+          </n-space>
+        </n-card>
+
         <n-card
           size="small"
           :header-style="cardHeaderStyle"
@@ -367,7 +435,7 @@ async function rebuild() {
               Agent
               <n-tooltip :style="tipStyle">
                 <template #trigger><span class="hint">?</span></template>
-                「agent」类型的订阅会调用命令行 Agent 抓取；留空的项使用本机上该 Agent 自身的登录与默认设置。
+                「agent」类型订阅和 AI 最终结果处理共用此配置；留空的项使用本机上该 Agent 自身的登录与默认设置。
                 「超时」填 0 表示使用默认窗口（300 秒）。可执行文件留空时，抓取会在 PATH、常见安装目录和登录 Shell
                 中查找 claude / codex，找到后写入配置。API Key 存放在独立的 0600 文件 {{ secretsPath }} 中，
                 不会写入 informer.json。
@@ -587,6 +655,27 @@ async function rebuild() {
       </div>
     </n-spin>
   </div>
+  <n-modal v-model:show="processingPreviewOpen" preset="card" title="AI 最终结果处理 · 测试预览" style="width: min(1000px, 92vw); max-height: 88vh; overflow: auto" :mask-closable="!processingTesting">
+    <n-space vertical :size="14">
+      <n-text depth="3">本次使用当前提示词与已保存的 Agent 设置；结果仅供预览。</n-text>
+      <n-alert v-if="processingTesting" type="info" :bordered="false">正在处理候选文章，可在右上角日志查看进度……</n-alert>
+      <n-alert v-if="processingError" type="error" :bordered="false">{{ processingError }}</n-alert>
+      <template v-if="processingPreview">
+        <n-alert :type="processingPreview.action === 'skip' ? 'warning' : 'success'" :bordered="false">
+          {{ processingPreview.action === 'skip' ? `将跳过推送：${processingPreview.summary}` : '处理完成，以下为最终日报预览。' }}
+        </n-alert>
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi><n-card title="原始候选" size="small"><pre class="processing-original">{{ processingPreview.original }}</pre></n-card></n-gi>
+          <n-gi><n-card title="处理结果" size="small"><div class="markdown-body" @click="openMarkdownLink" v-html="renderMarkdown(processingPreview.content || processingPreview.summary)" /></n-card></n-gi>
+        </n-grid>
+        <n-text strong>筛选明细</n-text>
+        <div v-for="decision in processingPreview.decisions" :key="decision.id">
+          <n-tag size="small" :type="decision.selected ? 'success' : 'default'">{{ decision.selected ? '保留' : '过滤' }}</n-tag>
+          <n-text> {{ decision.title }}：{{ decision.reason }}</n-text>
+        </div>
+      </template>
+    </n-space>
+  </n-modal>
 </template>
 
 <style scoped>
@@ -653,4 +742,6 @@ async function rebuild() {
 .tiny {
   font-size: 12px;
 }
+
+.processing-original { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font: inherit; }
 </style>
