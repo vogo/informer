@@ -18,20 +18,30 @@
 package feed_test
 
 import (
-	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/vogo/informer/internal/feed"
 )
 
-// TestUpdateAndFilterFeeds fetches a real feed, so it is skipped in short mode.
+// TestUpdateAndFilterFeeds fetches a local RSS fixture.
 // It shares the package level database handle, so it never runs in parallel.
 func TestUpdateAndFilterFeeds(t *testing.T) {
-	if testing.Short() {
-		t.Skip("network test")
-	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = fmt.Fprintf(w, `<rss version="2.0"><channel><title>Fixture</title>
+<link>https://example.com</link><description>Test feed</description>
+<item><title>Fixture article</title><link>https://example.com/article</link>
+<guid>https://example.com/article</guid><pubDate>%s</pubDate></item>
+</channel></rss>`, time.Now().UTC().Format(time.RFC1123Z))
+	}))
+	t.Cleanup(server.Close)
 
 	db, err := feed.InitFeedDB(t.TempDir())
 	require.NoError(t, err)
@@ -44,22 +54,15 @@ func TestUpdateAndFilterFeeds(t *testing.T) {
 
 	require.NoError(t, db.Create(&feed.Source{
 		Title:      "test",
-		URL:        "http://blog.sciencenet.cn/rss.php?uid=117333",
+		URL:        server.URL,
 		CategoryID: feed.DefaultCategoryID,
 		Enabled:    true,
 	}).Error)
 
 	articles := feed.UpdateAndFilterFeeds(feedConfig, nil)
-	if len(articles) == 0 {
-		t.Error("parse feed article failed")
-	} else {
-		articlesInfo, marshalErr := json.Marshal(articles)
-		if marshalErr != nil {
-			t.Error(marshalErr)
-		}
-
-		t.Log(string(articlesInfo))
-	}
+	require.Len(t, articles, 1)
+	assert.Equal(t, "Fixture article", articles[0].Title)
+	assert.Equal(t, "https://example.com/article", articles[0].URL)
 }
 
 func TestGetHostFromUrl(t *testing.T) {

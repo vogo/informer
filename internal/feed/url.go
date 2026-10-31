@@ -78,10 +78,7 @@ func GetHostFromURL(host string) string {
 // GetHostPrefix get host prefix from url,
 // prefix is http://www.blog.com if url is http://www.blog.com/page.html.
 func GetHostPrefix(link string) string {
-	protocolIndex := strings.Index(link, "//")
-	if protocolIndex < 0 {
-		protocolIndex = 0
-	}
+	protocolIndex := max(strings.Index(link, "//"), 0)
 
 	hostIndex := strings.Index(link[protocolIndex+2:], "/")
 	if hostIndex > 0 {

@@ -122,7 +122,7 @@ type Target struct {
 }
 
 // Options describes one inform run. The feed database is expected to be
-// initialised by the caller, so this package never opens it itself.
+// initialized by the caller, so this package never opens it itself.
 type Options struct {
 	ResultProcessing *resultprocess.Config
 
@@ -190,27 +190,14 @@ func Run(opts *Options) (*Result, error) {
 	today := time.Now()
 
 	dataPath := DailyDirPath(opts.HomeDir, today)
-	if err := os.MkdirAll(dataPath, os.ModePerm); err != nil && !os.IsExist(err) {
+	err := os.MkdirAll(dataPath, os.ModePerm)
+	if err != nil && !os.IsExist(err) {
 		return nil, fmt.Errorf("create data directory %q: %w", dataPath, err)
 	}
 
 	todayContentFilePath := DailyFilePath(opts.HomeDir, today)
 
-	buf := bytes.NewBuffer(nil)
-	buf.WriteString(date.GetDateInfo())
-
-	if dailySoup := soup.GetDailySoup(); dailySoup != "" {
-		buf.WriteString(dailySoup)
-		buf.WriteByte('\n')
-		buf.WriteByte('\n')
-	}
-
-	var articles []*feed.Article
-	if opts.FeedConfig != nil {
-		articles = feed.AddFeeds(buf, opts.FeedConfig, opts.AgentConfig)
-	}
-
-	content := buf.String()
+	content, articles := initialContent(opts)
 
 	result := &Result{
 		Content:         content,
@@ -255,6 +242,25 @@ func Run(opts *Options) (*Result, error) {
 	}
 
 	return result, nil
+}
+
+// initialContent collects the date, daily sentence and selected feed articles.
+func initialContent(opts *Options) (string, []*feed.Article) {
+	buf := bytes.NewBuffer(nil)
+	buf.WriteString(date.GetDateInfo())
+
+	if dailySoup := soup.GetDailySoup(); dailySoup != "" {
+		buf.WriteString(dailySoup)
+		buf.WriteByte('\n')
+		buf.WriteByte('\n')
+	}
+
+	var articles []*feed.Article
+	if opts.FeedConfig != nil {
+		articles = feed.AddFeeds(buf, opts.FeedConfig, opts.AgentConfig)
+	}
+
+	return buf.String(), articles
 }
 
 // deliverAll delivers the content to every target at once.

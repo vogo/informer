@@ -156,6 +156,8 @@ func TestPreviewErrorPropagation(t *testing.T) {
 // TestPreviewChangesNoPersistedState is the core purity guarantee: a preview may be
 // repeated any number of times without altering a single stored row, including the
 // health status of a source whose parsing fails.
+//
+//nolint:gosmopolitan //uses a Chinese category name as fixture input.
 func TestPreviewChangesNoPersistedState(t *testing.T) {
 	server := newContentServer(t)
 	svc := newService(t)

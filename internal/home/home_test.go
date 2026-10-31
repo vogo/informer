@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/vogo/informer/internal/home"
 )
 
@@ -148,7 +149,7 @@ func legacyLayout(t *testing.T) string {
 	require.NoError(t, os.WriteFile(filepath.Join(legacy, "data", "2025", "2025-06-01.md"), []byte("new day"), 0o600))
 
 	// the executable itself must never be copied into the data directory.
-	require.NoError(t, os.WriteFile(filepath.Join(legacy, "informer"), []byte("binary"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(legacy, "informer"), []byte("binary"), 0o700)) //nolint:gosec //executable migration fixture.
 
 	return legacy
 }
@@ -246,7 +247,7 @@ func TestInitSkipsUnrelatedExecutableDirectory(t *testing.T) {
 
 	// an executable installed into a shared bin directory holds no informer data.
 	legacy := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(legacy, "some-other-tool"), []byte("x"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(legacy, "some-other-tool"), []byte("x"), 0o700)) //nolint:gosec //executable migration fixture.
 
 	target := filepath.Join(t.TempDir(), "informer-home")
 	t.Setenv(home.EnvHome, target)
@@ -260,6 +261,7 @@ func TestInitSkipsUnrelatedExecutableDirectory(t *testing.T) {
 }
 
 func TestMigrateSkipsWhenLegacyEqualsActive(t *testing.T) {
+	t.Parallel()
 	legacy := legacyLayout(t)
 
 	require.NoError(t, home.Migrate(legacy, legacy))

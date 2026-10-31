@@ -41,6 +41,8 @@ var ErrCommandNotFound = errors.New("agent command not found")
 // but must not stall a fetch when the shell init is slow.
 const loginShellLocateTimeout = 3 * time.Second
 
+const windowsGOOS = "windows"
+
 // DefaultCommandName is the bare executable name of a provider when none is configured.
 func DefaultCommandName(provider string) string {
 	if strings.TrimSpace(provider) == ProviderCodex {
@@ -56,56 +58,65 @@ func DefaultCommandName(provider string) string {
 // and in common install locations. An absolute or relative path is verified as an
 // executable file. The returned path is always absolute when the lookup succeeds.
 func ResolveCommand(provider, command string) (string, error) {
+	return ResolveCommandContext(context.Background(), provider, command)
+}
+
+// ResolveCommandContext resolves an executable while honoring caller cancellation.
+func ResolveCommandContext(ctx context.Context, provider, command string) (string, error) {
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return LocateCommand(provider)
+		return lookUp(ctx, DefaultCommandName(provider))
 	}
 
 	if filepath.IsAbs(command) || strings.ContainsRune(command, filepath.Separator) ||
-		(runtime.GOOS == "windows" && strings.Contains(command, `/`)) {
+		(runtime.GOOS == windowsGOOS && strings.Contains(command, `/`)) {
 		return requireExecutable(command)
 	}
 
-	return lookUp(command)
+	return lookUp(ctx, command)
 }
 
 // LocateCommand finds the default executable of a provider on this machine.
 func LocateCommand(provider string) (string, error) {
-	return lookUp(DefaultCommandName(provider))
+	return lookUp(context.Background(), DefaultCommandName(provider))
 }
 
-func lookUp(name string) (string, error) {
+func lookUp(ctx context.Context, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || !isSafeCommandName(name) {
 		return "", fmt.Errorf("%w: empty or invalid command name", ErrCommandNotFound)
 	}
 
-	if path, err := exec.LookPath(name); err == nil {
+	path, err := exec.LookPath(name)
+	if err == nil {
 		return absExecutable(path)
 	}
 
 	for _, dir := range candidateDirs() {
 		candidate := filepath.Join(dir, name)
-		if path, err := requireExecutable(candidate); err == nil {
+		path, err := requireExecutable(candidate)
+		if err == nil {
 			return path, nil
 		}
 
-		if runtime.GOOS == "windows" {
-			if path, err := requireExecutable(candidate + ".exe"); err == nil {
+		if runtime.GOOS == windowsGOOS {
+			path, err := requireExecutable(candidate + ".exe")
+			if err == nil {
 				return path, nil
 			}
 		}
 	}
 
-	if path, err := lookUpViaLoginShell(name); err == nil {
+	path, err = lookUpViaLoginShell(ctx, name)
+	if err == nil {
 		return path, nil
 	}
 
 	return "", fmt.Errorf("%w: %q not found in PATH or common install locations", ErrCommandNotFound, name)
 }
 
-func lookUpViaLoginShell(name string) (string, error) {
-	if runtime.GOOS == "windows" {
+func lookUpViaLoginShell(parent context.Context, name string) (string, error) {
+	if runtime.GOOS == windowsGOOS {
 		return "", ErrCommandNotFound
 	}
 
@@ -114,12 +125,12 @@ func lookUpViaLoginShell(name string) (string, error) {
 		shell = "/bin/sh"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), loginShellLocateTimeout)
+	ctx, cancel := context.WithTimeout(parent, loginShellLocateTimeout)
 	defer cancel()
 
-	// name is restricted to a safe command token, so interpolating it into the
-	// shell snippet cannot turn into an arbitrary command.
-	cmd := exec.CommandContext(ctx, shell, "-lc", "command -v "+name)
+	// Pass the validated command token as an argument rather than shell code.
+	// #nosec G702 -- the login shell is user-selected; name is passed as a positional argument.
+	cmd := exec.CommandContext(ctx, shell, "-lc", `command -v "$1"`, "informer-locate", name)
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -140,6 +151,7 @@ func requireExecutable(path string) (string, error) {
 		return "", fmt.Errorf("%w: empty path", ErrCommandNotFound)
 	}
 
+	// #nosec G703 -- user-selected executables may live anywhere; this only checks metadata.
 	info, err := os.Stat(path)
 	if err != nil {
 		return "", fmt.Errorf("%w: %s: %w", ErrCommandNotFound, path, err)
@@ -149,7 +161,7 @@ func requireExecutable(path string) (string, error) {
 		return "", fmt.Errorf("%w: %s is a directory", ErrCommandNotFound, path)
 	}
 
-	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
+	if runtime.GOOS != windowsGOOS && info.Mode()&0o111 == 0 {
 		return "", fmt.Errorf("%w: %s is not executable", ErrCommandNotFound, path)
 	}
 
@@ -245,9 +257,9 @@ func versionManagerBinDirs(root string) []string {
 			continue
 		}
 
-		dirs = append(dirs, filepath.Join(root, entry.Name(), "bin"))
 		// fnm stores binaries under installation/bin rather than bin.
-		dirs = append(dirs, filepath.Join(root, entry.Name(), "installation", "bin"))
+		dirs = append(dirs, filepath.Join(root, entry.Name(), "bin"),
+			filepath.Join(root, entry.Name(), "installation", "bin"))
 	}
 
 	return dirs
@@ -267,6 +279,7 @@ func uniqueExistingDirs(dirs []string) []string {
 			continue
 		}
 
+		// #nosec G703 -- install directories come from the local user environment; metadata only.
 		info, err := os.Stat(dir)
 		if err != nil || !info.IsDir() {
 			continue

@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/home"
 	"github.com/vogo/informer/internal/inform"
@@ -85,6 +86,8 @@ func runFullCycle(t *testing.T, server *httptest.Server) informRun {
 
 // recommendationSection cuts the article block out of the daily file, so that the
 // comparison does not depend on the external daily soup service.
+//
+//nolint:gosmopolitan //matches the shipped daily-report heading.
 func recommendationSection(content string) string {
 	index := strings.Index(content, "文章推荐:")
 	if index < 0 {

@@ -19,6 +19,7 @@ package httpx
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,6 +33,7 @@ import (
 )
 
 const (
+	headerUserAgent            = "user-agent"
 	DefaultMaxIdleConns        = 32
 	DefaultMaxIdleConnsPerHost = 8
 	DefaultMaxConnsPerHost     = 64
@@ -40,7 +42,10 @@ const (
 	DefaultRequestTimeout = time.Second * 60
 )
 
-//nolint:gochecknoglobals //ignore this.
+// ErrInvalidProxy indicates a proxy setting without a scheme or host.
+var ErrInvalidProxy = errors.New("invalid http proxy: scheme and host are required")
+
+//nolint:gochecknoglobals //shared cookie jar.
 var jar, _ = cookiejar.New(nil)
 
 // configuredProxy holds the optional HTTP(S) proxy URL for HTTPClient.
@@ -52,7 +57,7 @@ var configuredProxy atomic.Pointer[url.URL]
 
 // HTTPClient the default http client.
 //
-//nolint:exhaustivestruct,gochecknoglobals // ignore this
+//nolint:gochecknoglobals // ignore this
 var HTTPClient = &http.Client{
 	Transport: &http.Transport{
 		Proxy:               proxyFromConfig,
@@ -66,6 +71,8 @@ var HTTPClient = &http.Client{
 }
 
 // proxyFromConfig returns the configured proxy, or nil when none is set.
+//
+//nolint:nilnil //net/http uses (nil, nil) to mean no proxy.
 func proxyFromConfig(_ *http.Request) (*url.URL, error) {
 	proxy := configuredProxy.Load()
 	if proxy == nil {
@@ -90,6 +97,8 @@ func SetProxy(proxyURL string) error {
 }
 
 // ParseProxyURL validates an HTTP(S) proxy URL. An empty value returns nil.
+//
+//nolint:nilnil //an empty setting clears the optional proxy.
 func ParseProxyURL(proxyURL string) (*url.URL, error) {
 	trimmed := strings.TrimSpace(proxyURL)
 	if trimmed == "" {
@@ -102,7 +111,7 @@ func ParseProxyURL(proxyURL string) (*url.URL, error) {
 	}
 
 	if parsed.Scheme == "" || parsed.Host == "" {
-		return nil, fmt.Errorf("invalid http proxy %q: scheme and host are required", trimmed)
+		return nil, fmt.Errorf("%w: %q", ErrInvalidProxy, trimmed)
 	}
 
 	return parsed, nil
@@ -132,13 +141,13 @@ func NewClient(timeout time.Duration) *http.Client {
 var defaultHTTPHeaders = map[string]string{
 	"accept":          "*/*",
 	"accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
-	"user-agent":      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.3",
+	headerUserAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.3",
 	"mode":            "cors",
 }
 
 //nolint:gochecknoglobals //ignore this.
 var wechatHTTPHeaders = map[string]string{
-	"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) MicroMessenger/6.8.0(0x16080000) MacWechat/3.4.1(0x13040110) Safari/605.1.15 NetType/WIFI",
+	headerUserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) MicroMessenger/6.8.0(0x16080000) MacWechat/3.4.1(0x13040110) Safari/605.1.15 NetType/WIFI",
 }
 
 func GetLinkData(link string) ([]byte, error) {

@@ -39,6 +39,9 @@ const (
 	// MigratedMarker marks a finished legacy migration so that it never runs a second time.
 	MigratedMarker = ".migrated"
 
+	legacyConfig  = "informer.json"
+	legacyDB      = "feed.db"
+	legacyData    = "data"
 	dirPermission = 0o700
 	probeFileName = ".informer-write-probe"
 )
@@ -49,12 +52,12 @@ const (
 //
 //nolint:gochecknoglobals //ignore this.
 var legacyEntries = []string{
-	"informer.json",
-	"feed.db",
+	legacyConfig,
+	legacyDB,
 	"feed.db-wal",
 	"feed.db-shm",
 	"feed_data.json",
-	"data",
+	legacyData,
 }
 
 // Resolve returns the active data directory without creating it.
@@ -87,15 +90,18 @@ func Init(legacyDir string) (string, error) {
 		return "", err
 	}
 
-	if err = os.MkdirAll(dir, dirPermission); err != nil {
+	err = os.MkdirAll(dir, dirPermission)
+	if err != nil {
 		return "", fmt.Errorf("create informer home %q: %w", dir, err)
 	}
 
-	if err = ensureWritable(dir); err != nil {
+	err = ensureWritable(dir)
+	if err != nil {
 		return "", err
 	}
 
-	if err = Migrate(legacyDir, dir); err != nil {
+	err = Migrate(legacyDir, dir)
+	if err != nil {
 		return "", err
 	}
 
@@ -120,7 +126,8 @@ func Migrate(legacyDir, activeDir string) error {
 	}
 
 	marker := filepath.Join(activeDir, MigratedMarker)
-	if _, statErr := os.Stat(marker); statErr == nil {
+	_, statErr := os.Stat(marker)
+	if statErr == nil {
 		return nil
 	}
 
@@ -129,12 +136,14 @@ func Migrate(legacyDir, activeDir string) error {
 	}
 
 	for _, name := range legacyEntries {
-		if err = copyEntry(filepath.Join(legacy, name), filepath.Join(activeDir, name)); err != nil {
+		err = copyEntry(filepath.Join(legacy, name), filepath.Join(activeDir, name))
+		if err != nil {
 			return err
 		}
 	}
 
-	if err = os.WriteFile(marker, []byte(legacy+"\n"), internal.DefaultDataFilePermission); err != nil {
+	err = os.WriteFile(marker, []byte(legacy+"\n"), internal.DefaultDataFilePermission)
+	if err != nil {
 		return fmt.Errorf("write migration marker %q: %w", marker, err)
 	}
 
@@ -144,8 +153,9 @@ func Migrate(legacyDir, activeDir string) error {
 // isLegacyDataDir reports whether the directory actually holds informer data,
 // so that an executable placed in an unrelated directory triggers no migration.
 func isLegacyDataDir(dir string) bool {
-	for _, name := range []string{"informer.json", "feed.db", "data"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+	for _, name := range []string{legacyConfig, legacyDB, legacyData} {
+		_, err := os.Stat(filepath.Join(dir, name))
+		if err == nil {
 			return true
 		}
 	}
@@ -175,7 +185,8 @@ func copyEntry(src, dst string) error {
 }
 
 func copyDir(src, dst string) error {
-	if err := os.MkdirAll(dst, dirPermission); err != nil {
+	err := os.MkdirAll(dst, dirPermission)
+	if err != nil {
 		return fmt.Errorf("create directory %q: %w", dst, err)
 	}
 
@@ -185,7 +196,8 @@ func copyDir(src, dst string) error {
 	}
 
 	for _, entry := range entries {
-		if err = copyEntry(filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name())); err != nil {
+		err = copyEntry(filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name()))
+		if err != nil {
 			return err
 		}
 	}
@@ -194,7 +206,8 @@ func copyDir(src, dst string) error {
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
-	if _, err := os.Lstat(dst); err == nil {
+	_, err := os.Lstat(dst)
+	if err == nil {
 		// keep whatever the user already has in the active directory.
 		return nil
 	} else if !os.IsNotExist(err) {
@@ -212,13 +225,15 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return fmt.Errorf("create target file %q: %w", dst, err)
 	}
 
-	if _, err = io.Copy(out, in); err != nil {
+	_, err = io.Copy(out, in)
+	if err != nil {
 		out.Close()
 
 		return fmt.Errorf("copy %q to %q: %w", src, dst, err)
 	}
 
-	if err = out.Close(); err != nil {
+	err = out.Close()
+	if err != nil {
 		return fmt.Errorf("close target file %q: %w", dst, err)
 	}
 
@@ -233,11 +248,13 @@ func ensureWritable(dir string) error {
 		return fmt.Errorf("informer home %q is not writable: %w", dir, err)
 	}
 
-	if err = file.Close(); err != nil {
+	err = file.Close()
+	if err != nil {
 		return fmt.Errorf("informer home %q is not writable: %w", dir, err)
 	}
 
-	if err = os.Remove(probe); err != nil {
+	err = os.Remove(probe)
+	if err != nil {
 		return fmt.Errorf("informer home %q is not writable: %w", dir, err)
 	}
 

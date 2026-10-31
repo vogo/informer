@@ -129,14 +129,16 @@ func (s *Service) CreateSource(source *feed.Source) error {
 		source.CategoryID = feed.DefaultCategoryID
 	}
 
-	if err := s.requireCategory(source.CategoryID); err != nil {
+	err = s.requireCategory(source.CategoryID)
+	if err != nil {
 		return err
 	}
 
 	// a newly created source is enabled; disabling is an explicit follow up update.
 	source.Enabled = true
 
-	if err := s.db.Create(source).Error; err != nil {
+	err = s.db.Create(source).Error
+	if err != nil {
 		return fmt.Errorf("create source: %w", err)
 	}
 
@@ -147,7 +149,8 @@ func (s *Service) CreateSource(source *feed.Source) error {
 func (s *Service) GetSource(id int64) (*feed.Source, error) {
 	var source feed.Source
 
-	if err := s.db.Where("id = ?", id).First(&source).Error; err != nil {
+	err := s.db.Where("id = ?", id).First(&source).Error
+	if err != nil {
 		return nil, wrapFind(err, "source", id)
 	}
 
@@ -173,15 +176,18 @@ func (s *Service) UpdateSource(source *feed.Source) error {
 		source.CategoryID = feed.DefaultCategoryID
 	}
 
-	if err := s.requireCategory(source.CategoryID); err != nil {
+	err = s.requireCategory(source.CategoryID)
+	if err != nil {
 		return err
 	}
 
-	if _, err := s.GetSource(source.ID); err != nil {
+	_, err = s.GetSource(source.ID)
+	if err != nil {
 		return err
 	}
 
-	if err := s.db.Save(source).Error; err != nil {
+	err = s.db.Save(source).Error
+	if err != nil {
 		return fmt.Errorf("update source %d: %w", source.ID, err)
 	}
 
@@ -194,11 +200,13 @@ func (s *Service) UpdateSourceColumn(id int64, column string, value any) error {
 		return fmt.Errorf("%w: column is empty", ErrInvalidArgument)
 	}
 
-	if _, err := s.GetSource(id); err != nil {
+	_, err := s.GetSource(id)
+	if err != nil {
 		return err
 	}
 
-	if err := s.db.Model(&feed.Source{}).Where("id = ?", id).Update(column, value).Error; err != nil {
+	err = s.db.Model(&feed.Source{}).Where("id = ?", id).Update(column, value).Error
+	if err != nil {
 		return fmt.Errorf("update source %d column %q: %w", id, column, err)
 	}
 

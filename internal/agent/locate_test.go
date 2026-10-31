@@ -38,6 +38,7 @@ func TestDefaultCommandName(t *testing.T) {
 }
 
 func TestResolveCommandUsesAnAbsoluteExecutable(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == windowsGOOS {
 		t.Skip("the fixture is a posix shell script")
 	}

@@ -174,7 +174,6 @@ func GoFeedArticles(source *Source, sink runlog.Sink) ([]*Article, error) {
 		return nil, err
 	}
 
-	//nolint:prealloc //ignore this.
 	var articles []*Article
 
 	for i, item := range feedData.Items {

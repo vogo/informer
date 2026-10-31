@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/vogo/informer/internal/cli"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/service"
@@ -177,4 +178,11 @@ func TestFeedUsageErrors(t *testing.T) {
 	} {
 		require.ErrorIs(t, cli.Feed(svc, ops), cli.ErrUsage, "ops: %v", ops)
 	}
+}
+
+// Failed lookups must reach the CLI caller instead of reporting success.
+func TestFeedReturnsMissingSourceErrors(t *testing.T) {
+	svc := newTestService(t)
+	require.ErrorIs(t, cli.Feed(svc, []string{"parse", "999"}), service.ErrNotFound)
+	require.ErrorIs(t, cli.Feed(svc, []string{"copy", "999"}), service.ErrNotFound)
 }

@@ -32,6 +32,8 @@
 | Windows | `informer-ui-<版本>-windows-amd64-setup.exe`（NSIS，内置 WebView2 引导） | `informer-ui-<版本>-windows-amd64.zip` |
 | Linux | `informer-ui-<版本>-linux-amd64.tar.gz` 或 `.deb` | `informer-ui-<版本>-linux-amd64.tar.gz` |
 
+macOS 最低部署版本为 13（Go 1.27 的最低要求），兼容目标至少覆盖最近三个大版本（当前为 15、26、27）。Release 使用 macOS 15 构建 universal 包（Intel / Apple Silicon），CI 在 macOS 15 和 26 上构建并运行版本冒烟检查；完整界面功能仍需在目标系统上验证。
+
 macOS 安装包未签名。首次打开若被拦截，到「系统设置 → 隐私与安全性」放行。
 
 ### 从源码运行桌面版
@@ -204,7 +206,9 @@ Release 里的命令行包名为 `informer-cli-<版本>-<平台>.tar.gz`（Windo
 ```bash
 make test      # 跑测试并生成覆盖率
 make format    # 按 golangci-lint 配置格式化
-make check     # 许可证头检查 + golangci-lint
+make lint-update # 安装/更新最新版 golangci-lint
+make lint      # 检查根模块和桌面模块（Linux 自动使用 gtk3）
+make check     # 许可证头检查 + 两个模块的 lint
 ```
 
 许可证：[Apache License 2.0](LICENSE)。

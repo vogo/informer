@@ -110,7 +110,6 @@ func regexArticles(source *Source, match [][][]byte, sink runlog.Sink) []*Articl
 
 	hostPrefix := GetHostPrefix(source.URL)
 
-	//nolint:prealloc //ignore this.
 	var articles []*Article
 
 	for i, groups := range match {

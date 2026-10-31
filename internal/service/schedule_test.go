@@ -142,7 +142,7 @@ func TestScheduleLastRunDateRoundTripsThroughTheStateFile(t *testing.T) {
 	assert.FileExists(t, svc.ScheduleStatePath())
 
 	// a corrupt marker is treated as "no prior run" so the scheduler can recover.
-	require.NoError(t, os.WriteFile(svc.ScheduleStatePath(), []byte("not-a-day\n"), 0o644))
+	require.NoError(t, os.WriteFile(svc.ScheduleStatePath(), []byte("not-a-day\n"), 0o600))
 	day, err = svc.ReadScheduleLastRunDate()
 	require.NoError(t, err)
 	assert.Empty(t, day)

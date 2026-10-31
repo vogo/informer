@@ -33,7 +33,7 @@ const scheduleSectionKey = "schedule"
 
 // ScheduleStateFileName is the file that records the calendar day of the last
 // successful desktop scheduled push. It lives next to informer.json so a restarted
-// app can honour the once-per-day guard without asking the bot again.
+// app can honor the once-per-day guard without asking the bot again.
 const ScheduleStateFileName = "informer.schedule-state"
 
 // scheduleTimeLayout is the 24 hour clock format the schedule section stores,
@@ -141,7 +141,7 @@ func (s *Service) ReadScheduleLastRunDate() (string, error) {
 	if err != nil {
 		// a corrupt marker must not freeze the scheduler forever: pretend there is
 		// no prior run and let the next success overwrite the file.
-		return "", nil
+		return "", nil //nolint:nilerr //a corrupt marker intentionally permits retry.
 	}
 
 	return day, nil

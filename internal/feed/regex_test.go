@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/vogo/informer/internal/feed"
 )
@@ -51,7 +52,7 @@ func TestRegexParse(t *testing.T) {
 		URLExp:      "$1",
 	}, nil)
 
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	for _, a := range articles {
 		t.Log(a.Title, a.URL)
@@ -78,7 +79,7 @@ func TestRegexParse2(t *testing.T) {
 		URLExp:      "$1",
 	}, nil)
 
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	if assert.Len(t, articles, 2) {
 		assert.Equal(t, "Armageddon", articles[0].Title)
@@ -105,7 +106,7 @@ func TestRegexParse3(t *testing.T) {
 		URLExp:      "https://www.infoq.cn/article/$2",
 	}, nil)
 
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	for _, a := range articles {
 		t.Log(a.Title, a.URL)

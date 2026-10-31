@@ -31,7 +31,8 @@ jobs:
 
   macos:
     name: macOS (darwin/universal, app.zip + unsigned dmg)
-    runs-on: macos-14
+    # Build on the oldest supported hosted image to catch newer-API dependencies.
+    runs-on: macos-15
     steps:
 
       - name: Check out code
@@ -66,6 +67,18 @@ jobs:
           echo "architectures: $archs"
           echo "$archs" | grep -q x86_64
           echo "$archs" | grep -q arm64
+
+      # Check the actual Mach-O metadata, not just the compiler flags or plist.
+      - name: Verify minimum macOS version
+        run: |
+          for arch in arm64 x86_64; do
+            minos=$(xcrun vtool -arch "$arch" -show-build \
+              cmd/informer-ui/bin/informer.app/Contents/MacOS/informer-ui | awk '$1 == "minos" { print $2 }')
+            echo "$arch minimum macOS: $minos"
+            test "$minos" = "13.0"
+          done
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' \
+            cmd/informer-ui/bin/informer.app/Contents/Info.plist)" = "13.0.0"
 
       - name: Verify injected version
         run: |
@@ -261,7 +274,7 @@ jobs:
       matrix:
         include:
           - name: darwin-universal
-            os: macos-14
+            os: macos-15
             archive: informer-cli-${{ github.ref_name }}-darwin-universal.tar.gz
           - name: linux-amd64
             os: ubuntu-24.04
@@ -306,8 +319,9 @@ jobs:
           mkdir -p dist/cli
           case "${{ matrix.name }}" in
             darwin-universal)
-              export CGO_CFLAGS="-mmacosx-version-min=12.0"
-              export CGO_LDFLAGS="-mmacosx-version-min=12.0"
+              export MACOSX_DEPLOYMENT_TARGET=13.0
+              export CGO_CFLAGS="-mmacosx-version-min=13.0"
+              export CGO_LDFLAGS="-mmacosx-version-min=13.0"
               GOARCH=arm64 go build -trimpath -ldflags="-s -w" \
                 -o dist/cli/informer-arm64 ./cmd/informer
               GOARCH=amd64 go build -trimpath -ldflags="-s -w" \
@@ -319,6 +333,11 @@ jobs:
               echo "architectures: $archs"
               echo "$archs" | grep -q x86_64
               echo "$archs" | grep -q arm64
+              for arch in arm64 x86_64; do
+                minos=$(xcrun vtool -arch "$arch" -show-build dist/cli/informer | awk '$1 == "minos" { print $2 }')
+                echo "$arch minimum macOS: $minos"
+                test "$minos" = "13.0"
+              done
               tar -czf "$ARCHIVE" -C dist/cli informer
               tar -tzf "$ARCHIVE" | grep -qx informer
               ;;

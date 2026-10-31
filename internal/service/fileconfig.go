@@ -155,13 +155,21 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 		return nil, err
 	}
 
+	view.PreservedKeys = preservedConfigKeys(doc)
+
+	return view, nil
+}
+
+// preservedConfigKeys lists sections that the settings form does not edit.
+func preservedConfigKeys(doc *configstore.Doc) []string {
+	keys := []string{}
 	for _, key := range doc.Keys() {
 		if !editableConfigKey(key) {
-			view.PreservedKeys = append(view.PreservedKeys, key)
+			keys = append(keys, key)
 		}
 	}
 
-	return view, nil
+	return keys
 }
 
 // readAgentSection reads the agent section of one loaded document, nil when the

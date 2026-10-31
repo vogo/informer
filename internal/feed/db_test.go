@@ -23,9 +23,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/vogo/informer/internal/feed"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/vogo/informer/internal/feed"
 )
 
 // legacySource mirrors the Source schema as it existed before this change,

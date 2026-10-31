@@ -53,7 +53,7 @@ const (
 //
 //nolint:gosmopolitan //informer is a chinese product; the notes speak the user's language.
 func runClaude(ctx context.Context, cfg *Config, prompt string, observer Observer) (string, error) {
-	command, err := ResolveCommand(cfg.Provider, cfg.Command)
+	command, err := ResolveCommandContext(ctx, cfg.Provider, cfg.Command)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrAgentFailed, err)
 	}
@@ -216,7 +216,7 @@ func claudeEnv(cfg *Config) []string {
 
 	if cfg.HTTPProxy != "" {
 		// all three names are set so http, https and socks-aware clients inside
-		// the agent process honour the same configured proxy.
+		// the agent process honor the same configured proxy.
 		overrides[envHTTPProxy] = cfg.HTTPProxy
 		overrides[envHTTPSProxy] = cfg.HTTPProxy
 		overrides[envAllProxy] = cfg.HTTPProxy

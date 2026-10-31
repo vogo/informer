@@ -54,7 +54,8 @@ func (s *Service) CreateArticle(article *feed.Article) error {
 		return fmt.Errorf("%w: article url is empty", ErrInvalidArgument)
 	}
 
-	if err := s.db.Create(article).Error; err != nil {
+	err := s.db.Create(article).Error
+	if err != nil {
 		return fmt.Errorf("create article: %w", err)
 	}
 
@@ -65,7 +66,8 @@ func (s *Service) CreateArticle(article *feed.Article) error {
 func (s *Service) GetArticle(id int64) (*feed.Article, error) {
 	var article feed.Article
 
-	if err := s.db.Where("id = ?", id).First(&article).Error; err != nil {
+	err := s.db.Where("id = ?", id).First(&article).Error
+	if err != nil {
 		return nil, wrapFind(err, "article", id)
 	}
 
@@ -78,11 +80,13 @@ func (s *Service) UpdateArticle(article *feed.Article) error {
 		return fmt.Errorf("%w: article id is required", ErrInvalidArgument)
 	}
 
-	if _, err := s.GetArticle(article.ID); err != nil {
+	_, err := s.GetArticle(article.ID)
+	if err != nil {
 		return err
 	}
 
-	if err := s.db.Save(article).Error; err != nil {
+	err = s.db.Save(article).Error
+	if err != nil {
 		return fmt.Errorf("update article %d: %w", article.ID, err)
 	}
 

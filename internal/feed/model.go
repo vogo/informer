@@ -20,7 +20,7 @@ package feed
 import "slices"
 
 type Config struct {
-	ID                int64 `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
+	ID                int64 `gorm:"primarykey;AUTO_INCREMENT" json:"id"`
 	MaxInformFeedSize int   `json:"max_inform_feed_size"`
 	FeedExpireDays    int   `json:"feed_expire_days"`
 	SameSiteMaxCount  int   `json:"same_site_max_count"`
@@ -50,18 +50,18 @@ const (
 	DefaultCategoryID = 1
 
 	// DefaultCategoryName is the name of the seeded default category.
-	DefaultCategoryName = "未分类"
+	DefaultCategoryName = "未分类" //nolint:gosmopolitan //default category label in the Chinese UI.
 )
 
 // Category groups sources. Listing order is Sort ascending, then ID.
 type Category struct {
-	ID   int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
-	Name string `json:"name" gorm:"uniqueIndex"`
-	Sort int    `json:"sort" gorm:"index"`
+	ID   int64  `gorm:"primarykey;AUTO_INCREMENT" json:"id"`
+	Name string `gorm:"uniqueIndex"               json:"name"`
+	Sort int    `gorm:"index"                     json:"sort"`
 }
 
 type Source struct {
-	ID            int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
+	ID            int64  `gorm:"primarykey;AUTO_INCREMENT" json:"id"`
 	Title         string `json:"title"`
 	URL           string `json:"url"`
 	CURL          string `json:"curl"`
@@ -78,8 +78,8 @@ type Source struct {
 	Status        int    `json:"status"`
 	ErrorInfo     string `json:"error_info"`
 	ParseType     string `json:"parse_type"`
-	CategoryID    int64  `json:"category_id" gorm:"index"`
-	Enabled       bool   `json:"enabled" gorm:"index"`
+	CategoryID    int64  `gorm:"index"                     json:"category_id"`
+	Enabled       bool   `gorm:"index"                     json:"enabled"`
 
 	// AgentProvider selects the agent command line of a ParseTypeAgent source.
 	// An empty value uses the configured default provider.
@@ -133,20 +133,20 @@ func DeriveParseType(s *Source) string {
 type Detail struct{}
 
 type Article struct {
-	ID        int64  `json:"id" gorm:"primarykey;AUTO_INCREMENT"`
-	URL       string `json:"url" gorm:"index"`
+	ID        int64  `gorm:"primarykey;AUTO_INCREMENT" json:"id"`
+	URL       string `gorm:"index"                     json:"url"`
 	Title     string `json:"title"`
 	Timestamp int64  `json:"timestamp"`
 	Weight    int64  `json:"weight"`
-	Informed  bool   `json:"informed" gorm:"index"`
-	Score     int64  `json:"score" gorm:"index"`
-	SourceID  int64  `json:"source_id" gorm:"index"`
+	Informed  bool   `gorm:"index"                     json:"informed"`
+	Score     int64  `gorm:"index"                     json:"score"`
+	SourceID  int64  `gorm:"index"                     json:"source_id"`
 
 	// FetchedAt is the unix second the article was first persisted by a fetch.
 	// It stays NULL for articles stored before this field existed.
-	FetchedAt *int64 `json:"fetched_at" gorm:"index"`
+	FetchedAt *int64 `gorm:"index" json:"fetched_at"`
 
 	// InformedAt is the unix second a notification actually delivered the article.
 	// It stays NULL for historical articles, even when Informed is already true.
-	InformedAt *int64 `json:"informed_at" gorm:"index"`
+	InformedAt *int64 `gorm:"index" json:"informed_at"`
 }

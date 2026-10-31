@@ -33,7 +33,8 @@ func (s *Service) CreateConfig(config *feed.Config) error {
 		return fmt.Errorf("%w: config is nil", ErrInvalidArgument)
 	}
 
-	if err := s.db.Create(config).Error; err != nil {
+	err := s.db.Create(config).Error
+	if err != nil {
 		return fmt.Errorf("create config: %w", err)
 	}
 
@@ -44,7 +45,8 @@ func (s *Service) CreateConfig(config *feed.Config) error {
 func (s *Service) GetConfig(id int64) (*feed.Config, error) {
 	var config feed.Config
 
-	if err := s.db.Where("id = ?", id).First(&config).Error; err != nil {
+	err := s.db.Where("id = ?", id).First(&config).Error
+	if err != nil {
 		return nil, wrapFind(err, "config", id)
 	}
 
@@ -57,11 +59,13 @@ func (s *Service) UpdateConfig(config *feed.Config) error {
 		return fmt.Errorf("%w: config id is required", ErrInvalidArgument)
 	}
 
-	if _, err := s.GetConfig(config.ID); err != nil {
+	_, err := s.GetConfig(config.ID)
+	if err != nil {
 		return err
 	}
 
-	if err := s.db.Save(config).Error; err != nil {
+	err = s.db.Save(config).Error
+	if err != nil {
 		return fmt.Errorf("update config %d: %w", config.ID, err)
 	}
 
@@ -102,7 +106,8 @@ func (s *Service) ReadFileConfig() (*inform.Config, error) {
 	}
 
 	var config inform.Config
-	if err = json.Unmarshal(raw, &config); err != nil {
+	err = json.Unmarshal(raw, &config)
+	if err != nil {
 		return nil, fmt.Errorf("parse config file %q: %w", path, err)
 	}
 

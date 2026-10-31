@@ -82,7 +82,8 @@ func GetDailySoup() string {
 		Content string `json:"content"`
 	}{}
 
-	if err = json.Unmarshal(buf, &data); err != nil {
+	err = json.Unmarshal(buf, &data)
+	if err != nil {
 		logger.Infof("err: %v", err)
 
 		return ""

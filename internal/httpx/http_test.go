@@ -20,7 +20,8 @@ package httpx_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/vogo/informer/internal/httpx"
 )
 
@@ -28,6 +29,6 @@ func TestGetWechatLinkData(t *testing.T) {
 	t.Parallel()
 
 	data, err := httpx.GetWechatLinkData("https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzI1MzYzMjE0MQ==&scene=124#wechat_redirect")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	t.Logf("data: %s", data)
 }

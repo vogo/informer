@@ -90,8 +90,9 @@ func JsonParse(source *Source, sink runlog.Sink) ([]*Article, error) {
 		return nil, err
 	}
 
-	var jsonData map[string]interface{}
-	if jsonErr := json.Unmarshal(data, &jsonData); jsonErr != nil {
+	var jsonData map[string]any
+	jsonErr := json.Unmarshal(data, &jsonData)
+	if jsonErr != nil {
 		runlog.Errorf(sink, "响应不是合法 JSON：%v，响应开头：%s",
 			jsonErr, runlog.Truncate(string(data), maxLoggedBodyRunes))
 
@@ -126,7 +127,6 @@ func JsonParse(source *Source, sink runlog.Sink) ([]*Article, error) {
 func jsonArticles(source *Source, titles, urls []any, sink runlog.Sink) []*Article {
 	hostPrefix := GetHostPrefix(source.URL)
 
-	//nolint:prealloc //ignore this.
 	var articles []*Article
 
 	for i, titleValue := range titles {
@@ -167,7 +167,7 @@ func getJSONNestedValue(data map[string]any, keyPath string, sink runlog.Sink) [
 
 //nolint:gosmopolitan //informer is a chinese product; the recorded lines speak the user's language.
 func parseJSONNestedValue(data map[string]any, keys []string, sink runlog.Sink) []any {
-	var values []interface{}
+	var values []any
 
 	keyName := keys[0]
 	key := keyName
@@ -177,14 +177,15 @@ func parseJSONNestedValue(data map[string]any, keys []string, sink runlog.Sink) 
 	}
 
 	switch v := data[key].(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		if len(keys) == 1 {
 			runlog.Warnf(sink, "路径 %s 指向的是对象而不是取值：%v", keys, v)
 		} else {
 			values = appendNoneNil(values, parseJSONNestedValue(v, keys[1:], sink))
 		}
-	case []interface{}:
-		if isArr {
+	case []any:
+		switch {
+		case isArr:
 			for _, item := range v {
 				if len(keys) == 1 {
 					values = append(values, item)
@@ -192,12 +193,10 @@ func parseJSONNestedValue(data map[string]any, keys []string, sink runlog.Sink) 
 					values = appendNoneNil(values, parseJSONNestedValue(item.(map[string]any), keys[1:], sink))
 				}
 			}
-		} else {
-			if len(keys) == 1 {
-				values = append(values, v)
-			} else {
-				values = appendNoneNil(values, parseJSONNestedValue(v[0].(map[string]any), keys[1:], sink))
-			}
+		case len(keys) == 1:
+			values = append(values, any(v))
+		case len(v) > 0:
+			values = appendNoneNil(values, parseJSONNestedValue(v[0].(map[string]any), keys[1:], sink))
 		}
 	default:
 		if len(keys) == 1 {
@@ -210,9 +209,10 @@ func parseJSONNestedValue(data map[string]any, keys []string, sink runlog.Sink) 
 	return values
 }
 
-func appendNoneNil(values []interface{}, value []interface{}) []interface{} {
+func appendNoneNil(values, value []any) []any {
 	if len(value) > 0 {
 		values = append(values, value...)
 	}
+
 	return values
 }

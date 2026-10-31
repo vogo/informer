@@ -109,7 +109,7 @@ func newAppWithHome(homeDir string) *App {
 // A broken data directory still shows in the window: the scheduler never runs
 // on a service that was not built, and this method never aborts startup.
 //
-//nolint:unparam //Wails ServiceStartup requires an error result.
+//nolint:unparam,contextcheck //Wails requires an error result; scheduled runs have an independent lifetime.
 func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error {
 	if a.initErr == nil {
 		a.sched = scheduler.New(
@@ -191,6 +191,7 @@ func (a *App) RestartToUpdate() error {
 	if err != nil {
 		return err
 	}
+
 	return app.Updater.Restart(context.Background())
 }
 
@@ -226,6 +227,7 @@ func (a *App) runInform() (*inform.Result, error) {
 		return nil, ErrDiagnoseRunning
 	}
 	defer a.agentMu.Unlock()
+
 	return a.svc.TriggerInform("")
 }
 

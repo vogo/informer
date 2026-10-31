@@ -4,10 +4,8 @@ linters:
   disable:
     - cyclop
     - depguard
+    # Keep deprecated names disabled while default: all still includes them.
     - exhaustruct
-    # golangci-lint v2.13 deprecated exhaustruct and wsl and shipped the live
-    # versions under new names; the deprecated entries alone stop disabling
-    # anything, so both spellings are listed until the old ones are dropped.
     - exhaustruct_v5
     - forcetypeassert
     - gochecknoglobals
@@ -25,6 +23,7 @@ linters:
     dupl:
       threshold: 100
     goconst:
+      ignore-tests: true
       min-len: 2
       min-occurrences: 2
     gocritic:
@@ -54,6 +53,19 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      # Persisted legacy field names are part of the source model and bindings.
+      - linters: [revive]
+        path: internal/feed/(model|db_test)\.go$
+        text: 'struct field Json(Title|URL)Path should be JSON(Title|URL)Path'
+      # CLI commands intentionally write their results to stdout.
+      - linters: [forbidigo]
+        path: internal/cli/
+      # These fixtures exercise Chinese category names and CLI output.
+      - linters: [gosmopolitan]
+        path: internal/(cli/feed|feed/db|service/crud)_test\.go$
+      # These tests mutate the shared database, stdout, or proxy configuration.
+      - linters: [paralleltest]
+        path: internal/(cli/.*_test|feed/(db|feed)_test|httpx/proxy_test)\.go$
       # feed.InitFeedDB installs a package level database handle, so two services
       # opening at the same time would race. Every test of the service package
       # therefore has to stay sequential; this is a structural constraint of the

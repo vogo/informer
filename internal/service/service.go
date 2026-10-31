@@ -28,8 +28,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/vogo/informer/internal/feed"
 	"gorm.io/gorm"
+
+	"github.com/vogo/informer/internal/feed"
 )
 
 // Errors returned by the service layer.
@@ -101,10 +102,7 @@ type PageRequest struct {
 
 // normalized clamps the request into the supported bounds.
 func (p PageRequest) normalized() PageRequest {
-	offset := p.Offset
-	if offset < 0 {
-		offset = 0
-	}
+	offset := max(p.Offset, 0)
 
 	limit := p.Limit
 	if limit <= 0 {
@@ -148,12 +146,14 @@ func findPage[T any](query *gorm.DB, order string, req PageRequest) (*Page[T], e
 	req = req.normalized()
 
 	var total int64
-	if err := query.Count(&total).Error; err != nil {
+	err := query.Count(&total).Error
+	if err != nil {
 		return nil, fmt.Errorf("count records: %w", err)
 	}
 
 	var items []T
-	if err := query.Order(order).Offset(req.Offset).Limit(req.Limit).Find(&items).Error; err != nil {
+	err = query.Order(order).Offset(req.Offset).Limit(req.Limit).Find(&items).Error
+	if err != nil {
 		return nil, fmt.Errorf("list records: %w", err)
 	}
 

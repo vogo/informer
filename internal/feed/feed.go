@@ -34,6 +34,8 @@ const (
 
 // AddFeeds writes the recommended articles into buf and returns them so that the
 // caller can record the delivery once a notification actually succeeded.
+//
+//nolint:gosmopolitan //daily report heading is Chinese by design.
 func AddFeeds(buf io.StringWriter, config *Config, agentConfig *agent.Config) []*Article {
 	articles := UpdateAndFilterFeeds(config, agentConfig)
 	if len(articles) > 0 {

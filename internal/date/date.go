@@ -22,6 +22,7 @@ import (
 	"time"
 )
 
+//nolint:gosmopolitan //the daily report is written for Chinese readers.
 func GetDateInfo() string {
 	now := time.Now()
 	weekday := now.Weekday()

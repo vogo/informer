@@ -74,7 +74,8 @@ func (s *Service) recordInformed(result *inform.Result) {
 		return
 	}
 
-	if err := feed.MarkArticlesInformed(result.Articles, time.Now().Unix()); err != nil {
+	err := feed.MarkArticlesInformed(result.Articles, time.Now().Unix())
+	if err != nil {
 		logger.Warnf("record inform timestamp failed: %v", err)
 	}
 }

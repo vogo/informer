@@ -101,9 +101,7 @@ func parseSource(svc *service.Service, idStr string) error {
 
 	articles, err := svc.Preview(id)
 	if err != nil {
-		fmt.Println(err)
-
-		return nil
+		return err
 	}
 
 	for _, item := range articles {
@@ -115,7 +113,8 @@ func parseSource(svc *service.Service, idStr string) error {
 
 func addSource(svc *service.Service, title, link string) error {
 	source := &feed.Source{Title: title, URL: link}
-	if err := svc.CreateSource(source); err != nil {
+	err := svc.CreateSource(source)
+	if err != nil {
 		return err
 	}
 
@@ -136,7 +135,6 @@ func addAgentSource(svc *service.Service, title, prompt string) error {
 		return err
 	}
 
-	//nolint:forbidigo //the command line reports its result on stdout by design.
 	fmt.Printf("%d,\t%s,\t%s\n", source.ID, source.Title, source.ResolveParseType())
 
 	return nil
@@ -186,8 +184,8 @@ func viewSource(svc *service.Service, idStr string) error {
 	fmt.Printf("json_title_path:\t%s\n", source.JsonTitlePath)
 	fmt.Printf("json_url_path:\t%s\n", source.JsonURLPath)
 	fmt.Printf("parse_type:\t%s\n", source.ResolveParseType())
-	fmt.Printf("agent_provider:\t%s\n", source.AgentProvider) //nolint:forbidigo //stdout is the output of this command.
-	fmt.Printf("agent_prompt:\t%s\n", source.AgentPrompt)     //nolint:forbidigo //stdout is the output of this command.
+	fmt.Printf("agent_provider:\t%s\n", source.AgentProvider)
+	fmt.Printf("agent_prompt:\t%s\n", source.AgentPrompt)
 	fmt.Printf("category_id:\t%d\n", source.CategoryID)
 	fmt.Printf("enabled:\t%t\n", source.Enabled)
 
@@ -228,9 +226,7 @@ func copySource(svc *service.Service, idStr string) error {
 
 	source, err := svc.GetSource(id)
 	if err != nil {
-		fmt.Println("source not found")
-
-		return nil
+		return err
 	}
 
 	duplicate := *source
@@ -238,7 +234,8 @@ func copySource(svc *service.Service, idStr string) error {
 	duplicate.Status = 0
 	duplicate.ErrorInfo = ""
 
-	if err = svc.CreateSource(&duplicate); err != nil {
+	err = svc.CreateSource(&duplicate)
+	if err != nil {
 		return err
 	}
 

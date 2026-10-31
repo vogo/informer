@@ -51,15 +51,18 @@ func InitFeedDB(dataDir string) (*gorm.DB, error) {
 
 	state := inspectSchema(db)
 
-	if err = migrateSchema(db); err != nil {
+	err = migrateSchema(db)
+	if err != nil {
 		return nil, err
 	}
 
-	if err = seedDefaultCategory(db); err != nil {
+	err = seedDefaultCategory(db)
+	if err != nil {
 		return nil, err
 	}
 
-	if err = backfillSources(db, state); err != nil {
+	err = backfillSources(db, state)
+	if err != nil {
 		return nil, err
 	}
 
@@ -81,7 +84,8 @@ func inspectSchema(db *gorm.DB) schemaState {
 
 func migrateSchema(db *gorm.DB) error {
 	for _, model := range []any{&Category{}, &Config{}, &Source{}, &Article{}} {
-		if err := db.AutoMigrate(model); err != nil {
+		err := db.AutoMigrate(model)
+		if err != nil {
 			return fmt.Errorf("migrate feed schema %T: %w", model, err)
 		}
 	}
@@ -103,7 +107,8 @@ func seedDefaultCategory(db *gorm.DB) error {
 		return fmt.Errorf("read default category: %w", err)
 	}
 
-	if err = db.Create(&Category{ID: DefaultCategoryID, Name: DefaultCategoryName}).Error; err != nil {
+	err = db.Create(&Category{ID: DefaultCategoryID, Name: DefaultCategoryName}).Error
+	if err != nil {
 		return fmt.Errorf("seed default category: %w", err)
 	}
 
@@ -114,26 +119,29 @@ func seedDefaultCategory(db *gorm.DB) error {
 // Every statement is idempotent and only touches rows that still carry no explicit value.
 func backfillSources(db *gorm.DB, state schemaState) error {
 	// sources without a category always point at the seeded default one.
-	if err := db.Model(&Source{}).
+	err := db.Model(&Source{}).
 		Where("category_id IS NULL OR category_id = 0").
-		Update("category_id", DefaultCategoryID).Error; err != nil {
+		Update("category_id", DefaultCategoryID).Error
+	if err != nil {
 		return fmt.Errorf("backfill source category: %w", err)
 	}
 
 	// the enabled column is filled exactly once, on the run that adds it,
 	// so a source disabled later is never switched back on.
 	if state.sourceTableExisted && !state.hadEnabled {
-		if err := db.Model(&Source{}).Where("1 = 1").Update("enabled", true).Error; err != nil {
+		err := db.Model(&Source{}).Where("1 = 1").Update("enabled", true).Error
+		if err != nil {
 			return fmt.Errorf("backfill source enabled: %w", err)
 		}
 	}
 
 	// only sources without an explicit parse type get the derived value.
-	if err := db.Model(&Source{}).
+	err = db.Model(&Source{}).
 		Where("parse_type IS NULL OR parse_type = ''").
 		Update("parse_type", gorm.Expr(
 			"CASE WHEN is_json THEN ? WHEN regex IS NOT NULL AND regex != '' THEN ? ELSE ? END",
-			ParseTypeJSON, ParseTypeRegex, ParseTypeFeed)).Error; err != nil {
+			ParseTypeJSON, ParseTypeRegex, ParseTypeFeed)).Error
+	if err != nil {
 		return fmt.Errorf("backfill source parse type: %w", err)
 	}
 

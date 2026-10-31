@@ -15,18 +15,21 @@
  * limitations under the License.
  */
 
-package feed
+package feed_test
 
 import (
 	"testing"
+
+	"github.com/vogo/informer/internal/feed"
 )
 
 func TestJsonParseFeed(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("network test")
 	}
 
-	src := &Source{
+	src := &feed.Source{
 		ID:            0,
 		Title:         "test",
 		URL:           "https://newsapi-hbr.caijingmobile.com/article/list?last_id=",
@@ -43,7 +46,7 @@ func TestJsonParseFeed(t *testing.T) {
 		JsonURLPath:   "data/focus_articles[]/article/share_url",
 	}
 
-	articles, err := JsonParse(src, nil)
+	articles, err := feed.JsonParse(src, nil)
 	if err != nil || len(articles) == 0 {
 		t.Skipf("live JSON endpoint unavailable: err=%v articles=%d", err, len(articles))
 	}

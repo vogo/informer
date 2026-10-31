@@ -20,7 +20,7 @@ name: CI
 
 on:
   push:
-    branches: [master, develop]
+    branches: [main, master, develop]
   pull_request:
 
 permissions:
@@ -72,7 +72,7 @@ jobs:
       # reads cannot import packages that use newer language features - which
       # turns every lint run into a typecheck failure or an outright panic.
       - name: golangci-lint (root module)
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           install-mode: goinstall
@@ -82,7 +82,7 @@ jobs:
       # Wails v3 defaults to GTK4; build tag gtk3 keeps us on WebKitGTK 4.1
       # which matches the release .deb runtime deps.
       - name: golangci-lint (desktop module)
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           install-mode: goinstall
@@ -139,8 +139,13 @@ jobs:
             webkit_packages: libgtk-3-dev libwebkit2gtk-4.1-dev
             webkit_abi: '1'
             extra_tags: 'gtk3'
-          - platform: macos
-            os: macos-14
+          - platform: macos-15
+            os: macos-15
+            webkit_packages: ''
+            webkit_abi: ''
+            extra_tags: ''
+          - platform: macos-26
+            os: macos-26
             webkit_packages: ''
             webkit_abi: ''
             extra_tags: ''

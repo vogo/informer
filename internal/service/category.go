@@ -34,7 +34,8 @@ func (s *Service) CreateCategory(category *feed.Category) error {
 		return fmt.Errorf("%w: category name is empty", ErrInvalidArgument)
 	}
 
-	if err := s.db.Create(category).Error; err != nil {
+	err := s.db.Create(category).Error
+	if err != nil {
 		return fmt.Errorf("create category: %w", err)
 	}
 
@@ -45,7 +46,8 @@ func (s *Service) CreateCategory(category *feed.Category) error {
 func (s *Service) GetCategory(id int64) (*feed.Category, error) {
 	var category feed.Category
 
-	if err := s.db.Where("id = ?", id).First(&category).Error; err != nil {
+	err := s.db.Where("id = ?", id).First(&category).Error
+	if err != nil {
 		return nil, wrapFind(err, "category", id)
 	}
 
@@ -62,11 +64,13 @@ func (s *Service) UpdateCategory(category *feed.Category) error {
 		return fmt.Errorf("%w: category name is empty", ErrInvalidArgument)
 	}
 
-	if _, err := s.GetCategory(category.ID); err != nil {
+	_, err := s.GetCategory(category.ID)
+	if err != nil {
 		return err
 	}
 
-	if err := s.db.Save(category).Error; err != nil {
+	err = s.db.Save(category).Error
+	if err != nil {
 		return fmt.Errorf("update category %d: %w", category.ID, err)
 	}
 
@@ -80,12 +84,14 @@ func (s *Service) DeleteCategory(id int64) error {
 		return fmt.Errorf("%w: the default category cannot be deleted", ErrInvalidArgument)
 	}
 
-	if _, err := s.GetCategory(id); err != nil {
+	_, err := s.GetCategory(id)
+	if err != nil {
 		return err
 	}
 
 	var referencing int64
-	if err := s.db.Model(&feed.Source{}).Where("category_id = ?", id).Count(&referencing).Error; err != nil {
+	err = s.db.Model(&feed.Source{}).Where("category_id = ?", id).Count(&referencing).Error
+	if err != nil {
 		return fmt.Errorf("count sources of category %d: %w", id, err)
 	}
 
@@ -93,7 +99,8 @@ func (s *Service) DeleteCategory(id int64) error {
 		return fmt.Errorf("%w: category %d has %d sources", ErrCategoryInUse, id, referencing)
 	}
 
-	if err := s.db.Where("id = ?", id).Delete(&feed.Category{}).Error; err != nil {
+	err = s.db.Where("id = ?", id).Delete(&feed.Category{}).Error
+	if err != nil {
 		return fmt.Errorf("delete category %d: %w", id, err)
 	}
 
@@ -196,7 +203,8 @@ func (s *Service) ListCategories(page PageRequest) (*Page[*feed.Category], error
 func (s *Service) AllCategories() ([]*feed.Category, error) {
 	var categories []*feed.Category
 
-	if err := s.db.Model(&feed.Category{}).Order(categoryOrder).Find(&categories).Error; err != nil {
+	err := s.db.Model(&feed.Category{}).Order(categoryOrder).Find(&categories).Error
+	if err != nil {
 		return nil, fmt.Errorf("list categories: %w", err)
 	}
 
@@ -205,7 +213,8 @@ func (s *Service) AllCategories() ([]*feed.Category, error) {
 
 // requireCategory fails when the referenced category does not exist.
 func (s *Service) requireCategory(id int64) error {
-	if _, err := s.GetCategory(id); err != nil {
+	_, err := s.GetCategory(id)
+	if err != nil {
 		return err
 	}
 

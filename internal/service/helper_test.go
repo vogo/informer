@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/inform"
 	"github.com/vogo/informer/internal/service"
