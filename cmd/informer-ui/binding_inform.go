@@ -56,6 +56,7 @@ type InformResultDTO struct {
 
 // DeliveryDTO is the outcome of delivering one run to one target.
 type DeliveryDTO struct {
+	Uncertain bool `json:"uncertain"`
 	// Name identifies the target as the settings page labels it.
 	Name string `json:"name"`
 
@@ -128,6 +129,7 @@ func toDeliveryDTOs(deliveries []inform.Delivery) []DeliveryDTO {
 
 	for _, delivery := range deliveries {
 		dtos = append(dtos, DeliveryDTO{
+			Uncertain: delivery.Uncertain,
 			Name:      delivery.Name,
 			URL:       delivery.URL,
 			Success:   delivery.Success,

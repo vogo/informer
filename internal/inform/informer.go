@@ -39,6 +39,7 @@ import (
 	"github.com/vogo/informer/internal/lark"
 	"github.com/vogo/informer/internal/resultprocess"
 	"github.com/vogo/informer/internal/soup"
+	"github.com/vogo/informer/internal/wechat"
 )
 
 // ConfigFileName is the informer configuration file inside the active data directory.
@@ -77,6 +78,7 @@ func DailyFilePath(homeDir string, day time.Time) string {
 
 // Config is the layout of informer.json.
 type Config struct {
+	WeChat           *wechat.Config        `json:"wechat,omitempty"`
 	ResultProcessing *resultprocess.Config `json:"result_processing,omitempty"`
 
 	Feed *feed.Config `json:"feed"`
@@ -115,6 +117,9 @@ func (w Webhook) IsEnabled() bool {
 
 // Target is one bot an inform run delivers to.
 type Target struct {
+	// Kind is empty for legacy webhook targets.
+	Kind      string
+	GroupName string
 	// Name labels the target in the per target delivery result.
 	Name string
 
@@ -174,6 +179,8 @@ type Result struct {
 
 // Delivery is the outcome of delivering the message to one target.
 type Delivery struct {
+	// Uncertain means the desktop send may have happened and must not be retried blindly.
+	Uncertain bool
 	// Name and URL identify the target the outcome belongs to.
 	Name string
 	URL  string
@@ -301,6 +308,8 @@ func deliver(target Target, content string, weekday time.Weekday) Delivery {
 	var err error
 
 	switch {
+	case target.Kind == "wechat":
+		_, err = wechat.Send(target.GroupName, content)
 	case strings.Contains(target.URL, lark.Host):
 		err = lark.Lark(target.URL, content)
 	case strings.Contains(target.URL, ding.Host):
@@ -311,6 +320,7 @@ func deliver(target Target, content string, weekday time.Weekday) Delivery {
 
 	if err != nil {
 		delivery.Error = err.Error()
+		delivery.Uncertain = errors.Is(err, wechat.ErrUncertain)
 	} else {
 		delivery.Success = true
 	}

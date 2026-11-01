@@ -3,6 +3,7 @@ import {computed, onMounted, reactive, ref} from 'vue'
 import {
   NAlert,
   NButton,
+  NPopconfirm,
   NCard,
   NEllipsis,
   NForm,
@@ -24,6 +25,11 @@ import {
   useMessage
 } from 'naive-ui'
 import {
+  CheckWeChat,
+  LocateWeChat,
+  TestWeChat,
+  ResolveWeChatPending,
+  SaveWeChat,
   DetectAgentCommand,
   ReadConfig,
   ReadSecrets,
@@ -72,7 +78,7 @@ const form = reactive({
 // the agent section drives every「agent」订阅: the endpoint, the model and the
 // tool set. The api key is not part of it - it is saved on its own below, so this
 // form never has to hold a credential it was never shown.
-const agent = reactive({
+const agent = ref({
   provider: '',
   baseURL: '',
   model: '',
@@ -96,12 +102,38 @@ const enabledWebhookCount = computed(
   () => webhooks.value.filter(row => row.enabled && row.url.trim() !== '').length
 )
 
+const wechat = ref({enabled: false, groupName: ''})
+const wechatBusy = ref(false)
+const wechatFeedback = ref('')
+const wechatError = ref(false)
+async function wechatAction(action: 'save' | 'check' | 'locate' | 'test' | 'resolve') {
+  if (wechatBusy.value) return
+  wechatBusy.value = true
+  wechatFeedback.value = ''
+  wechatError.value = false
+  try {
+    if (action === 'save') {
+      await SaveWeChat({...wechat.value})
+      wechatFeedback.value = '微信推送配置已保存'
+    } else if (action === 'resolve') {
+      await ResolveWeChatPending(wechat.value.groupName)
+      wechatFeedback.value = '已解除该群的待确认暂停；下一次推送可再次发送'
+    } else {
+      const result = requireValue(await (action === 'check' ? CheckWeChat() : action === 'locate' ? LocateWeChat(wechat.value.groupName) : TestWeChat(wechat.value.groupName)), 'WeChatOutcome')
+      wechatFeedback.value = result.message
+    }
+  } catch (e) {
+    wechatError.value = true
+    wechatFeedback.value = errorText(e)
+  } finally { wechatBusy.value = false }
+}
+
 const httpProxyConfigured = ref(false)
 const httpProxy = ref('')
 const httpProxyInput = ref('')
 const httpProxySaving = ref(false)
 
-const schedule = reactive({
+const schedule = ref({
   enabled: false,
   time: '10:00'
 })
@@ -161,9 +193,10 @@ async function load() {
     configPath.value = config.path
     configExists.value = config.exists
     preservedKeys.value = config.preservedKeys ?? []
+    Object.assign(wechat.value, config.wechat ?? {enabled: false, groupName: ''})
     Object.assign(form, config.feed)
-    Object.assign(schedule, config.schedule)
-    Object.assign(agent, config.agent)
+    Object.assign(schedule.value, config.schedule)
+    Object.assign(agent.value, config.agent)
     Object.assign(resultProcessing, config.resultProcessing ?? {enabled: false, prompt: ''})
     agentProviderOptions.value = (config.agentProviders ?? []).map(value => ({label: value, value}))
     webhooks.value = (config.webhooks ?? []).map(row => ({
@@ -205,8 +238,8 @@ async function saveSchedule() {
   scheduleSaving.value = true
   try {
     await SaveSchedule({
-      enabled: schedule.enabled,
-      time: schedule.time
+      enabled: schedule.value.enabled,
+      time: schedule.value.time
     })
     message.success('定时任务已保存，应用保持打开时按时推送')
     await load()
@@ -221,12 +254,12 @@ async function saveAgent() {
   agentSaving.value = true
   try {
     await SaveAgentConfig({
-      provider: agent.provider,
-      baseURL: agent.baseURL,
-      model: agent.model,
-      allowedTools: agent.allowedTools,
-      timeoutSeconds: agent.timeoutSeconds,
-      command: agent.command
+      provider: agent.value.provider,
+      baseURL: agent.value.baseURL,
+      model: agent.value.model,
+      allowedTools: agent.value.allowedTools,
+      timeoutSeconds: agent.value.timeoutSeconds,
+      command: agent.value.command
     })
     message.success('Agent 配置已保存，下一次抓取即生效')
     await load()
@@ -240,12 +273,12 @@ async function saveAgent() {
 async function detectAgentCommand() {
   agentDetecting.value = true
   try {
-    const path = await DetectAgentCommand(agent.provider)
+    const path = await DetectAgentCommand(agent.value.provider)
     if (!path) {
       message.warning('未找到可执行文件')
       return
     }
-    agent.command = path
+    agent.value.command = path
     message.success('已找到可执行文件，请保存 Agent 配置')
   } catch (e) {
     message.error(`查找失败：${errorText(e)}`)
@@ -504,6 +537,42 @@ async function rebuild() {
           </n-form>
         </n-card>
 
+        <n-card size="small" title="本机微信（macOS）" :header-style="cardHeaderStyle" :content-style="cardContentStyle">
+          <template #header-extra>
+            <n-button size="tiny" type="primary" :disabled="wechatBusy" @click="wechatAction('save')">保存微信配置</n-button>
+          </template>
+          <n-space vertical :size="10">
+            <n-space align="center">
+              <n-switch v-model:value="wechat.enabled" :disabled="wechatBusy" size="small" />
+              <span>启用微信群推送</span>
+            </n-space>
+            <n-input v-model:value="wechat.groupName" :disabled="wechatBusy" placeholder="完整且唯一的微信群名" size="small" />
+            <n-text depth="3" class="tiny">
+              仅支持 macOS。请先登录微信、解锁桌面，并为 informer 开启辅助功能权限。发送会切换到微信前台。
+              先检查环境、定位群聊，再发送测试。定位与测试使用当前填写的群名，保存后才参与日常推送。
+              发送前校验群聊信息，保留已有草稿；不支持当前界面时停止操作。
+            </n-text>
+            <n-space :size="6">
+              <n-button size="small" :disabled="wechatBusy" @click="wechatAction('check')">检查环境</n-button>
+              <n-button size="small" :disabled="wechatBusy || !wechat.groupName.trim()" @click="wechatAction('locate')">定位目标群</n-button>
+              <n-popconfirm @positive-click="wechatAction('test')">
+                <template #trigger><n-button size="small" :disabled="wechatBusy || !wechat.groupName.trim()">发送测试消息</n-button></template>
+                将向「{{ wechat.groupName }}」发送“informer 微信推送测试”和当前时间，确认发送？
+              </n-popconfirm>
+              <n-popconfirm @positive-click="wechatAction('resolve')">
+                <template #trigger><n-button size="small" :disabled="wechatBusy || !wechat.groupName.trim()">解除发送暂停</n-button></template>
+                请先检查「{{ wechat.groupName }}」中的消息，并处理遗留草稿。解除后下次推送可能再次发送，确认已核对？
+              </n-popconfirm>
+            </n-space>
+            <n-text v-if="wechatBusy" depth="3" class="tiny">正在操作微信，请暂时不要切换聊天或编辑消息…</n-text>
+            <n-alert v-if="wechatFeedback" :type="wechatError ? 'error' : 'success'" :show-icon="false">{{ wechatFeedback }}</n-alert>
+            <n-text depth="3" class="tiny">
+              消息以纯文本发送，上限 4000 字。结果不确定时暂停该群后续发送，核对后可解除；本机聊天中出现消息不等于对方已读。
+              Webhook 与微信任一成功即记录文章通知时间，失败目标不会自动单独补推。Windows 和 Linux 暂不支持本机微信。
+            </n-text>
+          </n-space>
+        </n-card>
+
         <n-card
           size="small"
           :header-style="cardHeaderStyle"
@@ -545,7 +614,7 @@ async function rebuild() {
                 <n-button size="small" quaternary @click="removeWebhook(index)">删除</n-button>
               </div>
               <n-text v-if="webhooks.length === 0" depth="3" class="tiny">
-                未配置目标时只生成日报，不发送推送。
+                未配置 Webhook 且未启用微信时只生成日报，不发送推送。
               </n-text>
             </div>
 

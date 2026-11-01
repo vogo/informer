@@ -89,14 +89,14 @@ async function triggerNow() {
     } else if (result.skipped) {
       message.info(`已跳过推送：${result.skipReason}`)
     } else if (deliveries.length === 0) {
-      message.success('日报已生成，但未配置启用的机器人目标，未发送推送')
+      message.success('日报已生成，但未配置启用的推送目标，未发送推送')
     } else if (failed.length > 0) {
       const missed = failed
-        .map(row => `${row.name || row.url}（${row.errorInfo}）`)
+        .map(row => `${row.name || row.url}（${row.uncertain ? '待确认：' : ''}${row.errorInfo}）`)
         .join('、')
       message.warning(`已推送 ${result.articleCount} 篇文章，${deliveries.length - failed.length} 个目标成功，${missed} 失败`)
     } else {
-      message.success(`已推送 ${result.articleCount} 篇文章到 ${deliveries.length} 个机器人目标`)
+      message.success(`已推送 ${result.articleCount} 篇文章到 ${deliveries.length} 个推送目标`)
     }
 
     await loadIndex()
@@ -178,7 +178,7 @@ function onContentClick(event: MouseEvent) {
             <template #trigger>
               <n-button size="tiny" tertiary>立即推送</n-button>
             </template>
-            将抓取所有启用的订阅、生成今日日报并推送到所有启用的机器人目标，确认立即推送？
+            将抓取所有启用的订阅、生成今日日报并推送到所有启用的推送目标，确认立即推送？
           </n-popconfirm>
         </div>
         <n-button size="tiny" tertiary :loading="indexLoading" @click="loadIndex">刷新</n-button>

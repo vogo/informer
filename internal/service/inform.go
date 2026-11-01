@@ -18,6 +18,7 @@
 package service
 
 import (
+	"strings"
 	"time"
 
 	"github.com/vogo/logger"
@@ -43,9 +44,14 @@ func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 		return nil, err
 	}
 
+	targets := s.ResolveTargets(urlAddr)
+	if strings.TrimSpace(urlAddr) == "" && fileConfig.WeChat != nil && fileConfig.WeChat.Enabled {
+		targets = append(targets, inform.Target{Kind: wechatSectionKey, Name: "WeChat: " + fileConfig.WeChat.GroupName, GroupName: fileConfig.WeChat.GroupName})
+	}
+
 	result, err := inform.Run(&inform.Options{
 		HomeDir:          s.homeDir,
-		Targets:          s.ResolveTargets(urlAddr),
+		Targets:          targets,
 		FeedConfig:       s.EffectiveFeedConfig(fileConfig),
 		AgentConfig:      s.EffectiveAgentConfig(fileConfig),
 		ResultProcessing: fileConfig.ResultProcessing,

@@ -1,4 +1,5 @@
 {
+  "wechat": {"enabled": false, "group_name": ""},
   "feed": {
     "same_site_max_count": 3,
     "feed_expire_days": 150,
