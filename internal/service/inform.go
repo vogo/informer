@@ -22,7 +22,6 @@ import (
 
 	"github.com/vogo/logger"
 
-	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/inform"
 )
 
@@ -50,7 +49,7 @@ func (s *Service) TriggerInform(urlAddr string) (*inform.Result, error) {
 		FeedConfig:       s.EffectiveFeedConfig(fileConfig),
 		AgentConfig:      s.EffectiveAgentConfig(fileConfig),
 		ResultProcessing: fileConfig.ResultProcessing,
-	})
+	}, s.feeds)
 	if err != nil {
 		return result, err
 	}
@@ -74,7 +73,7 @@ func (s *Service) recordInformed(result *inform.Result) {
 		return
 	}
 
-	err := feed.MarkArticlesInformed(result.Articles, time.Now().Unix())
+	err := s.feeds.MarkArticlesInformed(result.Articles, time.Now().Unix())
 	if err != nil {
 		logger.Warnf("record inform timestamp failed: %v", err)
 	}

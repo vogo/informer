@@ -73,7 +73,7 @@ func (s *Service) PreviewResultProcessing(ctx context.Context, prompt string) (*
 			return nil, validationErr
 		}
 	}
-	articles, err := feed.SelectArticles(feedConfig)
+	articles, err := s.feeds.SelectArticles(feedConfig)
 	if err != nil {
 		return nil, err
 	}

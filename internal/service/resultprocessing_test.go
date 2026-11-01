@@ -249,3 +249,18 @@ func TestFinalProcessingDisablesAgentTools(t *testing.T) {
 	assert.NotContains(t, string(args), "--allowedTools")
 	assert.Contains(t, string(args), "--strict-mcp-config")
 }
+
+func TestFinalProcessingPreviewUsesServiceDatabase(t *testing.T) {
+	first := processingService(t, filteredAnswer)
+	second := newService(t)
+	beforeFirst := snapshotDB(t, first)
+	beforeSecond := snapshotDB(t, second)
+
+	preview, err := first.PreviewResultProcessing(context.Background(), finalPrompt)
+	require.NoError(t, err)
+	require.Len(t, preview.Candidates, 2)
+	assert.Equal(t, "low value", preview.Candidates[1].Title)
+	assert.Contains(t, preview.Report.Content, "https://example.com/two")
+	assert.Equal(t, beforeFirst, snapshotDB(t, first))
+	assert.Equal(t, beforeSecond, snapshotDB(t, second))
+}

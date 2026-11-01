@@ -54,6 +54,7 @@ const (
 // Service is the business entry point backed by the feed database of one data directory.
 type Service struct {
 	db      *gorm.DB
+	feeds   *feed.Store
 	homeDir string
 
 	// composeMu guards the composing conversation registry alone. It is never
@@ -78,7 +79,7 @@ func New(homeDir string) (*Service, error) {
 		return nil, err
 	}
 
-	svc := &Service{db: db, homeDir: homeDir}
+	svc := &Service{db: db, feeds: feed.NewStore(db), homeDir: homeDir}
 	svc.ApplyHTTPProxy()
 
 	return svc, nil

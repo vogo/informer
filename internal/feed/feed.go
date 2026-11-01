@@ -36,8 +36,8 @@ const (
 // caller can record the delivery once a notification actually succeeded.
 //
 //nolint:gosmopolitan //daily report heading is Chinese by design.
-func AddFeeds(buf io.StringWriter, config *Config, agentConfig *agent.Config) []*Article {
-	articles := UpdateAndFilterFeeds(config, agentConfig)
+func (s *Store) AddFeeds(buf io.StringWriter, config *Config, agentConfig *agent.Config) []*Article {
+	articles := s.UpdateAndFilterFeeds(config, agentConfig)
 	if len(articles) > 0 {
 		_, _ = buf.WriteString("文章推荐:\n")
 
@@ -49,7 +49,7 @@ func AddFeeds(buf io.StringWriter, config *Config, agentConfig *agent.Config) []
 	return articles
 }
 
-func UpdateAndFilterFeeds(config *Config, agentConfig *agent.Config) []*Article {
+func (s *Store) UpdateAndFilterFeeds(config *Config, agentConfig *agent.Config) []*Article {
 	now := time.Now()
 	nowTime := now.Unix()
 	expireTime := now.Add(time.Hour * 24 * time.Duration(-config.FeedExpireDays)).Unix()
@@ -60,18 +60,18 @@ func UpdateAndFilterFeeds(config *Config, agentConfig *agent.Config) []*Article 
 	var sources []*Source
 
 	// only enabled sources take part in a real fetch; Preview is not restricted by Enabled.
-	feedDataDB.Model(&Source{}).Where("enabled = ?", true).Order("id").Find(&sources)
+	s.db.Model(&Source{}).Where("enabled = ?", true).Order("id").Find(&sources)
 
 	for _, source := range sources {
 		switch source.ResolveParseType() {
 		case ParseTypeJSON:
-			jsonParseFeed(config, source, expireTime)
+			s.jsonParseFeed(config, source, expireTime)
 		case ParseTypeRegex:
-			regexParseFeed(config, source, expireTime)
+			s.regexParseFeed(config, source, expireTime)
 		case ParseTypeAgent:
-			agentParseFeed(config, source, agentConfig, expireTime)
+			s.agentParseFeed(config, source, agentConfig, expireTime)
 		default:
-			addGoFeed(config, source, expireTime)
+			s.addGoFeed(config, source, expireTime)
 		}
 
 		if minWeight > source.Weight {
@@ -85,15 +85,15 @@ func UpdateAndFilterFeeds(config *Config, agentConfig *agent.Config) []*Article 
 
 	dayIntervalWeight := (maxWeight - minWeight) / int64(config.FeedExpireDays)
 
-	updateExistsScore(nowTime, dayIntervalWeight)
+	s.updateExistsScore(nowTime, dayIntervalWeight)
 
-	return sortAndChoseArticles(config)
+	return s.sortAndChoseArticles(config)
 }
 
-func updateExistsScore(nowTime, dayIntervalWeight int64) {
+func (s *Store) updateExistsScore(nowTime, dayIntervalWeight int64) {
 	var articleList []*Article
 
-	feedDataDB.Model(&Article{}).Where("informed=?", false).Find(&articleList)
+	s.db.Model(&Article{}).Where("informed=?", false).Find(&articleList)
 
 	for _, article := range articleList {
 		// adjust timestamp
@@ -104,14 +104,14 @@ func updateExistsScore(nowTime, dayIntervalWeight int64) {
 		pastDays := (nowTime - article.Timestamp) / oneDaySeconds
 		newScore := article.Weight - pastDays*dayIntervalWeight
 
-		feedDataDB.Model(article).Update("score", newScore)
+		s.db.Model(article).Update("score", newScore)
 	}
 }
 
 const articleChoseSizeMultiple = 4
 
-func sortAndChoseArticles(config *Config) []*Article {
-	articles, err := SelectArticles(config)
+func (s *Store) sortAndChoseArticles(config *Config) []*Article {
+	articles, err := s.SelectArticles(config)
 	if err != nil {
 		logger.Warnf("select candidate articles: %v", err)
 	}
@@ -120,13 +120,13 @@ func sortAndChoseArticles(config *Config) []*Article {
 }
 
 // SelectArticles reads existing candidates without fetching or updating any record.
-func SelectArticles(config *Config) ([]*Article, error) {
+func (s *Store) SelectArticles(config *Config) ([]*Article, error) {
 	if config == nil {
 		return []*Article{}, nil
 	}
 	var articleList []*Article
 
-	result := feedDataDB.Model(&Article{}).
+	result := s.db.Model(&Article{}).
 		Where("informed=?", false).
 		Order("score desc").
 		Order("id desc").
@@ -169,10 +169,10 @@ func choseArticle(list []*Article, config *Config) []*Article {
 	return articles
 }
 
-func isFeedURLExists(url string) bool {
+func (s *Store) isFeedURLExists(url string) bool {
 	var existCount int64
 
-	feedDataDB.Model(&Article{}).Where("url=?", url).Count(&existCount)
+	s.db.Model(&Article{}).Where("url=?", url).Count(&existCount)
 
 	if existCount > 0 {
 		logger.Warnf("exists feed: %s", url)
@@ -183,7 +183,7 @@ func isFeedURLExists(url string) bool {
 	return false
 }
 
-func saveParsedArticles(config *Config, source *Source, articles []*Article) {
+func (s *Store) saveParsedArticles(config *Config, source *Source, articles []*Article) {
 	count := 0
 
 	for _, a := range articles {
@@ -197,29 +197,29 @@ func saveParsedArticles(config *Config, source *Source, articles []*Article) {
 
 		count++
 
-		if isFeedURLExists(a.URL) {
+		if s.isFeedURLExists(a.URL) {
 			continue
 		}
 
-		saveNewArticle(a)
+		s.saveNewArticle(a)
 	}
 }
 
 // saveNewArticle persists a freshly fetched article and stamps its first fetch time.
 // Duplicate urls never reach this function, so FetchedAt is never overwritten.
-func saveNewArticle(article *Article) {
+func (s *Store) saveNewArticle(article *Article) {
 	if article.FetchedAt == nil {
 		fetchedAt := time.Now().Unix()
 		article.FetchedAt = &fetchedAt
 	}
 
-	feedDataDB.Save(article)
+	s.db.Save(article)
 }
 
 // MarkArticlesInformed records the moment a notification actually delivered the articles.
 // It is called only after the notification step succeeded, so a failed delivery never
 // produces an inform timestamp.
-func MarkArticlesInformed(articles []*Article, informedAt int64) error {
+func (s *Store) MarkArticlesInformed(articles []*Article, informedAt int64) error {
 	if len(articles) == 0 {
 		return nil
 	}
@@ -231,18 +231,18 @@ func MarkArticlesInformed(articles []*Article, informedAt int64) error {
 		a.InformedAt = &informedAt
 	}
 
-	return feedDataDB.Model(&Article{}).Where("id IN ?", ids).
+	return s.db.Model(&Article{}).Where("id IN ?", ids).
 		Updates(map[string]any{"informed": true, "informed_at": informedAt}).Error
 }
 
-func updateSourceError(source *Source, err error) {
+func (s *Store) updateSourceError(source *Source, err error) {
 	source.Status = StatusError
 	source.ErrorInfo = err.Error()
-	feedDataDB.Save(source)
+	s.db.Save(source)
 }
 
-func updateSourceNormal(source *Source) {
+func (s *Store) updateSourceNormal(source *Source) {
 	source.Status = StatusNormal
 	source.ErrorInfo = ""
-	feedDataDB.Save(source)
+	s.db.Save(source)
 }

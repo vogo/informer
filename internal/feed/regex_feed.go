@@ -21,19 +21,19 @@ import (
 	"github.com/vogo/logger"
 )
 
-func regexParseFeed(config *Config, source *Source, _ int64) {
+func (s *Store) regexParseFeed(config *Config, source *Source, _ int64) {
 	logger.Info("regex parse feed: ", source.URL)
 
 	articles, err := RegexParse(source, nil)
 	if err != nil {
 		logger.Infof("regex parse feed url error! url: %s, error: %v", source.URL, err)
 
-		updateSourceError(source, err)
+		s.updateSourceError(source, err)
 
 		return
 	}
 
-	updateSourceNormal(source)
+	s.updateSourceNormal(source)
 
-	saveParsedArticles(config, source, articles)
+	s.saveParsedArticles(config, source, articles)
 }

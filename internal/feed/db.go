@@ -29,8 +29,17 @@ import (
 // DBFileName is the sqlite file holding feed data inside the active data directory.
 const DBFileName = "feed.db"
 
-//nolint:gochecknoglobals //ignore this.
-var feedDataDB *gorm.DB
+// Store binds feed fetching, selection and delivery state to one database.
+// It borrows the handle owned by the service; constructing another Store never
+// changes the database used by an existing instance.
+type Store struct {
+	db *gorm.DB
+}
+
+// NewStore binds feed operations to an initialized database.
+func NewStore(db *gorm.DB) *Store {
+	return &Store{db: db}
+}
 
 // schemaState records which columns already existed before AutoMigrate ran,
 // so that one-shot backfills never overwrite values the user set later on.
@@ -65,8 +74,6 @@ func InitFeedDB(dataDir string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	feedDataDB = db
 
 	return db, nil
 }
