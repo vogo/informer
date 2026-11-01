@@ -139,7 +139,12 @@ const columns: DataTableColumns<ArticleItemDTO> = [
     render: row =>
       h(
         NButton,
-        {text: true, type: 'primary', onClick: () => { void Browser.OpenURL(row.url) }},
+        {
+          text: true,
+          type: 'primary',
+          style: {maxWidth: '100%', minWidth: 0},
+          onClick: () => { void Browser.OpenURL(row.url) }
+        },
         {default: () => h(NEllipsis, null, {default: () => row.title || row.url})}
       )
   },
@@ -217,6 +222,7 @@ const columns: DataTableColumns<ArticleItemDTO> = [
       </n-alert>
 
       <n-data-table
+        table-layout="fixed"
         :columns="columns"
         :data="items"
         :loading="loading"
@@ -238,6 +244,8 @@ const columns: DataTableColumns<ArticleItemDTO> = [
 .page {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
   height: 100%;
   overflow: hidden;
 }
@@ -254,6 +262,7 @@ const columns: DataTableColumns<ArticleItemDTO> = [
 
 .content {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 16px;
 }
