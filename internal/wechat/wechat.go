@@ -45,6 +45,7 @@ const MaxMessageRunes = 4000
 
 const (
 	StatusSent      = "sent"
+	opSnapshot      = "snapshot"
 	statusPending   = "pending"
 	roleSearchField = "AXSearchField"
 	roleButton      = "AXButton"
@@ -92,11 +93,13 @@ type node struct {
 	Pressable   bool   `json:"pressable"`
 }
 type request struct {
-	Group string `json:"group,omitempty"`
-	Body  string `json:"body,omitempty"`
-	Op    string `json:"op"`
-	Node  *node  `json:"node,omitempty"`
-	Value string `json:"value,omitempty"`
+	// Prompt is only enabled by the user-initiated environment check.
+	Prompt bool   `json:"prompt,omitempty"`
+	Group  string `json:"group,omitempty"`
+	Body   string `json:"body,omitempty"`
+	Op     string `json:"op"`
+	Node   *node  `json:"node,omitempty"`
+	Value  string `json:"value,omitempty"`
 }
 type response struct {
 	Nodes   []node `json:"nodes"`
@@ -180,9 +183,11 @@ func callProcess(ctx context.Context, req request, lockFile *os.File) (response,
 var uiMutex sync.Mutex
 
 type client struct {
-	driver   driver
-	stateDir string
-	pause    func()
+	stage          string
+	snapshotLogged bool
+	driver         driver
+	stateDir       string
+	pause          func()
 }
 
 func withClient(fn func(*client) error) error {
@@ -203,19 +208,35 @@ func withClient(fn func(*client) error) error {
 	defer cancel()
 
 	return platformLock(dir, func(lockFile *os.File) error {
-		return fn(&client{driver: processDriver(func(req request) (response, error) { return callProcess(ctx, req, lockFile) }), stateDir: dir, pause: func() { time.Sleep(200 * time.Millisecond) }})
+		c := &client{driver: processDriver(func(req request) (response, error) { return callProcess(ctx, req, lockFile) }), stateDir: dir, pause: func() { time.Sleep(200 * time.Millisecond) }}
+		err := fn(c)
+		if err != nil {
+			return fmt.Errorf("微信操作阶段 %s: %w", c.stage, err)
+		}
+
+		return nil
 	})
 }
 
-// Check only checks availability and permissions. It does not change chats.
+// Check checks availability and permissions without changing chats. If access is
+// missing, this explicit user action requests permission and opens System Settings.
 func Check() (*Outcome, error) {
-	var result response
-	err := withClient(func(c *client) error {
-		var err error
-		result, err = c.driver.call(request{Op: "status"})
+	var result *Outcome
+	err := traceOperation("check", "", func() error {
+		return withClient(func(c *client) error {
+			var err error
+			result, err = c.check()
 
-		return err
+			return err
+		})
 	})
+
+	return result, err
+}
+
+func (c *client) check() (*Outcome, error) {
+	c.setStage("check_environment")
+	result, err := c.call(request{Op: "status", Prompt: true})
 	if err != nil {
 		return nil, err
 	}
@@ -226,11 +247,14 @@ func Check() (*Outcome, error) {
 // Locate opens an exact, unique search result and verifies the group details.
 func Locate(group string) (*Outcome, error) {
 	group = strings.TrimSpace(group)
-	err := Validate(Config{Enabled: true, GroupName: group})
-	if err != nil {
-		return nil, err
-	}
-	err = withClient(func(c *client) error { return c.locate(group) })
+	err := traceOperation("locate", group, func() error {
+		err := Validate(Config{Enabled: true, GroupName: group})
+		if err != nil {
+			return err
+		}
+
+		return withClient(func(c *client) error { return c.locate(group) })
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -242,20 +266,23 @@ func Locate(group string) (*Outcome, error) {
 // blocks ALL subsequent messages to this group until explicitly acknowledged.
 func Send(group, markdown string) (*Outcome, error) {
 	group = strings.TrimSpace(group)
-	err := Validate(Config{Enabled: true, GroupName: group})
-	if err != nil {
-		return nil, err
-	}
-	body := PlainText(markdown)
-	if strings.TrimSpace(body) == "" || utf8.RuneCountInString(body) > MaxMessageRunes {
-		return nil, fmt.Errorf("%w: 微信消息须为 1–%d 字；请缩短日报或减少推荐文章数", errAutomation, MaxMessageRunes)
-	}
 	var outcome *Outcome
-	err = withClient(func(c *client) error {
-		var err error
-		outcome, err = c.send(group, body)
+	err := traceOperation("send", group, func() error {
+		err := Validate(Config{Enabled: true, GroupName: group})
+		if err != nil {
+			return err
+		}
+		body := PlainText(markdown)
+		if strings.TrimSpace(body) == "" || utf8.RuneCountInString(body) > MaxMessageRunes {
+			return fmt.Errorf("%w: 微信消息须为 1–%d 字；请缩短日报或减少推荐文章数", errAutomation, MaxMessageRunes)
+		}
 
-		return err
+		return withClient(func(c *client) error {
+			var err error
+			outcome, err = c.send(group, body)
+
+			return err
+		})
 	})
 
 	return outcome, err
@@ -265,15 +292,19 @@ func Send(group, markdown string) (*Outcome, error) {
 // remain, so acknowledging uncertainty does not discard successful deduplication.
 func ResolvePending(group string) error {
 	group = strings.TrimSpace(group)
-	err := Validate(Config{Enabled: true, GroupName: group})
-	if err != nil {
-		return err
-	}
 
-	return withClient(func(c *client) error { return c.resolvePending(group) })
+	return traceOperation("resolve_pending", group, func() error {
+		err := Validate(Config{Enabled: true, GroupName: group})
+		if err != nil {
+			return err
+		}
+
+		return withClient(func(c *client) error { return c.resolvePending(group) })
+	})
 }
 
 func (c *client) resolvePending(group string) error {
+	c.setStage("resolve_pending")
 	state, err := c.readState(group)
 	if err != nil {
 		return err
@@ -335,14 +366,14 @@ func uncertain(err error) error {
 }
 
 func (c *client) snapshot() ([]node, error) {
-	result, err := c.driver.call(request{Op: "snapshot"})
+	result, err := c.call(request{Op: opSnapshot})
 
 	return result.Nodes, err
 }
 
 //nolint:gocritic //UI snapshots are immutable values, copied consistently across selector callbacks.
 func (c *client) act(op string, n node, value string) error {
-	_, err := c.driver.call(request{Op: op, Node: &n, Value: value})
+	_, err := c.call(request{Op: op, Node: &n, Value: value})
 
 	return err
 }
@@ -386,18 +417,20 @@ func choose(nodes []node, match func(node) bool, what string) (node, error) {
 func pressable(n node) bool { return n.Pressable && n.Enabled }
 
 func (c *client) waitFor(fn func([]node) bool) ([]node, error) {
+	var lastNodes []node
 	for range 12 {
 		nodes, err := c.snapshot()
 		if err != nil {
 			return nil, err
 		}
+		lastNodes = nodes
 		if fn(nodes) {
 			return nodes, nil
 		}
 		c.pause()
 	}
 
-	return nil, fmt.Errorf("%w: 等待微信界面更新超时；请检查是否已登录、是否有弹窗", errAutomation)
+	return lastNodes, fmt.Errorf("%w: 等待微信界面更新超时；请检查是否已登录、是否有弹窗", errAutomation)
 }
 
 //nolint:gocritic //UI snapshots are immutable values, copied consistently across selector callbacks.
@@ -449,16 +482,22 @@ func (c *client) locate(group string) error {
 }
 
 func (c *client) openChat(group string) ([]node, error) {
-	_, err := c.driver.call(request{Op: "activate"})
+	c.setStage("activate_wechat")
+	_, err := c.call(request{Op: "activate"})
 	if err != nil {
 		return nil, err
 	}
+	c.setStage("find_search_field")
 	nodes, err := c.waitFor(func(nodes []node) bool {
 		_, err := choose(nodes, searchField, "搜索框")
 
 		return err == nil
 	})
 	if err != nil {
+		if len(nodes) > 0 {
+			return nil, fmt.Errorf("微信未暴露可识别的搜索框（界面节点=%d）。请确认已登录并打开主聊天窗口；若仍无法识别，当前微信版本不支持此辅助功能定位方式: %w", len(nodes), err)
+		}
+
 		return nil, err
 	}
 	search, err := choose(nodes, searchField, "搜索框")
@@ -468,11 +507,13 @@ func (c *client) openChat(group string) ([]node, error) {
 	if strings.TrimSpace(search.Value) != "" && search.Value != group {
 		return nil, fmt.Errorf("%w: 微信搜索框已有内容，请先清空后重试", errAutomation)
 	}
+	c.setStage("search_group")
 	err = c.act("set", search, group)
 	if err != nil {
 		return nil, err
 	}
 	// Search matching is deliberately exact. Do not send to the first result.
+	c.setStage("match_unique_chat")
 	var candidate node
 	_, err = c.waitFor(func(nodes []node) bool {
 		var e error
@@ -494,10 +535,12 @@ func (c *client) openChat(group string) ([]node, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.setStage("open_chat")
 	err = c.act("press", candidate, "")
 	if err != nil {
 		return nil, err
 	}
+	c.setStage("verify_chat_title")
 	nodes, err = c.waitFor(func(nodes []node) bool {
 		s, e := choose(nodes, searchField, "搜索框")
 
@@ -511,6 +554,7 @@ func (c *client) openChat(group string) ([]node, error) {
 }
 
 func (c *client) verifyGroup(group string, nodes []node) error {
+	c.setStage("open_chat_info")
 	info, err := choose(nodes, func(n node) bool {
 		return n.Role == roleButton && pressable(n) && label(n, "聊天信息", "聊天详情", "Chat Info", "Chat Details")
 	}, "聊天信息按钮")
@@ -521,6 +565,7 @@ func (c *client) verifyGroup(group string, nodes []node) error {
 	if err != nil {
 		return err
 	}
+	c.setStage("verify_group_type")
 	_, err = c.waitFor(func(nodes []node) bool {
 		// Personal contacts also have Chat Info. Require the group-only field.
 		for _, n := range nodes {
@@ -541,6 +586,7 @@ func (c *client) verifyGroup(group string, nodes []node) error {
 	if !verifiedHeader(nodes, group) {
 		return fmt.Errorf("%w: 群聊校验时聊天标题改变，已停止", errAutomation)
 	}
+	c.setStage("close_chat_info")
 	// Toggle the same information button; no global Escape/Return keystrokes.
 	info, err = choose(nodes, func(n node) bool {
 		return n.Role == roleButton && pressable(n) && label(n, "聊天信息", "聊天详情", "Chat Info", "Chat Details")
@@ -642,6 +688,7 @@ func messageCount(nodes []node, body string) int {
 }
 
 func (c *client) send(group, body string) (*Outcome, error) {
+	c.setStage("check_delivery_state")
 	state, err := c.readState(group)
 	if err != nil {
 		return nil, err
@@ -657,15 +704,18 @@ func (c *client) send(group, body string) (*Outcome, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.setStage("persist_pending")
 	// Persist BEFORE touching the send button, including across a killed process.
 	err = c.writeState(group, receipt{Status: statusPending, Digest: digest, At: time.Now()})
 	if err != nil {
 		return nil, err
 	}
-	_, err = c.driver.call(request{Op: "send", Node: &button, Group: group, Body: body})
+	c.setStage("click_send")
+	_, err = c.call(request{Op: "send", Node: &button, Group: group, Body: body})
 	if err != nil {
 		return nil, uncertain(err)
 	}
+	c.setStage("verify_sent_message")
 	_, err = c.waitFor(func(nodes []node) bool {
 		input, e := composer(nodes)
 
@@ -674,6 +724,7 @@ func (c *client) send(group, body string) (*Outcome, error) {
 	if err != nil {
 		return nil, uncertain(err)
 	}
+	c.setStage("persist_sent")
 	err = c.writeState(group, receipt{Status: StatusSent, Digest: digest, At: time.Now()})
 	if err != nil {
 		return nil, uncertain(err)
@@ -702,6 +753,7 @@ func (c *client) prepareDraft(group, body string) (node, int, error) {
 	if err != nil {
 		return node{}, 0, err
 	}
+	c.setStage("check_draft")
 	nodes, err := c.snapshot()
 	if err != nil {
 		return node{}, 0, err
@@ -717,10 +769,12 @@ func (c *client) prepareDraft(group, body string) (node, int, error) {
 		return node{}, 0, fmt.Errorf("%w: 聊天标题发生变化，已停止发送", errAutomation)
 	}
 	before := messageCount(nodes, body)
+	c.setStage("write_message")
 	err = c.act("set", input, body)
 	if err != nil {
 		return node{}, 0, err
 	}
+	c.setStage("verify_draft")
 	nodes, err = c.snapshot()
 	if err != nil {
 		return node{}, 0, err

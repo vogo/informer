@@ -548,7 +548,7 @@ async function rebuild() {
             </n-space>
             <n-input v-model:value="wechat.groupName" :disabled="wechatBusy" placeholder="完整且唯一的微信群名" size="small" />
             <n-text depth="3" class="tiny">
-              仅支持 macOS。请先登录微信、解锁桌面，并为 informer 开启辅助功能权限。发送会切换到微信前台。
+              仅支持 macOS。请先登录微信并解锁桌面。“检查环境”发现缺少权限时会自动打开系统设置，请为 informer 开启辅助功能权限（不是 Input Monitoring）。发送会切换到微信前台。
               先检查环境、定位群聊，再发送测试。定位与测试使用当前填写的群名，保存后才参与日常推送。
               发送前校验群聊信息，保留已有草稿；不支持当前界面时停止操作。
             </n-text>

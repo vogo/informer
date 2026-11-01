@@ -44,13 +44,15 @@ static BOOL walk(AXUIElementRef e, NSArray *path, NSInteger parent, NSMutableArr
     node[@"path"] = path;
     node[@"parent"] = @(parent);
     node[@"value"] = textAttr(e, kAXValueAttribute);
-    node[@"enabled"] = attr(e, kAXEnabledAttribute) ?: @YES;
+    id enabled = attr(e, kAXEnabledAttribute);
+    node[@"enabled"] = (enabled == nil || [enabled boolValue]) ? @YES : @NO;
     Boolean settable = false;
     AXUIElementIsAttributeSettable(e, kAXValueAttribute, &settable);
-    node[@"writable"] = @(settable);
+    // Boolean is unsigned char, so @(settable) encodes 0/1 rather than JSON booleans.
+    node[@"writable"] = settable ? @YES : @NO;
     CFArrayRef actions = NULL;
     if (AXUIElementCopyActionNames(e, &actions) == kAXErrorSuccess) {
-        node[@"pressable"] = @([(NSArray *)actions containsObject:(NSString *)kAXPressAction]);
+        node[@"pressable"] = [(NSArray *)actions containsObject:(NSString *)kAXPressAction] ? @YES : @NO;
         CFRelease(actions);
     }
     NSInteger index = nodes.count;
@@ -93,7 +95,20 @@ static BOOL sendPreconditions(AXUIElementRef window, NSDictionary *r) {
     return header && composers == 1;
 }
 static NSDictionary *execute(NSDictionary *r) {
-    if (!AXIsProcessTrusted()) return @{@"error": @"请在系统设置的隐私与安全性中，为当前运行的 informer（CLI 则为终端）开启辅助功能权限；安装或更新后可能需要重新授权"};
+    if (!AXIsProcessTrusted()) {
+        NSString *guide = @"请为当前运行的 informer 开启辅助功能权限（Accessibility；部分系统显示 Device Control and Data Access），不是 Input Monitoring。若列表中没有 informer，请点击＋添加当前安装的应用。CLI 可能需授权终端或实际运行的可执行文件；安装或更新后可能需重新授权";
+        // Only the explicit environment check may interrupt the desktop. Scheduled
+        // sends and retries remain non-interactive when permission is missing.
+        if ([r[@"op"] isEqual:@"status"] && [r[@"prompt"] boolValue]) {
+            NSDictionary *options = @{(id)kAXTrustedCheckOptionPrompt: @YES};
+            AXIsProcessTrustedWithOptions((CFDictionaryRef)options);
+            NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"];
+            BOOL opened = [[NSWorkspace sharedWorkspace] openURL:url];
+            NSString *prefix = opened ? @"已打开系统设置的权限页面。" : @"无法自动打开权限页面，请手动进入系统设置 → 隐私与安全性。";
+            return @{@"error": [NSString stringWithFormat:@"%@%@。开启后返回 informer，再点击“检查环境”；若仍提示未授权，请退出 informer 后重新打开", prefix, guide]};
+        }
+        return @{@"error": guide};
+    }
     NSDictionary *session = [(id)CGSessionCopyCurrentDictionary() autorelease];
     if (!session || [session[@"CGSSessionScreenIsLocked"] boolValue] || ![session[(__bridge NSString *)kCGSessionOnConsoleKey] boolValue])
         return @{@"error": @"请登录并解锁当前 macOS 桌面后再推送微信"};

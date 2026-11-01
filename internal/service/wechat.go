@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/vogo/logger"
+
 	"github.com/vogo/informer/internal/wechat"
 )
 
@@ -29,10 +31,21 @@ const wechatSectionKey = "wechat"
 // SaveWeChat stores the optional local desktop target.
 func (s *Service) SaveWeChat(config wechat.Config) error {
 	config.GroupName = strings.TrimSpace(config.GroupName)
+	logger.Infof("[wechat] save configuration target=%q enabled=%t", config.GroupName, config.Enabled)
 	err := wechat.Validate(config)
 	if err != nil {
+		logger.Errorf("[wechat] save configuration target=%q validation failed: %v", config.GroupName, err)
+
 		return fmt.Errorf("%w: %w", ErrInvalidArgument, err)
 	}
 
-	return s.saveConfigSection(wechatSectionKey, config)
+	err = s.saveConfigSection(wechatSectionKey, config)
+	if err != nil {
+		logger.Errorf("[wechat] save configuration target=%q failed: %v", config.GroupName, err)
+
+		return err
+	}
+	logger.Infof("[wechat] configuration saved target=%q enabled=%t", config.GroupName, config.Enabled)
+
+	return nil
 }

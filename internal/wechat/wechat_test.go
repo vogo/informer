@@ -19,14 +19,19 @@
 package wechat
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/vogo/logger"
+
+	"github.com/vogo/informer/internal/logbuf"
 )
 
 var errFakeUI = errors.New("fake UI failure")
@@ -34,6 +39,8 @@ var errFakeUI = errors.New("fake UI failure")
 // fakeUI models search, group details, the draft and visible chat history. Tests
 // drive the production workflow, including its durable pre-send marker.
 type fakeUI struct {
+	requests      []request
+	statusErr     error
 	group         string
 	search        string
 	opened        bool
@@ -50,8 +57,11 @@ type fakeUI struct {
 
 func (f *fakeUI) call(req request) (response, error) {
 	f.calls++
+	f.requests = append(f.requests, req)
 	switch req.Op {
-	case "activate", "status":
+	case "status":
+		return response{Message: "ready"}, f.statusErr
+	case "activate":
 		return response{Message: "ready"}, nil
 	case "snapshot":
 		return response{Nodes: f.nodes()}, nil
@@ -251,4 +261,125 @@ func TestResolvePendingPreservesSuccessfulReceipt(t *testing.T) {
 	_, err = c.send(ui.group, "正文")
 	require.NoError(t, err)
 	require.Len(t, ui.sent, 1, "clearing pending must not erase confirmed receipt")
+}
+
+func TestEnvironmentCheckRequestsPermissionWithoutSending(t *testing.T) {
+	t.Parallel()
+	for _, denied := range []bool{false, true} {
+		t.Run(strconv.FormatBool(denied), func(t *testing.T) {
+			t.Parallel()
+			ui := &fakeUI{}
+			if denied {
+				ui.statusErr = errFakeUI
+			}
+			result, err := testClient(t, ui).check()
+			if denied {
+				require.ErrorIs(t, err, errFakeUI)
+				require.Nil(t, result)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, "ready", result.Status)
+			}
+			require.Equal(t, []request{{Op: "status", Prompt: true}}, ui.requests)
+			require.Empty(t, ui.sent)
+		})
+	}
+}
+
+func TestDeliveryDoesNotRequestPermissionOrOpenSettings(t *testing.T) {
+	t.Parallel()
+	ui := &fakeUI{group: "技术群"}
+	_, err := testClient(t, ui).send(ui.group, "正文")
+	require.NoError(t, err)
+	for _, req := range ui.requests {
+		require.False(t, req.Prompt, "delivery must never open permission settings")
+	}
+}
+
+//nolint:paralleltest //Capture the process-wide logger before parallel tests resume.
+func TestWeChatErrorsReachSystemLogWithStage(t *testing.T) {
+	buffer := captureWeChatLog(t)
+	var wire response
+	decodeErr := json.Unmarshal([]byte(`{"nodes":[{"writable":0}]}`), &wire)
+	require.Error(t, decodeErr)
+	ui := &fakeUI{group: "技术群"}
+	c := testClient(t, ui)
+	c.driver = processDriver(func(req request) (response, error) {
+		if req.Op == "snapshot" {
+			return response{}, decodeErr
+		}
+
+		return ui.call(req)
+	})
+	err := traceOperation("locate", ui.group, func() error { return c.locate(ui.group) })
+	require.ErrorIs(t, err, decodeErr)
+	entries := buffer.Since(0, 0).Entries
+	var text strings.Builder
+	errorCount := 0
+	for _, entry := range entries {
+		text.WriteString(entry.Text)
+		if entry.Level == logbuf.LevelError {
+			errorCount++
+		}
+	}
+	require.GreaterOrEqual(t, errorCount, 2, "both stage error and operation failure reach the system log")
+	require.Contains(t, text.String(), "stage=find_search_field op=snapshot failed")
+	require.Contains(t, text.String(), "cannot unmarshal number")
+	require.Contains(t, text.String(), "writable")
+	require.Contains(t, text.String(), "operation=locate")
+}
+
+//nolint:paralleltest //Capture the process-wide logger before parallel tests resume.
+func TestWeChatLogsProgressWithoutMessageContents(t *testing.T) {
+	buffer := captureWeChatLog(t)
+	ui := &fakeUI{group: "技术群"}
+	c := testClient(t, ui)
+	const body = "private-message-body-must-not-be-logged"
+	err := traceOperation("send", ui.group, func() error {
+		_, err := c.send(ui.group, body)
+
+		return err
+	})
+	require.NoError(t, err)
+	var text strings.Builder
+	for _, entry := range buffer.Since(0, 0).Entries {
+		text.WriteString(entry.Text)
+	}
+	for _, stage := range []string{"activate_wechat", "search_group", "verify_group_type", "write_message", "click_send", "verify_sent_message"} {
+		require.Contains(t, text.String(), "stage="+stage)
+	}
+	require.Contains(t, text.String(), "snapshot nodes=")
+	require.Contains(t, text.String(), "completed elapsed=")
+	require.NotContains(t, text.String(), body)
+	_, err = Send("", body)
+	require.Error(t, err)
+	last := buffer.Since(0, 1).Entries
+	require.Len(t, last, 1)
+	require.Equal(t, logbuf.LevelError, last[0].Level)
+	require.Contains(t, last[0].Text, "operation=send")
+}
+
+func captureWeChatLog(t *testing.T) *logbuf.Buffer {
+	t.Helper()
+	previous := logger.Writer()
+	buffer := logbuf.New(200)
+	logger.SetOutput(buffer)
+	t.Cleanup(func() { logger.SetOutput(previous) })
+
+	return buffer
+}
+
+func TestCollapsedNativeTreeReportsCompatibilityInsteadOfOnlyTimeout(t *testing.T) {
+	t.Parallel()
+	c := &client{driver: processDriver(func(req request) (response, error) {
+		if req.Op == opSnapshot {
+			return response{Nodes: []node{{Role: "AXWindow", Parent: -1}, {Role: roleButton, Parent: 0}}}, nil
+		}
+
+		return response{}, nil
+	}), pause: func() {}}
+	_, err := c.openChat("技术群")
+	require.ErrorContains(t, err, "未暴露可识别的搜索框")
+	require.ErrorContains(t, err, "界面节点=2")
+	require.ErrorContains(t, err, "当前微信版本不支持")
 }
