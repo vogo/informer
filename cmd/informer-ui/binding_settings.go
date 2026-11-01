@@ -67,6 +67,7 @@ type WebhookDTO struct {
 
 // ConfigViewDTO is the whole settings page state of informer.json.
 type ConfigViewDTO struct {
+	WeChat           *WeChatConfigDTO           `json:"wechat"`
 	ResultProcessing *ResultProcessingConfigDTO `json:"resultProcessing"`
 
 	// Path is where the file lives, so the user can also edit it by hand.
@@ -157,6 +158,7 @@ func (a *App) ReadConfig() (*ConfigViewDTO, error) {
 
 	dto := &ConfigViewDTO{
 		ResultProcessing: &ResultProcessingConfigDTO{Enabled: view.ResultProcessing.Enabled, Prompt: view.ResultProcessing.Prompt},
+		WeChat:           &WeChatConfigDTO{Enabled: view.WeChat.Enabled, GroupName: view.WeChat.GroupName},
 		Path:             view.Path,
 		Exists:           view.Exists,
 		Feed:             defaults,

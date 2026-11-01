@@ -3,6 +3,11 @@
  * depend on the long module path under frontend/bindings/.
  */
 export {
+  CheckWeChat,
+  LocateWeChat,
+  TestWeChat,
+  ResolveWeChatPending,
+  SaveWeChat,
   ApplySourceFix,
   ClearSystemLogs,
   CloseCompose,

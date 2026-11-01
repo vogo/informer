@@ -24,6 +24,7 @@ import (
 	"github.com/vogo/informer/internal/configstore"
 	"github.com/vogo/informer/internal/feed"
 	"github.com/vogo/informer/internal/resultprocess"
+	"github.com/vogo/informer/internal/wechat"
 )
 
 // feedSectionKey is the top level key of the feed section inside informer.json.
@@ -56,6 +57,7 @@ func DefaultFeedConfig() *feed.Config {
 
 // FileConfigView is the informer.json state the settings page renders.
 type FileConfigView struct {
+	WeChat           *wechat.Config        `json:"wechat"`
 	ResultProcessing *resultprocess.Config `json:"result_processing"`
 
 	// Path is the absolute location of the file, shown so the user can find it.
@@ -151,6 +153,12 @@ func (s *Service) ReadFileConfigView() (*FileConfigView, error) {
 	}
 
 	view.HTTPProxy, err = s.readHTTPProxy()
+	if err != nil {
+		return nil, err
+	}
+
+	view.WeChat = &wechat.Config{}
+	_, err = doc.Unmarshal(wechatSectionKey, view.WeChat)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +296,7 @@ func checkRange(name string, value, low, high int) error {
 
 func editableConfigKey(key string) bool {
 	switch key {
-	case feedSectionKey, scheduleSectionKey, agentSectionKey, webhooksKey, legacyWebhookKey, httpProxyKey, resultProcessingKey:
+	case wechatSectionKey, feedSectionKey, scheduleSectionKey, agentSectionKey, webhooksKey, legacyWebhookKey, httpProxyKey, resultProcessingKey:
 		return true
 	default:
 		return false
